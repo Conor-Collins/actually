@@ -7,7 +7,7 @@
 - Work and commit only on your own branch. Never switch to, commit to, or merge into main.
 - Out-of-scope ideas, bugs you noticed and spec questions go under "Follow-ups noticed" in your final reply. The human decides whether they become tasks.
 - If the task conflicts with the spec or is unclear, stop and ask.
-- Done means: every acceptance criterion met, `yarn typecheck && yarn lint && yarn test` passes, and changes are committed. Then reply with what changed, how you verified each criterion, and "Follow-ups noticed".
+- Done means: every acceptance criterion met, `node .yarn/releases/yarn-4.17.1.cjs typecheck && node .yarn/releases/yarn-4.17.1.cjs lint && node .yarn/releases/yarn-4.17.1.cjs test` passes, and changes are committed. Then reply with what changed, how you verified each criterion, and "Follow-ups noticed".
 
 # AGENTS.md - Guide for AI Agents Working with Actual Budget
 
