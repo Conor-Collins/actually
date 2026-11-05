@@ -1,0 +1,16 @@
+{
+  "$schema": "https://t3.codes/schema/t3.json",
+  "defaultThreadEnvMode": "worktree",
+  "scripts": [
+    {
+      "name": "Land this thread",
+      "command": "land-thread",
+      "icon": "test"
+    },
+    {
+      "name": "Board",
+      "command": "cd \"$T3CODE_PROJECT_ROOT\" && backlog browser --no-open",
+      "icon": "play"
+    }
+  ]
+}
