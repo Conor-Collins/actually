@@ -9,8 +9,10 @@
     },
     {
       "name": "Board",
-      "command": "cd \"$T3CODE_PROJECT_ROOT\" && backlog browser --no-open",
-      "icon": "play"
+      "command": "board 6423",
+      "icon": "play",
+      "previewUrl": "http://localhost:6423",
+      "autoOpenPreview": true
     }
   ]
 }

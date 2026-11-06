@@ -3,11 +3,11 @@
 - The spec is docs/SPEC.md (not written yet). Plans are in docs/plans/ (none yet). The task board is backlog/. The human owns all three.
 - You are given ONE task ID per thread. Read its file in backlog/tasks/ and the spec section it references. That task is your whole scope.
 - First action in a new thread: run `git branch -m task-<id>-<short-name>` for the task you were given.
-- Never create, edit, move or delete anything in backlog/, docs/SPEC.md, docs/plans/, AGENTS.md, CLAUDE.md or .claude/. Do not run `backlog task create` or `backlog task edit`. Branches that touch these files are automatically refused at landing, and your work is thrown away.
+- Never create, edit, move or delete anything in backlog/, docs/SPEC.md, docs/plans/, AGENTS.md, CLAUDE.md or .claude/. Do not run `backlog task create` or `backlog task edit`; the one board command you may run is `task-review` (see Done). Branches that touch these files are automatically refused at landing, and your work is thrown away.
 - Work and commit only on your own branch. Never switch to, commit to, or merge into main.
 - Out-of-scope ideas, bugs you noticed and spec questions go under "Follow-ups noticed" in your final reply. The human decides whether they become tasks.
 - If the task conflicts with the spec or is unclear, stop and ask.
-- Done means: every acceptance criterion met, `node .yarn/releases/yarn-4.17.1.cjs typecheck && node .yarn/releases/yarn-4.17.1.cjs lint && node .yarn/releases/yarn-4.17.1.cjs test` passes, and changes are committed. Then reply with what changed, how you verified each criterion, and "Follow-ups noticed".
+- Done means: every acceptance criterion met, `node .yarn/releases/yarn-4.17.1.cjs typecheck && node .yarn/releases/yarn-4.17.1.cjs lint && node .yarn/releases/yarn-4.17.1.cjs test` passes, and changes are committed. Then run `task-review` in your worktree (it moves your task to Review for the human; if it refuses, include its message in your reply), and reply with what changed, how you verified each criterion, and "Follow-ups noticed".
 
 # AGENTS.md - Guide for AI Agents Working with Actual Budget
 
