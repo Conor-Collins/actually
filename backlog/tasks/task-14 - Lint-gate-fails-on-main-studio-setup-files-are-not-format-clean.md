@@ -4,7 +4,7 @@ title: 'Lint gate fails on main: studio setup files are not format-clean'
 status: Review
 assignee: []
 created_date: '2026-11-13T16:14:00Z'
-updated_date: '2026-11-13T16:19:00Z'
+updated_date: '2026-11-13T16:27:00Z'
 labels:
   - base
   - gate
@@ -27,3 +27,9 @@ Fix it in .oxfmtrc.json only, by extending the existing ignore list from ["backl
 - [ ] #2 `node .yarn/releases/yarn-4.17.1.cjs lint` passes.
 - [ ] #3 The whole gate `node .yarn/releases/yarn-4.17.1.cjs typecheck && node .yarn/releases/yarn-4.17.1.cjs lint && node .yarn/releases/yarn-4.17.1.cjs test` passes.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-11-13: candidate 974fe2bfd approved by independent review (GPT Sol xhigh, round 1). Landing attempted and stopped cleanly, nothing merged: the gate cannot run in the main checkout as the agent account because about 18,000 build and cache files there (node_modules/.cache, packages/*/dist, packages/*/build, packages/*/node_modules/.vite, packages/loot-core/@types) are owned by the owner's account without group write. Waits for the owner to restore group write (runbook setup step); then land again.
+<!-- SECTION:NOTES:END -->
