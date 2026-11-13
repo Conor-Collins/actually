@@ -4,11 +4,12 @@ title: Merge upstream Actual v26.11.0 into main
 status: In Progress
 assignee: []
 created_date: '2026-11-13T16:07:00Z'
-updated_date: '2026-11-13T16:09:00Z'
+updated_date: '2026-11-13T16:14:00Z'
 labels:
   - base
   - upstream
-dependencies: []
+dependencies:
+  - TASK-14
 priority: high
 ordinal: 1000
 ---
@@ -30,3 +31,9 @@ Rule-file exception for this task only: the merge brings upstream's one-line cha
 - [ ] #3 `git diff --stat HEAD^1 HEAD -- backlog docs land.conf .claude CLAUDE.md t3.json` is empty, and `git diff HEAD^1 HEAD -- AGENTS.md` shows only upstream's one .nvmrc version line.
 - [ ] #4 After `node .yarn/releases/yarn-4.17.1.cjs install`, the gate `node .yarn/releases/yarn-4.17.1.cjs typecheck && node .yarn/releases/yarn-4.17.1.cjs lint && node .yarn/releases/yarn-4.17.1.cjs test` passes on the merge commit, and the working tree is clean afterwards (the install changed no tracked file).
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-11-13: rung 1 candidate 076fbe1f5 is the correct clean merge (tree 450bc19e, checks 1 to 3 pass, typecheck passes) but the gate stops at lint for a reason already on main; waits on TASK-14, then the merge is redone from the new main.
+<!-- SECTION:NOTES:END -->
