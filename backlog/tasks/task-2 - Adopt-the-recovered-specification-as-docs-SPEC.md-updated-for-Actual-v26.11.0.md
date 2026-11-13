@@ -1,10 +1,10 @@
 ---
 id: TASK-2
 title: Adopt the recovered specification as docs/SPEC.md, updated for Actual v26.11.0
-status: In Progress
+status: Review
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-13T16:09:00Z'
+updated_date: '2026-11-13T16:27:00Z'
 labels:
   - spec
   - owner-approval
@@ -29,3 +29,9 @@ docs/SPEC.md is the owner's file and is protected in land.conf, so no task branc
 - [ ] #4 The owner has approved the exact candidate (sha256 quoted in the approval).
 - [ ] #5 docs/SPEC.md on main has the approved sha256, and AGENTS.md's 'not written yet' note is reported to the owner as stale.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-11-13: candidate sha256 57bc4055 approved by independent review (GPT Sol xhigh, round 2 of 2; round 1 asked for two corrections, both made). Waits for the owner's approval of the exact bytes (packet: /data/t3-work/actually-approvals/task-2/APPROVE.md) and for TASK-1 to be Done.
+<!-- SECTION:NOTES:END -->
