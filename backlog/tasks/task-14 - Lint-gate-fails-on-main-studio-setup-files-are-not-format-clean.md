@@ -1,9 +1,10 @@
 ---
 id: TASK-14
 title: 'Lint gate fails on main: studio setup files are not format-clean'
-status: In Progress
+status: Review
 assignee: []
 created_date: '2026-11-13T16:14:00Z'
+updated_date: '2026-11-13T16:19:00Z'
 labels:
   - base
   - gate
