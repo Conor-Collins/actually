@@ -1,9 +1,10 @@
 ---
 id: TASK-2
 title: Adopt the recovered specification as docs/SPEC.md, updated for Actual v26.11.0
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
+updated_date: '2026-11-13T16:09:00Z'
 labels:
   - spec
   - owner-approval
