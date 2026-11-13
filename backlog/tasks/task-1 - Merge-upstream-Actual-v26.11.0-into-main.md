@@ -1,7 +1,7 @@
 ---
 id: TASK-1
 title: Merge upstream Actual v26.11.0 into main
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-11-13T16:07:00Z'
 updated_date: '2026-11-13T16:09:00Z'
