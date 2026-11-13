@@ -4,7 +4,7 @@ title: Adopt the recovered specification as docs/SPEC.md, updated for Actual v26
 status: Review
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-13T16:27:00Z'
+updated_date: '2026-11-13T18:11:00Z'
 labels:
   - spec
   - owner-approval
@@ -34,4 +34,6 @@ docs/SPEC.md is the owner's file and is protected in land.conf, so no task branc
 
 <!-- SECTION:NOTES:BEGIN -->
 2026-11-13: candidate sha256 57bc4055 approved by independent review (GPT Sol xhigh, round 2 of 2; round 1 asked for two corrections, both made). Waits for the owner's approval of the exact bytes (packet: /data/t3-work/actually-approvals/task-2/APPROVE.md) and for TASK-1 to be Done.
+
+2026-11-13: owner approval given in the orchestrator thread. Asked to reply 'approve TASK-2 57bc4055' or say what to change, the owner replied: "2. I approve the spec". Applies to candidate sha256 57bc4055d97b9f05c4cceff700654e92efc936349b5889d389ca6e44d6cd8a49. To be committed as docs/SPEC.md once TASK-1 is Done, after re-checking the hash and that docs/SPEC.md is still absent on main.
 <!-- SECTION:NOTES:END -->
