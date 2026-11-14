@@ -1,6 +1,6 @@
 # Actually
 
-Actually is a fork of [Actual Budget](https://github.com/actualbudget/actual) that brings monthly expenses, longer budget periods, and account cash needs into one view.
+Actually is a fork of [Actual Budget](https://github.com/actualbudget/actual) intended to bring monthly expenses, longer budget periods, and account cash needs into one view.
 
 `docs/SPEC.md` is the working specification for the project. Where this file and it disagree, the spec wins. The spec marks each part of the design: some parts are agreed, explicitly requested or corrected in the project discussion, and some parts are proposals still open to change.
 
@@ -16,7 +16,7 @@ Actual spending remains visible in the month when the transaction occurred. Budg
 
 ## Budget periods
 
-A period record has six fields:
+The proposed period record, used by the current calculation code, has six fields:
 
 - `id`: the unique identity of this period.
 - `category`: the category to which it belongs.
@@ -25,15 +25,15 @@ A period record has six fields:
 - `budget`: this period's independent, nonnegative allowance.
 - `carryover`: an explicit, signed opening adjustment.
 
-Copying a period creates a new period with a new id, the same allowance and zero carryover. Carrying a balance is a separate explicit operation.
+Under the proposed copying behavior, a new period receives a new ID and a copy of the allowance, with carryover defaulting to zero. Carrying a balance is a separate explicit operation.
 
-Periods of one category cannot overlap. Adjacent periods are allowed. Gaps are allowed, but spending that has no period must be surfaced.
+The proposed invariants forbid overlapping periods of one category. Adjacent periods and gaps are allowed, but spending with no period must be surfaced.
 
 Money uses integer minor currency units, consistent with Actual's IntegerAmount type. The first version assumes one common currency; currency conversion is not specified.
 
 ## Payments and offsets
 
-By default, a transaction belongs to its category's period that contains its date. An offset links a transaction to another period of the same category. It does not change the transaction's bank date.
+By default, a transaction belongs to its category's period that contains its date. The proposed offset representation links a transaction ID to another period ID in the same category. It does not change the transaction's bank date.
 
 Early-payment example: a payment on December 20, 2026 can be assigned to the 2027 insurance period. It counts in December 2026 actual spending and in the 2027 insurance budget. It does not count as a second January cash payment.
 
@@ -41,7 +41,7 @@ Actual's ledger sign convention is retained: expenses are negative amounts and r
 
 ## Scheduled charges
 
-Each expected occurrence has an ID, period ID, date, and nonnegative expected charge amount. Its state is scheduled, or posted with a linked transaction ID. A posted actual replaces the corresponding expectation in the calculation, even when its actual amount differs from the estimate.
+In the proposed scheduled-charge model, each expected occurrence has an ID, period ID, date, and nonnegative expected charge amount. Its state is scheduled, or posted with a linked transaction ID. A posted actual replaces the corresponding expectation in the calculation, even when its actual amount differs from the estimate.
 
 Expected remaining = current budget remaining - outstanding expected charges.
 
@@ -49,7 +49,7 @@ Scheduled charges change the projection immediately, but they do not use up actu
 
 ## Cash and accounts
 
-Cash available is the sum of the selected accounts' snapshot balances. These snapshots already include actual transactions through an as-of date.
+The proposed cash model starts from account snapshots that include actual transactions through an as-of date. Cash available is the sum of the selected accounts' snapshot balances.
 
 Projected account cash is that account's snapshot balance plus future movements within the forecast horizon. Movements after the forecast horizon, and movements in accounts outside the selected set, are not included.
 
