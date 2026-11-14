@@ -9955,9 +9955,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"actual@workspace:.":
+"actually@workspace:.":
   version: 0.0.0-use.local
-  resolution: "actual@workspace:."
+  resolution: "actually@workspace:."
   dependencies:
     "@monorepo-utils/workspaces-to-typescript-project-references": "npm:^2.11.0"
     "@octokit/rest": "npm:^22.0.1"
