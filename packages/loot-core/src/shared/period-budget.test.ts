@@ -1404,7 +1404,7 @@ describe('summarizePeriodBudgets', () => {
         offsets: [],
         asOf: '2027-04-15',
       }),
-    ).toThrow(/p2/);
+    ).toThrow('posting p2: monthly actual spending sum');
   });
 
   // A4: attributed sum overflow
@@ -1429,7 +1429,7 @@ describe('summarizePeriodBudgets', () => {
         offsets: [],
         asOf: '2027-06-15',
       }),
-    ).toThrow(/p2/);
+    ).toThrow('posting p2: attributed sum');
   });
 
   // A5: running total overflow that would cancel
@@ -1455,7 +1455,7 @@ describe('summarizePeriodBudgets', () => {
     const periods = [
       makePeriod({
         id: 'big',
-        category: 'misc',
+        category: 'insurance',
         start: '2027-01-01',
         end: '2028-01-01',
         budget: MAX,
@@ -1465,11 +1465,13 @@ describe('summarizePeriodBudgets', () => {
     expect(() =>
       summarizePeriodBudgets({
         periods,
-        postings: [],
+        postings: [
+          { id: 'p1', category: 'insurance', date: '2027-03-10', amount: -1 },
+        ],
         offsets: [],
-        asOf: '2027-06-15',
+        asOf: '2027-04-20',
       }),
-    ).toThrow(/big/);
+    ).toThrow('period big: budget + carryover');
   });
 
   // A7: remaining overflow
@@ -1479,8 +1481,8 @@ describe('summarizePeriodBudgets', () => {
       makePeriod({
         id: 'big',
         category: 'insurance',
-        start: '2027-01-01',
-        end: '2028-01-01',
+        start: '2026-01-01',
+        end: '2027-01-01',
         budget: MAX,
         carryover: 0,
       }),
@@ -1489,17 +1491,12 @@ describe('summarizePeriodBudgets', () => {
       summarizePeriodBudgets({
         periods,
         postings: [
-          {
-            id: 'refund',
-            category: 'insurance',
-            date: '2027-03-10',
-            amount: 1,
-          },
+          { id: 'p1', category: 'insurance', date: '2026-06-10', amount: 1 },
         ],
         offsets: [],
-        asOf: '2027-06-15',
+        asOf: '2027-04-20',
       }),
-    ).toThrow(/big/);
+    ).toThrow('period big: remaining');
   });
 
   // A8: combined remaining overflow
@@ -1528,7 +1525,7 @@ describe('summarizePeriodBudgets', () => {
         offsets: [],
         asOf: '2027-06-15',
       }),
-    ).toThrow(/b/);
+    ).toThrow('period b: combined active remaining');
   });
 
   // A9: overspending total overflow
@@ -1567,7 +1564,59 @@ describe('summarizePeriodBudgets', () => {
         offsets: [],
         asOf: '2027-06-15',
       }),
-    ).toThrow(/b/);
+    ).toThrow('period b: total active overspending');
+  });
+
+  // G1: attributed sum overflows upward before cancelling
+  test('G1: throws when the attributed sum overflows upward before cancelling', () => {
+    const MAX = Number.MAX_SAFE_INTEGER;
+    const periods = [
+      makePeriod({
+        id: 'ins',
+        category: 'insurance',
+        start: '2027-01-01',
+        end: '2028-01-01',
+        budget: 0,
+        carryover: 0,
+      }),
+    ];
+    expect(() =>
+      summarizePeriodBudgets({
+        periods,
+        postings: [
+          { id: 'p1', category: 'insurance', date: '2027-03-10', amount: MAX },
+          { id: 'p2', category: 'insurance', date: '2027-03-10', amount: 1 },
+          { id: 'p3', category: 'insurance', date: '2027-03-10', amount: -1 },
+        ],
+        offsets: [],
+        asOf: '2027-04-20',
+      }),
+    ).toThrow('posting p2: attributed sum');
+  });
+
+  // G2: remaining overflows downward in an inactive period
+  test('G2: throws when remaining overflows downward in an inactive period', () => {
+    const MAX = Number.MAX_SAFE_INTEGER;
+    const periods = [
+      makePeriod({
+        id: 'neg',
+        category: 'insurance',
+        start: '2026-01-01',
+        end: '2027-01-01',
+        budget: 0,
+        carryover: -MAX,
+      }),
+    ];
+    expect(() =>
+      summarizePeriodBudgets({
+        periods,
+        postings: [
+          { id: 'p1', category: 'insurance', date: '2026-06-10', amount: -1 },
+        ],
+        offsets: [],
+        asOf: '2027-04-20',
+      }),
+    ).toThrow('period neg: remaining');
   });
 
   // A10: exactly -MAX is accepted
