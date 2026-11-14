@@ -114,6 +114,204 @@ export function copyBudgetPeriod(
   };
 }
 
+export type ExpensePosting = {
+  id: string;
+  category: string;
+  date: string;
+  amount: IntegerAmount;
+};
+
+export type PeriodOffset = {
+  transactionId: string;
+  periodId: string;
+};
+
+export type PeriodBudgetSummary = {
+  period: BudgetPeriod;
+  netSpending: IntegerAmount;
+  remaining: IntegerAmount;
+  overspending: IntegerAmount;
+};
+
+export type PeriodBudgetsSummary = {
+  periods: PeriodBudgetSummary[];
+  activePeriods: PeriodBudgetSummary[];
+  combinedActiveRemaining: IntegerAmount;
+  overspentActivePeriods: PeriodBudgetSummary[];
+  totalActiveOverspending: IntegerAmount;
+  monthlyActualSpending: IntegerAmount;
+  unassignedPostingIds: string[];
+};
+
+type SummarizePeriodBudgetsInput = {
+  periods: readonly BudgetPeriod[];
+  postings: readonly ExpensePosting[];
+  offsets: readonly PeriodOffset[];
+  asOf: string;
+};
+
+function assertValidDate(id: string, date: string): void {
+  if (!isValidDateString(date)) {
+    throw new Error(
+      `posting ${id}: date "${date}" is not a valid YYYY-MM-DD date`,
+    );
+  }
+}
+
+function validateSummarizeInput({
+  periods,
+  postings,
+  offsets,
+  asOf,
+}: SummarizePeriodBudgetsInput): void {
+  if (!isValidDateString(asOf)) {
+    throw new Error(`asOf "${asOf}" is not a valid YYYY-MM-DD date`);
+  }
+  validateBudgetPeriods(periods);
+  const seenPostingIds = new Set<string>();
+  for (const posting of postings) {
+    if (seenPostingIds.has(posting.id)) {
+      throw new Error(`duplicate posting id "${posting.id}"`);
+    }
+    seenPostingIds.add(posting.id);
+    assertValidDate(posting.id, posting.date);
+    assertSafeInteger(posting.amount, `posting ${posting.id}: amount`);
+  }
+  const periodById = new Map<string, BudgetPeriod>();
+  for (const period of periods) {
+    periodById.set(period.id, period);
+  }
+  const seenTransactionIds = new Set<string>();
+  for (const offset of offsets) {
+    if (seenTransactionIds.has(offset.transactionId)) {
+      throw new Error(`two offsets for transaction "${offset.transactionId}"`);
+    }
+    seenTransactionIds.add(offset.transactionId);
+    const period = periodById.get(offset.periodId);
+    if (period === undefined) {
+      throw new Error(
+        `offset for transaction "${offset.transactionId}" names unknown period "${offset.periodId}"`,
+      );
+    }
+    const posting = postings.find(p => p.id === offset.transactionId);
+    if (posting !== undefined && posting.category !== period.category) {
+      throw new Error(
+        `offset for transaction "${offset.transactionId}" crosses categories: posting is in "${posting.category}", period "${period.id}" is in "${period.category}"`,
+      );
+    }
+  }
+}
+
+export function summarizePeriodBudgets({
+  periods,
+  postings,
+  offsets,
+  asOf,
+}: SummarizePeriodBudgetsInput): PeriodBudgetsSummary {
+  validateSummarizeInput({ periods, postings, offsets, asOf });
+
+  const offsetByTransactionId = new Map<string, PeriodOffset>();
+  for (const offset of offsets) {
+    offsetByTransactionId.set(offset.transactionId, offset);
+  }
+  const periodById = new Map<string, BudgetPeriod>();
+  for (const period of periods) {
+    periodById.set(period.id, period);
+  }
+
+  const attributedSums = new Map<string, IntegerAmount>();
+  for (const period of periods) {
+    attributedSums.set(period.id, 0);
+  }
+  const unassignedPostingIds: string[] = [];
+  let monthlySum = 0;
+  const monthStart = `${asOf.slice(0, 8)}01`;
+
+  for (const posting of postings) {
+    if (posting.date > asOf) {
+      continue;
+    }
+    if (posting.date >= monthStart && posting.date <= asOf) {
+      monthlySum += posting.amount;
+      assertSafeInteger(
+        monthlySum,
+        `posting ${posting.id}: monthly actual spending sum`,
+      );
+    }
+    const offset = offsetByTransactionId.get(posting.id);
+    let period: BudgetPeriod | undefined;
+    if (offset !== undefined) {
+      period = periodById.get(offset.periodId);
+    } else {
+      for (const candidate of periods) {
+        if (
+          candidate.category === posting.category &&
+          candidate.start <= posting.date &&
+          posting.date < candidate.end
+        ) {
+          period = candidate;
+          break;
+        }
+      }
+    }
+    if (period === undefined) {
+      unassignedPostingIds.push(posting.id);
+    } else {
+      const total = (attributedSums.get(period.id) ?? 0) + posting.amount;
+      assertSafeInteger(
+        total,
+        `posting ${posting.id}: attributed sum for period "${period.id}"`,
+      );
+      attributedSums.set(period.id, total);
+    }
+  }
+
+  const periodSummaries: PeriodBudgetSummary[] = [];
+  for (const period of periods) {
+    const attributedSum = attributedSums.get(period.id) ?? 0;
+    const netSpending = attributedSum === 0 ? 0 : -attributedSum;
+    const allowance = period.budget + period.carryover;
+    assertSafeInteger(allowance, `period ${period.id}: budget + carryover`);
+    const remaining = allowance - netSpending;
+    assertSafeInteger(remaining, `period ${period.id}: remaining`);
+    const overspending = Math.max(0, -remaining);
+    periodSummaries.push({ period, netSpending, remaining, overspending });
+  }
+
+  const activePeriods = periodSummaries.filter(
+    summary => summary.period.start <= asOf && asOf < summary.period.end,
+  );
+  let combinedActiveRemaining = 0;
+  for (const summary of activePeriods) {
+    combinedActiveRemaining += summary.remaining;
+    assertSafeInteger(
+      combinedActiveRemaining,
+      `period ${summary.period.id}: combined active remaining`,
+    );
+  }
+  const overspentActivePeriods = activePeriods.filter(
+    summary => summary.overspending > 0,
+  );
+  let totalActiveOverspending = 0;
+  for (const summary of overspentActivePeriods) {
+    totalActiveOverspending += summary.overspending;
+    assertSafeInteger(
+      totalActiveOverspending,
+      `period ${summary.period.id}: total active overspending`,
+    );
+  }
+
+  return {
+    periods: periodSummaries,
+    activePeriods,
+    combinedActiveRemaining,
+    overspentActivePeriods,
+    totalActiveOverspending,
+    monthlyActualSpending: monthlySum === 0 ? 0 : -monthlySum,
+    unassignedPostingIds,
+  };
+}
+
 export function validateBudgetPeriods(periods: readonly BudgetPeriod[]): void {
   const seen = new Set<string>();
   for (const period of periods) {
