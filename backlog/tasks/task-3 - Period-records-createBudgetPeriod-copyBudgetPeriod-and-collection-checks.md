@@ -1,10 +1,10 @@
 ---
 id: TASK-3
 title: 'Period records: createBudgetPeriod, copyBudgetPeriod and collection checks'
-status: Review
+status: In Progress
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-14T03:17:00Z'
+updated_date: '2026-11-14T03:22:00Z'
 labels:
   - calculation
 dependencies:
@@ -30,3 +30,9 @@ Code goes in packages/loot-core/src/shared/period-budget.ts, tests in packages/l
 - [ ] #4 Tests cover every rule above, including an annual period 2027-01-01 to 2028-01-01 and a period that does not follow the calendar year.
 - [ ] #5 The new files are type-strict (no @ts-strict-ignore) and the gate `node .yarn/releases/yarn-4.17.1.cjs typecheck && node .yarn/releases/yarn-4.17.1.cjs lint && node .yarn/releases/yarn-4.17.1.cjs test` passes.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-11-13: round 1 (rung 1) candidate b77e930ff reviewed by GPT Sol xhigh: REQUEST CHANGES. Two blocking findings: tests do not catch four broken behaviours (unsafe carryover, explicit copy carryover, source modification, overlap in reverse order), and valid dates before year 0100 are rejected. Back to the coder for round 2.
+<!-- SECTION:NOTES:END -->
