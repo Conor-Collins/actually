@@ -1336,4 +1336,608 @@ describe('summarizePeriodBudgets', () => {
       /offset for transaction "tx" crosses categories: posting is in "Rent", period "p2" is in "Groceries"/,
     );
   });
+
+  // A1: posting amount outside safe integer range is rejected
+  test.each([2 ** 53, -(2 ** 53), NaN, Infinity, 1.5])(
+    'A1: rejects a posting with unsafe amount %p',
+    amount => {
+      const periods = [
+        makePeriod({
+          id: 'p1',
+          category: 'misc',
+          start: '2027-04-01',
+          end: '2027-05-01',
+          budget: 0,
+        }),
+      ];
+      expect(() =>
+        summarizePeriodBudgets({
+          periods,
+          postings: [
+            { id: 'bad', category: 'misc', date: '2027-04-10', amount },
+          ],
+          offsets: [],
+          asOf: '2027-04-15',
+        }),
+      ).toThrow(/bad/);
+    },
+  );
+
+  // A2: posting dated after asOf is still validated
+  test('A2: rejects an unsafe amount even when the posting is after asOf', () => {
+    const periods = [
+      makePeriod({
+        id: 'p1',
+        category: 'misc',
+        start: '2027-04-01',
+        end: '2027-05-01',
+        budget: 0,
+      }),
+    ];
+    expect(() =>
+      summarizePeriodBudgets({
+        periods,
+        postings: [
+          {
+            id: 'future',
+            category: 'misc',
+            date: '2027-06-01',
+            amount: 2 ** 53,
+          },
+        ],
+        offsets: [],
+        asOf: '2027-04-15',
+      }),
+    ).toThrow(/future/);
+  });
+
+  // A3: monthly sum overflow
+  test('A3: throws when the monthly actual spending sum overflows', () => {
+    const MAX = Number.MAX_SAFE_INTEGER;
+    expect(() =>
+      summarizePeriodBudgets({
+        periods: [],
+        postings: [
+          { id: 'p1', category: 'misc', date: '2027-04-10', amount: -MAX },
+          { id: 'p2', category: 'misc', date: '2027-04-10', amount: -1 },
+        ],
+        offsets: [],
+        asOf: '2027-04-15',
+      }),
+    ).toThrow(/p2/);
+  });
+
+  // A4: attributed sum overflow
+  test('A4: throws when the attributed sum for a period overflows', () => {
+    const MAX = Number.MAX_SAFE_INTEGER;
+    const periods = [
+      makePeriod({
+        id: 'ins',
+        category: 'insurance',
+        start: '2027-01-01',
+        end: '2028-01-01',
+        budget: 0,
+      }),
+    ];
+    expect(() =>
+      summarizePeriodBudgets({
+        periods,
+        postings: [
+          { id: 'p1', category: 'insurance', date: '2027-03-10', amount: -MAX },
+          { id: 'p2', category: 'insurance', date: '2027-03-10', amount: -1 },
+        ],
+        offsets: [],
+        asOf: '2027-06-15',
+      }),
+    ).toThrow(/p2/);
+  });
+
+  // A5: running total overflow that would cancel
+  test('A5: throws when an intermediate monthly sum overflows even if a later posting would cancel it', () => {
+    const MAX = Number.MAX_SAFE_INTEGER;
+    expect(() =>
+      summarizePeriodBudgets({
+        periods: [],
+        postings: [
+          { id: 'p1', category: 'misc', date: '2027-04-10', amount: MAX },
+          { id: 'p2', category: 'misc', date: '2027-04-10', amount: 1 },
+          { id: 'p3', category: 'misc', date: '2027-04-10', amount: -1 },
+        ],
+        offsets: [],
+        asOf: '2027-04-15',
+      }),
+    ).toThrow(/p2/);
+  });
+
+  // A6: budget + carryover overflow
+  test('A6: throws when budget plus carryover overflows', () => {
+    const MAX = Number.MAX_SAFE_INTEGER;
+    const periods = [
+      makePeriod({
+        id: 'big',
+        category: 'misc',
+        start: '2027-01-01',
+        end: '2028-01-01',
+        budget: MAX,
+        carryover: 1,
+      }),
+    ];
+    expect(() =>
+      summarizePeriodBudgets({
+        periods,
+        postings: [],
+        offsets: [],
+        asOf: '2027-06-15',
+      }),
+    ).toThrow(/big/);
+  });
+
+  // A7: remaining overflow
+  test('A7: throws when remaining overflows', () => {
+    const MAX = Number.MAX_SAFE_INTEGER;
+    const periods = [
+      makePeriod({
+        id: 'big',
+        category: 'insurance',
+        start: '2027-01-01',
+        end: '2028-01-01',
+        budget: MAX,
+        carryover: 0,
+      }),
+    ];
+    expect(() =>
+      summarizePeriodBudgets({
+        periods,
+        postings: [
+          {
+            id: 'refund',
+            category: 'insurance',
+            date: '2027-03-10',
+            amount: 1,
+          },
+        ],
+        offsets: [],
+        asOf: '2027-06-15',
+      }),
+    ).toThrow(/big/);
+  });
+
+  // A8: combined remaining overflow
+  test('A8: throws when the combined active remaining overflows', () => {
+    const MAX = Number.MAX_SAFE_INTEGER;
+    const periods = [
+      makePeriod({
+        id: 'a',
+        category: 'c1',
+        start: '2027-01-01',
+        end: '2028-01-01',
+        budget: MAX,
+      }),
+      makePeriod({
+        id: 'b',
+        category: 'c2',
+        start: '2027-01-01',
+        end: '2028-01-01',
+        budget: MAX,
+      }),
+    ];
+    expect(() =>
+      summarizePeriodBudgets({
+        periods,
+        postings: [],
+        offsets: [],
+        asOf: '2027-06-15',
+      }),
+    ).toThrow(/b/);
+  });
+
+  // A9: overspending total overflow
+  test('A9: throws when the total active overspending overflows', () => {
+    const MAX = Number.MAX_SAFE_INTEGER;
+    const periods = [
+      makePeriod({
+        id: 'a',
+        category: 'c1',
+        start: '2027-01-01',
+        end: '2028-01-01',
+        budget: 0,
+      }),
+      makePeriod({
+        id: 'c',
+        category: 'c3',
+        start: '2027-01-01',
+        end: '2028-01-01',
+        budget: MAX,
+      }),
+      makePeriod({
+        id: 'b',
+        category: 'c2',
+        start: '2027-01-01',
+        end: '2028-01-01',
+        budget: 0,
+      }),
+    ];
+    expect(() =>
+      summarizePeriodBudgets({
+        periods,
+        postings: [
+          { id: 'pa', category: 'c1', date: '2027-02-10', amount: -MAX },
+          { id: 'pb', category: 'c2', date: '2027-03-10', amount: -MAX },
+        ],
+        offsets: [],
+        asOf: '2027-06-15',
+      }),
+    ).toThrow(/b/);
+  });
+
+  // A10: exactly -MAX is accepted
+  test('A10: accepts an attributed sum of exactly -MAX_SAFE_INTEGER', () => {
+    const MAX = Number.MAX_SAFE_INTEGER;
+    const periods = [
+      makePeriod({
+        id: 'ins',
+        category: 'insurance',
+        start: '2027-01-01',
+        end: '2028-01-01',
+        budget: 0,
+      }),
+    ];
+    const summary = summarizePeriodBudgets({
+      periods,
+      postings: [
+        { id: 'p1', category: 'insurance', date: '2027-03-10', amount: -MAX },
+      ],
+      offsets: [],
+      asOf: '2027-06-15',
+    });
+    expect(summary.periods[0].netSpending).toBe(MAX);
+    expect(summary.periods[0].remaining).toBe(-MAX);
+    expect(summary.periods[0].overspending).toBe(MAX);
+
+    const summary2 = summarizePeriodBudgets({
+      periods,
+      postings: [
+        { id: 'p1', category: 'insurance', date: '2027-03-10', amount: MAX },
+      ],
+      offsets: [],
+      asOf: '2027-06-15',
+    });
+    expect(summary2.periods[0].netSpending).toBe(-MAX);
+    expect(summary2.periods[0].remaining).toBe(MAX);
+    expect(summary2.periods[0].overspending).toBe(0);
+  });
+
+  // B: refund-only period
+  test('B: a refund-only posting produces negative net spending and positive remaining', () => {
+    const periods = [
+      makePeriod({
+        id: 'ent',
+        category: 'entertainment',
+        start: '2027-04-01',
+        end: '2027-05-01',
+        budget: 10000,
+      }),
+    ];
+    const summary = summarizePeriodBudgets({
+      periods,
+      postings: [
+        {
+          id: 'refund',
+          category: 'entertainment',
+          date: '2027-04-10',
+          amount: 3000,
+        },
+      ],
+      offsets: [],
+      asOf: '2027-04-20',
+    });
+    expect(summary.periods[0].netSpending).toBe(-3000);
+    expect(summary.periods[0].remaining).toBe(13000);
+    expect(summary.periods[0].overspending).toBe(0);
+    expect(summary.monthlyActualSpending).toBe(-3000);
+  });
+
+  // C1: active period boundaries
+  test('C1: a period is active when asOf equals its start but not when asOf equals its end', () => {
+    const periods = [
+      makePeriod({
+        id: 'april',
+        category: 'misc',
+        start: '2027-04-01',
+        end: '2027-05-01',
+        budget: 100,
+      }),
+      makePeriod({
+        id: 'may',
+        category: 'misc',
+        start: '2027-05-01',
+        end: '2027-06-01',
+        budget: 100,
+      }),
+    ];
+    const atMayStart = summarizePeriodBudgets({
+      periods,
+      postings: [],
+      offsets: [],
+      asOf: '2027-05-01',
+    });
+    expect(atMayStart.activePeriods.map(s => s.period.id)).toEqual(['may']);
+
+    const atAprilEnd = summarizePeriodBudgets({
+      periods,
+      postings: [],
+      offsets: [],
+      asOf: '2027-04-30',
+    });
+    expect(atAprilEnd.activePeriods.map(s => s.period.id)).toEqual(['april']);
+  });
+
+  // C2: overspent active period selection
+  test('C2: only overspent active periods appear in overspentActivePeriods', () => {
+    const periods = [
+      makePeriod({
+        id: 'march',
+        category: 'groceries',
+        start: '2027-03-01',
+        end: '2027-04-01',
+        budget: 100,
+      }),
+      makePeriod({
+        id: 'april',
+        category: 'groceries',
+        start: '2027-04-01',
+        end: '2027-05-01',
+        budget: 100,
+      }),
+    ];
+    const summary = summarizePeriodBudgets({
+      periods,
+      postings: [
+        { id: 'm1', category: 'groceries', date: '2027-03-10', amount: -500 },
+        { id: 'a1', category: 'groceries', date: '2027-04-05', amount: -150 },
+      ],
+      offsets: [],
+      asOf: '2027-04-20',
+    });
+    expect(summary.overspentActivePeriods.map(s => s.period.id)).toEqual([
+      'april',
+    ]);
+    expect(summary.totalActiveOverspending).toBe(50);
+    const marchEntry = summary.periods.find(s => s.period.id === 'march');
+    expect(marchEntry?.overspending).toBe(400);
+  });
+
+  // C3: multiple overspent active periods in input order
+  test('C3: multiple overspent active periods appear in input order', () => {
+    const periods = [
+      makePeriod({
+        id: 'apr-c1',
+        category: 'c1',
+        start: '2027-04-01',
+        end: '2027-05-01',
+        budget: 100,
+      }),
+      makePeriod({
+        id: 'apr-c2',
+        category: 'c2',
+        start: '2027-04-01',
+        end: '2027-05-01',
+        budget: 100,
+      }),
+    ];
+    const summary = summarizePeriodBudgets({
+      periods,
+      postings: [
+        { id: 'p1', category: 'c1', date: '2027-04-10', amount: -8100 },
+        { id: 'p2', category: 'c2', date: '2027-04-10', amount: -2600 },
+      ],
+      offsets: [],
+      asOf: '2027-04-20',
+    });
+    expect(summary.overspentActivePeriods.map(s => s.period.id)).toEqual([
+      'apr-c1',
+      'apr-c2',
+    ]);
+    expect(summary.totalActiveOverspending).toBe(10500);
+  });
+
+  // D1: SPEC worked example at three asOf dates
+  test.each(['2027-04-20', '2027-08-15', '2027-12-31'])(
+    'D1: insurance figures hold at asOf %s',
+    asOf => {
+      const { periods, postings } = makeSpecExample();
+      const summary = summarizePeriodBudgets({
+        periods,
+        postings,
+        offsets: [],
+        asOf,
+      });
+      const insEntry = summary.periods.find(s => s.period.id === 'insurance');
+      expect(insEntry?.netSpending).toBe(120000);
+      expect(insEntry?.remaining).toBe(0);
+      expect(summary.activePeriods.map(s => s.period.id)).toContain(
+        'insurance',
+      );
+
+      const expectedMonthly = asOf === '2027-04-20' ? 223000 : 0;
+      expect(summary.monthlyActualSpending).toBe(expectedMonthly);
+    },
+  );
+
+  // D2: early offset (posting before period start, offset to that period)
+  test('D2: an offset attributes a pre-period posting to the named period', () => {
+    const periods = [
+      makePeriod({
+        id: 'insurance-2027',
+        category: 'insurance',
+        start: '2027-01-01',
+        end: '2028-01-01',
+        budget: 120000,
+      }),
+    ];
+    const postings = [
+      {
+        id: 'ins-early',
+        category: 'insurance',
+        date: '2026-12-20',
+        amount: -120000,
+      },
+    ];
+    const offsets = [
+      { transactionId: 'ins-early', periodId: 'insurance-2027' },
+    ];
+
+    const early = summarizePeriodBudgets({
+      periods,
+      postings,
+      offsets,
+      asOf: '2026-12-31',
+    });
+    expect(early.periods[0].netSpending).toBe(120000);
+    expect(early.periods[0].remaining).toBe(0);
+    expect(early.monthlyActualSpending).toBe(120000);
+    expect(early.activePeriods).toEqual([]);
+    expect(early.unassignedPostingIds).toEqual([]);
+
+    const late = summarizePeriodBudgets({
+      periods,
+      postings,
+      offsets,
+      asOf: '2027-01-31',
+    });
+    expect(late.periods[0].netSpending).toBe(120000);
+    expect(late.monthlyActualSpending).toBe(0);
+    expect(late.activePeriods.map(s => s.period.id)).toContain(
+      'insurance-2027',
+    );
+  });
+
+  // D3: late offset (posting after period end, offset to earlier period)
+  test('D3: an offset attributes a post-period posting to the named period', () => {
+    const periods = [
+      makePeriod({
+        id: 'insurance-2027',
+        category: 'insurance',
+        start: '2027-01-01',
+        end: '2028-01-01',
+        budget: 120000,
+      }),
+      makePeriod({
+        id: 'insurance-2028',
+        category: 'insurance',
+        start: '2028-01-01',
+        end: '2029-01-01',
+        budget: 120000,
+      }),
+    ];
+    const postings = [
+      {
+        id: 'ins-late',
+        category: 'insurance',
+        date: '2028-01-10',
+        amount: -120000,
+      },
+    ];
+
+    const withOffset = summarizePeriodBudgets({
+      periods,
+      postings,
+      offsets: [{ transactionId: 'ins-late', periodId: 'insurance-2027' }],
+      asOf: '2028-01-31',
+    });
+    const p2027 = withOffset.periods.find(
+      s => s.period.id === 'insurance-2027',
+    );
+    const p2028 = withOffset.periods.find(
+      s => s.period.id === 'insurance-2028',
+    );
+    expect(p2027?.netSpending).toBe(120000);
+    expect(p2028?.netSpending).toBe(0);
+    expect(p2028?.remaining).toBe(120000);
+    expect(withOffset.monthlyActualSpending).toBe(120000);
+
+    const withoutOffset = summarizePeriodBudgets({
+      periods,
+      postings,
+      offsets: [],
+      asOf: '2028-01-31',
+    });
+    const p2027no = withoutOffset.periods.find(
+      s => s.period.id === 'insurance-2027',
+    );
+    const p2028no = withoutOffset.periods.find(
+      s => s.period.id === 'insurance-2028',
+    );
+    expect(p2027no?.netSpending).toBe(0);
+    expect(p2028no?.netSpending).toBe(120000);
+    expect(withoutOffset.monthlyActualSpending).toBe(120000);
+  });
+
+  // E: inputs are not mutated
+  test('E: does not mutate its input arrays or objects', () => {
+    const periods = [
+      makePeriod({
+        id: 'p1',
+        category: 'Rent',
+        start: '2027-04-01',
+        end: '2027-05-01',
+        budget: 10000,
+        carryover: 500,
+      }),
+      makePeriod({
+        id: 'p2',
+        category: 'Groceries',
+        start: '2027-04-01',
+        end: '2027-05-01',
+        budget: 6000,
+        carryover: -300,
+      }),
+    ];
+    const postings = [
+      { id: 'tx1', category: 'Rent', date: '2027-04-10', amount: -5000 },
+      { id: 'tx2', category: 'Groceries', date: '2027-04-15', amount: -2000 },
+    ];
+    const offsets = [{ transactionId: 'tx1', periodId: 'p1' }];
+
+    Object.freeze(periods);
+    Object.freeze(periods[0]);
+    Object.freeze(periods[1]);
+    Object.freeze(postings);
+    Object.freeze(postings[0]);
+    Object.freeze(postings[1]);
+    Object.freeze(offsets);
+    Object.freeze(offsets[0]);
+
+    const periodsCopy = JSON.parse(JSON.stringify(periods));
+    const postingsCopy = JSON.parse(JSON.stringify(postings));
+    const offsetsCopy = JSON.parse(JSON.stringify(offsets));
+
+    summarizePeriodBudgets({ periods, postings, offsets, asOf: '2027-04-20' });
+
+    expect(periods).toEqual(periodsCopy);
+    expect(postings).toEqual(postingsCopy);
+    expect(offsets).toEqual(offsetsCopy);
+  });
+
+  // F: -0 normalization
+  test('F: normalizes -0 to 0 in remaining and combinedActiveRemaining', () => {
+    const periods = [
+      makePeriod({
+        id: 'p1',
+        category: 'Rent',
+        start: '2027-04-01',
+        end: '2027-05-01',
+        budget: -0,
+        carryover: -0,
+      }),
+    ];
+    const summary = summarizePeriodBudgets({
+      periods,
+      postings: [],
+      offsets: [],
+      asOf: '2027-04-15',
+    });
+    expect(Object.is(summary.periods[0].remaining, 0)).toBe(true);
+    expect(Object.is(summary.combinedActiveRemaining, 0)).toBe(true);
+  });
 });

@@ -272,8 +272,9 @@ export function summarizePeriodBudgets({
     const netSpending = attributedSum === 0 ? 0 : -attributedSum;
     const allowance = period.budget + period.carryover;
     assertSafeInteger(allowance, `period ${period.id}: budget + carryover`);
-    const remaining = allowance - netSpending;
-    assertSafeInteger(remaining, `period ${period.id}: remaining`);
+    const rawRemaining = allowance - netSpending;
+    assertSafeInteger(rawRemaining, `period ${period.id}: remaining`);
+    const remaining = rawRemaining === 0 ? 0 : rawRemaining;
     const overspending = Math.max(0, -remaining);
     periodSummaries.push({ period, netSpending, remaining, overspending });
   }
@@ -289,6 +290,8 @@ export function summarizePeriodBudgets({
       `period ${summary.period.id}: combined active remaining`,
     );
   }
+  combinedActiveRemaining =
+    combinedActiveRemaining === 0 ? 0 : combinedActiveRemaining;
   const overspentActivePeriods = activePeriods.filter(
     summary => summary.overspending > 0,
   );
