@@ -1,14 +1,17 @@
 ---
 id: TASK-5
 title: 'projectPeriodCharges: scheduled-charge occurrences and expected remaining'
-status: Review
+status: Done
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-14T05:20:00Z'
+updated_date: '2026-11-14T05:22:00Z'
 labels:
   - calculation
 dependencies:
   - TASK-4
+modified_files:
+  - packages/loot-core/src/shared/period-budget.test.ts
+  - packages/loot-core/src/shared/period-budget.ts
 priority: medium
 ordinal: 5000
 ---
@@ -23,12 +26,12 @@ Code goes in packages/loot-core/src/shared/period-budget.ts, tests in packages/l
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A scheduled occurrence is outstanding and reduces expected remaining for its period, without changing budget remaining. An overdue scheduled occurrence (date before as-of, not posted) stays outstanding.
-- [ ] #2 A posted occurrence whose linked posting is dated on or before as-of is not outstanding, even when the actual amount differs from the estimate; a posted occurrence whose linked posting is dated after as-of remains outstanding.
-- [ ] #3 After one occurrence is matched, a later occurrence of the same bill in the same period remains outstanding.
-- [ ] #4 Rejected: duplicate occurrence ids; a period id that does not exist; a negative, fractional or unsafe amount; a posted occurrence without a transaction id; one transaction linked to two occurrences; a linked transaction id that is not among the postings.
-- [ ] #5 A test reproduces SPEC section 8: the taxes period (2027-04-01 to 2027-07-01, allowance 900.00) with a 900.00 charge scheduled for 2027-04-28 has remaining 900.00 and expected remaining 0.00 at 2027-04-20.
-- [ ] #6 The gate `node .yarn/releases/yarn-4.17.1.cjs typecheck && node .yarn/releases/yarn-4.17.1.cjs lint && node .yarn/releases/yarn-4.17.1.cjs test` passes.
+- [x] #1 A scheduled occurrence is outstanding and reduces expected remaining for its period, without changing budget remaining. An overdue scheduled occurrence (date before as-of, not posted) stays outstanding.
+- [x] #2 A posted occurrence whose linked posting is dated on or before as-of is not outstanding, even when the actual amount differs from the estimate; a posted occurrence whose linked posting is dated after as-of remains outstanding.
+- [x] #3 After one occurrence is matched, a later occurrence of the same bill in the same period remains outstanding.
+- [x] #4 Rejected: duplicate occurrence ids; a period id that does not exist; a negative, fractional or unsafe amount; a posted occurrence without a transaction id; one transaction linked to two occurrences; a linked transaction id that is not among the postings.
+- [x] #5 A test reproduces SPEC section 8: the taxes period (2027-04-01 to 2027-07-01, allowance 900.00) with a 900.00 charge scheduled for 2027-04-28 has remaining 900.00 and expected remaining 0.00 at 2027-04-20.
+- [x] #6 The gate `node .yarn/releases/yarn-4.17.1.cjs typecheck && node .yarn/releases/yarn-4.17.1.cjs lint && node .yarn/releases/yarn-4.17.1.cjs test` passes.
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -40,3 +43,9 @@ Round 1 (rung 1): candidate c9d923f50 REQUEST CHANGES by GPT Sol xhigh. Implemen
 
 Review round 2 (GPT Sol xhigh): APPROVE of bb53d2e74. All six round-1 findings resolved by tests R1-R6 (test-only commit over c9d923f50). 145 focused tests pass; 43 mutations tried, 40 killed, 3 equivalent survivors; gate exit 0. Landing.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Landed task-5-project-period-charges as 41b10d6c1 on 2026-11-13.
+<!-- SECTION:FINAL_SUMMARY:END -->
