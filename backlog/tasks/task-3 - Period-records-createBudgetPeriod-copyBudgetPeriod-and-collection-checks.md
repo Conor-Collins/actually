@@ -1,15 +1,18 @@
 ---
 id: TASK-3
 title: 'Period records: createBudgetPeriod, copyBudgetPeriod and collection checks'
-status: Review
+status: Done
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-14T03:40:00Z'
+updated_date: '2026-11-14T03:45:00Z'
 labels:
   - calculation
 dependencies:
   - TASK-1
   - TASK-2
+modified_files:
+  - packages/loot-core/src/shared/period-budget.test.ts
+  - packages/loot-core/src/shared/period-budget.ts
 priority: high
 ordinal: 3000
 ---
@@ -24,11 +27,11 @@ Code goes in packages/loot-core/src/shared/period-budget.ts, tests in packages/l
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 createBudgetPeriod({ id, category, start, end, budget, carryover? }) returns the period with carryover defaulting to 0, and rejects: empty id or category; a start or end that is not a real calendar date in YYYY-MM-DD form (for example 2027-02-30); end on or before start; a negative budget; a budget or carryover that is fractional or not a safe integer. A negative carryover is accepted.
-- [ ] #2 copyBudgetPeriod(source, { id, start, end, carryover? }) returns a new period in the same category with the allowance copied by value and carryover defaulting to 0 (not the source's carryover); it rejects an id equal to the source's; the source object is not modified, and changing the copy's budget afterwards leaves the source's budget intact.
-- [ ] #3 An exported collection check (validateBudgetPeriods(periods)) rejects duplicate ids and two periods of one category that overlap; it accepts adjacent periods (one's end equals the next one's start), gaps, and overlapping dates in different categories.
-- [ ] #4 Tests cover every rule above, including an annual period 2027-01-01 to 2028-01-01 and a period that does not follow the calendar year.
-- [ ] #5 The new files are type-strict (no @ts-strict-ignore) and the gate `node .yarn/releases/yarn-4.17.1.cjs typecheck && node .yarn/releases/yarn-4.17.1.cjs lint && node .yarn/releases/yarn-4.17.1.cjs test` passes.
+- [x] #1 createBudgetPeriod({ id, category, start, end, budget, carryover? }) returns the period with carryover defaulting to 0, and rejects: empty id or category; a start or end that is not a real calendar date in YYYY-MM-DD form (for example 2027-02-30); end on or before start; a negative budget; a budget or carryover that is fractional or not a safe integer. A negative carryover is accepted.
+- [x] #2 copyBudgetPeriod(source, { id, start, end, carryover? }) returns a new period in the same category with the allowance copied by value and carryover defaulting to 0 (not the source's carryover); it rejects an id equal to the source's; the source object is not modified, and changing the copy's budget afterwards leaves the source's budget intact.
+- [x] #3 An exported collection check (validateBudgetPeriods(periods)) rejects duplicate ids and two periods of one category that overlap; it accepts adjacent periods (one's end equals the next one's start), gaps, and overlapping dates in different categories.
+- [x] #4 Tests cover every rule above, including an annual period 2027-01-01 to 2028-01-01 and a period that does not follow the calendar year.
+- [x] #5 The new files are type-strict (no @ts-strict-ignore) and the gate `node .yarn/releases/yarn-4.17.1.cjs typecheck && node .yarn/releases/yarn-4.17.1.cjs lint && node .yarn/releases/yarn-4.17.1.cjs test` passes.
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -38,3 +41,9 @@ Code goes in packages/loot-core/src/shared/period-budget.ts, tests in packages/l
 
 2026-11-13: round 2 (rung 1) candidate b857440c8 reviewed: REQUEST CHANGES. Date defect fixed and three of four test gaps closed. Remaining: the immutability test uses a fixture an earlier test has already changed (blocking), and the days-in-month table is not tested month by month (should-fix). Back to the coder for round 3.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Landed task-3-period-records as e87f94a2a on 2026-11-13.
+<!-- SECTION:FINAL_SUMMARY:END -->
