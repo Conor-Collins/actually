@@ -1,14 +1,17 @@
 ---
 id: TASK-6
 title: 'projectCashBalances: selected-account cash, projections and shortfalls'
-status: Review
+status: Done
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-14T06:18:00Z'
+updated_date: '2026-11-14T06:20:00Z'
 labels:
   - calculation
 dependencies:
   - TASK-5
+modified_files:
+  - packages/loot-core/src/shared/period-budget.test.ts
+  - packages/loot-core/src/shared/period-budget.ts
 priority: medium
 ordinal: 6000
 ---
@@ -23,12 +26,12 @@ Code goes in packages/loot-core/src/shared/period-budget.ts, tests in packages/l
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 It returns cash available (the sum of the selected accounts' snapshot balances) and, per selected account, the current balance, projected ending balance, minimum daily closing balance over the forecast, and the first shortfall date (the first date whose closing balance is below zero, or none).
-- [ ] #2 Movements dated on or before as-of, movements after the horizon and movements in accounts outside the selected set are not applied. Movements are grouped by date; their order within a day does not change the result.
-- [ ] #3 Rejected: duplicate account ids or movement ids; a selected account with no snapshot; fractional or unsafe amounts; any sum that leaves the safe-integer range; a horizon before as-of.
-- [ ] #4 A test reproduces SPEC section 6: checking 700.00 and savings 3,500.00 give cash 4,200.00; a 900.00 payment from checking on 2027-04-28 gives checking a minimum of -200.00 and first shortfall 2027-04-28 while combined projected cash stays positive; adding a 200.00 savings-to-checking transfer (two legs) before the payment removes the shortfall; combined projected cash is 3,300.00 in both cases.
-- [ ] #5 A test shows that income arriving after a shortfall leaves the first shortfall date and the negative minimum reported even though the ending balance is positive.
-- [ ] #6 The gate `node .yarn/releases/yarn-4.17.1.cjs typecheck && node .yarn/releases/yarn-4.17.1.cjs lint && node .yarn/releases/yarn-4.17.1.cjs test` passes.
+- [x] #1 It returns cash available (the sum of the selected accounts' snapshot balances) and, per selected account, the current balance, projected ending balance, minimum daily closing balance over the forecast, and the first shortfall date (the first date whose closing balance is below zero, or none).
+- [x] #2 Movements dated on or before as-of, movements after the horizon and movements in accounts outside the selected set are not applied. Movements are grouped by date; their order within a day does not change the result.
+- [x] #3 Rejected: duplicate account ids or movement ids; a selected account with no snapshot; fractional or unsafe amounts; any sum that leaves the safe-integer range; a horizon before as-of.
+- [x] #4 A test reproduces SPEC section 6: checking 700.00 and savings 3,500.00 give cash 4,200.00; a 900.00 payment from checking on 2027-04-28 gives checking a minimum of -200.00 and first shortfall 2027-04-28 while combined projected cash stays positive; adding a 200.00 savings-to-checking transfer (two legs) before the payment removes the shortfall; combined projected cash is 3,300.00 in both cases.
+- [x] #5 A test shows that income arriving after a shortfall leaves the first shortfall date and the negative minimum reported even though the ending balance is positive.
+- [x] #6 The gate `node .yarn/releases/yarn-4.17.1.cjs typecheck && node .yarn/releases/yarn-4.17.1.cjs lint && node .yarn/releases/yarn-4.17.1.cjs test` passes.
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -40,3 +43,9 @@ Review round 1 (rung 1, candidate 4857b5ab5): APPROVE of the production code, 10
 
 Review round 2 (rung 1, candidate ca292a25c): APPROVE. Only the test file changed (R1-R8 appended); all ten round 1 survivors are now killed; 207 focused tests pass; gate exit 0. Landing.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Landed task-6-project-cash-balances as 456597363 on 2026-11-13.
+<!-- SECTION:FINAL_SUMMARY:END -->
