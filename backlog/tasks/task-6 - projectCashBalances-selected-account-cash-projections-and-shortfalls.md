@@ -1,10 +1,10 @@
 ---
 id: TASK-6
 title: 'projectCashBalances: selected-account cash, projections and shortfalls'
-status: Review
+status: In Progress
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-14T05:55:00Z'
+updated_date: '2026-11-14T06:09:00Z'
 labels:
   - calculation
 dependencies:
@@ -35,4 +35,6 @@ Code goes in packages/loot-core/src/shared/period-budget.ts, tests in packages/l
 
 <!-- SECTION:NOTES:BEGIN -->
 Orchestrator: rung 1 (qwen3.8-27b) round 1 started; branch task-6-project-cash-balances. Brief fixes: output shape {cashAvailable, projectedCash, accounts[]}, validation order, per-day inflow/outflow totals so same-day order cannot change the result.
+
+Review round 1 (rung 1, candidate 4857b5ab5): APPROVE of the production code, 100 mutations tried, 81 killed, 9 equivalent, 10 real test gaps (aggregate overflow in mid-selection and negative projected overflow, ignored movements and overflow, association of same-day totals, pipe ids with movements on both accounts, zero opening balance, invalid horizon before date order). Orchestrator decision: add the eight tests R1-R8 (list in /tmp/actually-orch/task-6-tests-C.md) before landing; production code unchanged.
 <!-- SECTION:NOTES:END -->
