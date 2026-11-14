@@ -310,17 +310,60 @@ describe('createBudgetPeriod', () => {
       }),
     ).toThrow(/start "2027-01-00"/);
   });
+
+  const daysInMonth2027: Array<[string, number]> = [
+    ['01', 31],
+    ['02', 28],
+    ['03', 31],
+    ['04', 30],
+    ['05', 31],
+    ['06', 30],
+    ['07', 31],
+    ['08', 31],
+    ['09', 30],
+    ['10', 31],
+    ['11', 30],
+    ['12', 31],
+  ];
+
+  test.each(daysInMonth2027)(
+    'accepts the last day of month %s in 2027 and rejects the next day',
+    (month, lastDay) => {
+      const lastDayText = String(lastDay).padStart(2, '0');
+      const period = createBudgetPeriod({
+        id: 'p1',
+        category: 'Rent',
+        start: `2027-${month}-${lastDayText}`,
+        end: '2028-06-01',
+        budget: 150000,
+      });
+      expect(period.start).toBe(`2027-${month}-${lastDayText}`);
+      const nextDayText = String(lastDay + 1).padStart(2, '0');
+      expect(() =>
+        createBudgetPeriod({
+          id: 'p1',
+          category: 'Rent',
+          start: `2027-${month}-${nextDayText}`,
+          end: '2028-06-01',
+          budget: 150000,
+        }),
+      ).toThrow(new RegExp(`start "2027-${month}-${nextDayText}"`));
+    },
+  );
 });
 
 describe('copyBudgetPeriod', () => {
-  const source = makePeriod({
-    id: 'p1',
-    category: 'Rent',
-    budget: 150000,
-    carryover: -2500,
-  });
+  function makeSource() {
+    return makePeriod({
+      id: 'p1',
+      category: 'Rent',
+      budget: 150000,
+      carryover: -2500,
+    });
+  }
 
   test('copies the category and allowance by value and defaults carryover to 0', () => {
+    const source = makeSource();
     const copy = copyBudgetPeriod(source, {
       id: 'p2',
       start: '2028-01-01',
@@ -337,11 +380,12 @@ describe('copyBudgetPeriod', () => {
   });
 
   test('does not modify the source, and changing the copy leaves the source intact', () => {
+    const source = makeSource();
     const snapshot = { ...source };
     const copy = copyBudgetPeriod(source, {
       id: 'p2',
-      start: '2028-01-01',
-      end: '2029-01-01',
+      start: '2029-01-01',
+      end: '2030-01-01',
     });
     expect(copy).not.toBe(source);
     copy.id = 'x';
@@ -351,9 +395,33 @@ describe('copyBudgetPeriod', () => {
     copy.budget = 1;
     copy.carryover = 2;
     expect(source).toEqual(snapshot);
+    expect(source.id).toBe('p1');
+    expect(source.category).toBe('Rent');
+    expect(source.start).toBe('2027-01-01');
+    expect(source.end).toBe('2028-01-01');
+    expect(source.budget).toBe(150000);
+    expect(source.carryover).toBe(-2500);
+  });
+
+  test('does not throw when the source is frozen', () => {
+    const source = Object.freeze(makeSource());
+    const copy = copyBudgetPeriod(source, {
+      id: 'p2',
+      start: '2029-01-01',
+      end: '2030-01-01',
+    });
+    expect(copy).toEqual({
+      id: 'p2',
+      category: 'Rent',
+      start: '2029-01-01',
+      end: '2030-01-01',
+      budget: 150000,
+      carryover: 0,
+    });
   });
 
   test('keeps an explicit carryover', () => {
+    const source = makeSource();
     const copy = copyBudgetPeriod(source, {
       id: 'p2',
       start: '2028-01-01',
@@ -364,6 +432,7 @@ describe('copyBudgetPeriod', () => {
   });
 
   test('keeps a negative explicit carryover', () => {
+    const source = makeSource();
     const copy = copyBudgetPeriod(source, {
       id: 'p2',
       start: '2028-01-01',
@@ -374,6 +443,7 @@ describe('copyBudgetPeriod', () => {
   });
 
   test('rejects a fractional carryover', () => {
+    const source = makeSource();
     expect(() =>
       copyBudgetPeriod(source, {
         id: 'p2',
@@ -385,6 +455,7 @@ describe('copyBudgetPeriod', () => {
   });
 
   test('rejects an unsafe carryover', () => {
+    const source = makeSource();
     expect(() =>
       copyBudgetPeriod(source, {
         id: 'p2',
@@ -396,6 +467,7 @@ describe('copyBudgetPeriod', () => {
   });
 
   test('rejects an id equal to the source id', () => {
+    const source = makeSource();
     expect(() =>
       copyBudgetPeriod(source, {
         id: 'p1',
@@ -406,6 +478,7 @@ describe('copyBudgetPeriod', () => {
   });
 
   test('rejects an empty id', () => {
+    const source = makeSource();
     expect(() =>
       copyBudgetPeriod(source, {
         id: '',
@@ -416,6 +489,7 @@ describe('copyBudgetPeriod', () => {
   });
 
   test('rejects an invalid end date', () => {
+    const source = makeSource();
     expect(() =>
       copyBudgetPeriod(source, {
         id: 'p2',
@@ -426,6 +500,7 @@ describe('copyBudgetPeriod', () => {
   });
 
   test('rejects an end on or before the start', () => {
+    const source = makeSource();
     expect(() =>
       copyBudgetPeriod(source, {
         id: 'p2',
