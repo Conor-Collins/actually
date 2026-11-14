@@ -3,10 +3,10 @@ id: TASK-4
 title: >-
   summarizePeriodBudgets: attribution, offsets, monthly actuals, remaining and
   overspending
-status: In Progress
+status: Review
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-14T04:12:00Z'
+updated_date: '2026-11-14T04:23:00Z'
 labels:
   - calculation
 dependencies:
