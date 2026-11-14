@@ -4,7 +4,7 @@ title: 'Period records: createBudgetPeriod, copyBudgetPeriod and collection chec
 status: Done
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-14T03:45:00Z'
+updated_date: '2026-11-14T03:49:00Z'
 labels:
   - calculation
 dependencies:
@@ -40,6 +40,8 @@ Code goes in packages/loot-core/src/shared/period-budget.ts, tests in packages/l
 2026-11-13: round 1 (rung 1) candidate b77e930ff reviewed by GPT Sol xhigh: REQUEST CHANGES. Two blocking findings: tests do not catch four broken behaviours (unsafe carryover, explicit copy carryover, source modification, overlap in reverse order), and valid dates before year 0100 are rejected. Back to the coder for round 2.
 
 2026-11-13: round 2 (rung 1) candidate b857440c8 reviewed: REQUEST CHANGES. Date defect fixed and three of four test gaps closed. Remaining: the immutability test uses a fixture an earlier test has already changed (blocking), and the days-in-month table is not tested month by month (should-fix). Back to the coder for round 3.
+
+Round 3 (rung 1): candidate abdcda314 APPROVED by GPT Sol xhigh (56 tests, gate exit 0, all prior mutations caught). One non-blocking should-fix carried into TASK-4's brief: add an explicit test that createBudgetPeriod accepts budget 0. Landed as e87f94a2a.
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
