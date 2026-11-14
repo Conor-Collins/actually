@@ -1,10 +1,10 @@
 ---
 id: TASK-6
 title: 'projectCashBalances: selected-account cash, projections and shortfalls'
-status: In Progress
+status: Review
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-14T05:22:00Z'
+updated_date: '2026-11-14T05:55:00Z'
 labels:
   - calculation
 dependencies:
