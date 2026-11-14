@@ -1,9 +1,10 @@
 ---
 id: TASK-3
 title: 'Period records: createBudgetPeriod, copyBudgetPeriod and collection checks'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
+updated_date: '2026-11-14T03:09:00Z'
 labels:
   - calculation
 dependencies:
