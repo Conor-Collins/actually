@@ -1,14 +1,16 @@
 ---
 id: TASK-14
 title: 'Lint gate fails on main: studio setup files are not format-clean'
-status: Review
+status: Done
 assignee: []
 created_date: '2026-11-13T16:14:00Z'
-updated_date: '2026-11-13T16:27:00Z'
+updated_date: '2026-11-14T02:57:00Z'
 labels:
   - base
   - gate
 dependencies: []
+modified_files:
+  - .oxfmtrc.json
 priority: high
 ordinal: 14000
 ---
@@ -23,9 +25,9 @@ Fix it in .oxfmtrc.json only, by extending the existing ignore list from ["backl
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Only .oxfmtrc.json changes: its ignorePatterns line reads ["backlog/**", "groma/**", "/AGENTS.md", "/CLAUDE.md"]; AGENTS.md, CLAUDE.md and groma/ are byte-identical to main.
-- [ ] #2 `node .yarn/releases/yarn-4.17.1.cjs lint` passes.
-- [ ] #3 The whole gate `node .yarn/releases/yarn-4.17.1.cjs typecheck && node .yarn/releases/yarn-4.17.1.cjs lint && node .yarn/releases/yarn-4.17.1.cjs test` passes.
+- [x] #1 Only .oxfmtrc.json changes: its ignorePatterns line reads ["backlog/**", "groma/**", "/AGENTS.md", "/CLAUDE.md"]; AGENTS.md, CLAUDE.md and groma/ are byte-identical to main.
+- [x] #2 `node .yarn/releases/yarn-4.17.1.cjs lint` passes.
+- [x] #3 The whole gate `node .yarn/releases/yarn-4.17.1.cjs typecheck && node .yarn/releases/yarn-4.17.1.cjs lint && node .yarn/releases/yarn-4.17.1.cjs test` passes.
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -33,3 +35,9 @@ Fix it in .oxfmtrc.json only, by extending the existing ignore list from ["backl
 <!-- SECTION:NOTES:BEGIN -->
 2026-11-13: candidate 974fe2bfd approved by independent review (GPT Sol xhigh, round 1). Landing attempted and stopped cleanly, nothing merged: the gate cannot run in the main checkout as the agent account because about 18,000 build and cache files there (node_modules/.cache, packages/*/dist, packages/*/build, packages/*/node_modules/.vite, packages/loot-core/@types) are owned by the owner's account without group write. Waits for the owner to restore group write (runbook setup step); then land again.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Landed task-14-format-gate as 9849ae4c1 on 2026-11-13.
+<!-- SECTION:FINAL_SUMMARY:END -->
