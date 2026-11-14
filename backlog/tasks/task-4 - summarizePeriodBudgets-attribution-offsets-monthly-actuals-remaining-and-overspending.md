@@ -3,10 +3,10 @@ id: TASK-4
 title: >-
   summarizePeriodBudgets: attribution, offsets, monthly actuals, remaining and
   overspending
-status: Review
+status: In Progress
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-14T04:03:00Z'
+updated_date: '2026-11-14T04:12:00Z'
 labels:
   - calculation
 dependencies:
@@ -40,4 +40,6 @@ Code goes in packages/loot-core/src/shared/period-budget.ts, tests in packages/l
 
 <!-- SECTION:NOTES:BEGIN -->
 Orchestrator: started 2026-11-13 at rung 1 (qwen3.8-27b), reviewer GPT Sol xhigh. Brief also asks for the zero-allowance test left over from TASK-3 review round 3.
+
+Round 1 (rung 1): candidate 23789b0f9 REQUEST CHANGES by GPT Sol xhigh. Implementation passed all direct probes but 14 of 37 mutations survive the tests. Blocking: no tests for unsafe amounts and sum overflow (AC2); refund-only negative net spending unprotected (AC3); active end boundary, inactive overspending and overspending total unprotected (AC4); AC6 viewing dates 2027-08-15 and 2027-12-31 and the cross-year early/late offsets missing. Should-fix: no frozen-input test; remaining can be -0. Back to the coder for round 2.
 <!-- SECTION:NOTES:END -->
