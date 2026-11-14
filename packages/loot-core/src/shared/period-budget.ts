@@ -315,6 +315,160 @@ export function summarizePeriodBudgets({
   };
 }
 
+export type ChargeOccurrence = {
+  id: string;
+  periodId: string;
+  date: string;
+  amount: IntegerAmount; // expected charge, nonnegative
+  state: 'scheduled' | 'posted';
+  transactionId?: string; // required when state is 'posted'
+};
+
+export type PeriodChargeProjection = {
+  period: BudgetPeriod;
+  remaining: IntegerAmount; // same value as in the summary
+  outstandingCharges: IntegerAmount; // sum of outstanding occurrence amounts
+  expectedRemaining: IntegerAmount; // remaining - outstandingCharges
+  outstandingOccurrenceIds: string[]; // in input order
+};
+
+export type PeriodChargesProjection = {
+  summary: PeriodBudgetsSummary; // exactly what summarizePeriodBudgets returns
+  periods: PeriodChargeProjection[]; // every input period, in input order
+};
+
+type ProjectPeriodChargesInput = {
+  periods: readonly BudgetPeriod[];
+  postings: readonly ExpensePosting[];
+  offsets: readonly PeriodOffset[];
+  occurrences: readonly ChargeOccurrence[];
+  asOf: string;
+};
+
+type ValidatedOccurrence = {
+  occurrence: ChargeOccurrence;
+  outstanding: boolean;
+};
+
+function validateOccurrences(
+  occurrences: readonly ChargeOccurrence[],
+  periodIds: ReadonlySet<string>,
+  postingById: ReadonlyMap<string, ExpensePosting>,
+  asOf: string,
+): ValidatedOccurrence[] {
+  const seenOccurrenceIds = new Set<string>();
+  const postedTransactionById = new Map<string, string>();
+  const validated: ValidatedOccurrence[] = [];
+  for (const occurrence of occurrences) {
+    if (seenOccurrenceIds.has(occurrence.id)) {
+      throw new Error(`duplicate occurrence id "${occurrence.id}"`);
+    }
+    seenOccurrenceIds.add(occurrence.id);
+    if (!periodIds.has(occurrence.periodId)) {
+      throw new Error(
+        `occurrence ${occurrence.id}: period "${occurrence.periodId}" does not exist`,
+      );
+    }
+    if (!isValidDateString(occurrence.date)) {
+      throw new Error(
+        `occurrence ${occurrence.id}: date "${occurrence.date}" is not a valid YYYY-MM-DD date`,
+      );
+    }
+    assertSafeInteger(occurrence.amount, `occurrence ${occurrence.id}: amount`);
+    if (occurrence.amount < 0) {
+      throw new Error(
+        `occurrence ${occurrence.id}: amount must be nonnegative, got ${occurrence.amount}`,
+      );
+    }
+    let outstanding = false;
+    if (occurrence.state === 'posted') {
+      const transactionId = occurrence.transactionId;
+      if (transactionId === undefined || transactionId === '') {
+        throw new Error(
+          `occurrence ${occurrence.id}: posted without a transaction id`,
+        );
+      }
+      const earlierId = postedTransactionById.get(transactionId);
+      if (earlierId !== undefined) {
+        throw new Error(
+          `transaction "${transactionId}" is linked to occurrences "${earlierId}" and "${occurrence.id}"`,
+        );
+      }
+      const posting = postingById.get(transactionId);
+      if (posting === undefined) {
+        throw new Error(
+          `occurrence ${occurrence.id}: linked transaction "${transactionId}" is not among the postings`,
+        );
+      }
+      postedTransactionById.set(transactionId, occurrence.id);
+      outstanding = posting.date > asOf;
+    } else {
+      outstanding = true;
+    }
+    validated.push({ occurrence, outstanding });
+  }
+  return validated;
+}
+
+export function projectPeriodCharges({
+  periods,
+  postings,
+  offsets,
+  occurrences,
+  asOf,
+}: ProjectPeriodChargesInput): PeriodChargesProjection {
+  const summary = summarizePeriodBudgets({ periods, postings, offsets, asOf });
+
+  const periodIds = new Set<string>();
+  for (const period of periods) {
+    periodIds.add(period.id);
+  }
+  const postingById = new Map<string, ExpensePosting>();
+  for (const posting of postings) {
+    postingById.set(posting.id, posting);
+  }
+
+  const validated = validateOccurrences(
+    occurrences,
+    periodIds,
+    postingById,
+    asOf,
+  );
+
+  const periodsProjection: PeriodChargeProjection[] = [];
+  for (let i = 0; i < periods.length; i++) {
+    const period = periods[i];
+    const periodSummary = summary.periods[i];
+    let outstandingCharges = 0;
+    const outstandingOccurrenceIds: string[] = [];
+    for (const { occurrence, outstanding } of validated) {
+      if (!outstanding || occurrence.periodId !== period.id) {
+        continue;
+      }
+      outstandingCharges += occurrence.amount;
+      assertSafeInteger(
+        outstandingCharges,
+        `occurrence ${occurrence.id}: outstanding charges for period "${period.id}"`,
+      );
+      outstandingOccurrenceIds.push(occurrence.id);
+    }
+    const expectedRemaining = periodSummary.remaining - outstandingCharges;
+    assertSafeInteger(
+      expectedRemaining,
+      `period ${period.id}: expected remaining`,
+    );
+    periodsProjection.push({
+      period,
+      remaining: periodSummary.remaining,
+      outstandingCharges,
+      expectedRemaining,
+      outstandingOccurrenceIds,
+    });
+  }
+
+  return { summary, periods: periodsProjection };
+}
+
 export function validateBudgetPeriods(periods: readonly BudgetPeriod[]): void {
   const seen = new Set<string>();
   for (const period of periods) {
