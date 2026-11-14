@@ -1,9 +1,10 @@
 ---
 id: TASK-9
 title: 'Ledger adapter: Actual transactions to period postings'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
+updated_date: '2026-11-14T06:17:00Z'
 labels:
   - integration
 dependencies:
@@ -26,3 +27,9 @@ SPEC section 4 ('The future ledger adapter must') and section 10 step 3. Turns A
 - [ ] #4 Uncategorized or otherwise unresolved expenses are returned for resolution, not dropped.
 - [ ] #5 Tests cover splits, refunds, internal transfers, off-budget transfers and uncategorized expenses, and the gate `node .yarn/releases/yarn-4.17.1.cjs typecheck && node .yarn/releases/yarn-4.17.1.cjs lint && node .yarn/releases/yarn-4.17.1.cjs test` passes.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Started 2026-11-13 at rung 1 (local coder). Shape chosen by the orchestrator for the brief: a pure function toPeriodPostings({transactions, accounts, categories, payees}) in packages/loot-core/src/shared/period-ledger.ts returning {postings, unresolved}; it follows Actual v26.11.0 (budget/base.ts sums categorized transactions of on-budget accounts; queries/index.ts uncategorizedTransactions treats a transfer to an off-budget account as needing a category). Brief: /tmp/actually-orch/task-9-brief.md.
+<!-- SECTION:NOTES:END -->
