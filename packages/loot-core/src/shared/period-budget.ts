@@ -489,3 +489,186 @@ export function validateBudgetPeriods(periods: readonly BudgetPeriod[]): void {
     }
   }
 }
+
+export type AccountSnapshot = { id: string; balance: IntegerAmount };
+
+export type CashMovement = {
+  id: string;
+  account: string;
+  date: string;
+  amount: IntegerAmount;
+};
+
+export type AccountCashProjection = {
+  accountId: string;
+  currentBalance: IntegerAmount;
+  projectedEndingBalance: IntegerAmount;
+  minimumDailyClosingBalance: IntegerAmount;
+  firstShortfallDate: string | null;
+};
+
+export type CashBalancesProjection = {
+  cashAvailable: IntegerAmount;
+  projectedCash: IntegerAmount;
+  accounts: AccountCashProjection[];
+};
+
+type ProjectCashBalancesInput = {
+  accounts: readonly AccountSnapshot[];
+  selectedAccountIds: readonly string[];
+  movements: readonly CashMovement[];
+  asOf: string;
+  horizonEnd: string;
+};
+
+function normalizeZero(value: IntegerAmount): IntegerAmount {
+  return value === 0 ? 0 : value;
+}
+
+type DailyTotals = { inflow: IntegerAmount; outflow: IntegerAmount };
+
+export function projectCashBalances(
+  input: ProjectCashBalancesInput,
+): CashBalancesProjection {
+  const { accounts, selectedAccountIds, movements, asOf, horizonEnd } = input;
+
+  if (!isValidDateString(asOf)) {
+    throw new Error(`asOf "${asOf}" is not a valid YYYY-MM-DD date`);
+  }
+  if (!isValidDateString(horizonEnd)) {
+    throw new Error(
+      `horizonEnd "${horizonEnd}" is not a valid YYYY-MM-DD date`,
+    );
+  }
+  if (horizonEnd < asOf) {
+    throw new Error(`horizonEnd "${horizonEnd}" is before asOf "${asOf}"`);
+  }
+
+  const balances = new Map<string, IntegerAmount>();
+  for (const account of accounts) {
+    if (balances.has(account.id)) {
+      throw new Error(`duplicate account id "${account.id}"`);
+    }
+    assertSafeInteger(account.balance, `account ${account.id}: balance`);
+    balances.set(account.id, account.balance);
+  }
+
+  const selected = new Set<string>();
+  for (const id of selectedAccountIds) {
+    if (selected.has(id)) {
+      throw new Error(`duplicate selected account id "${id}"`);
+    }
+    if (!balances.has(id)) {
+      throw new Error(`selected account "${id}" has no snapshot`);
+    }
+    selected.add(id);
+  }
+
+  const seenMovements = new Set<string>();
+  for (const movement of movements) {
+    if (seenMovements.has(movement.id)) {
+      throw new Error(`duplicate movement id "${movement.id}"`);
+    }
+    if (!isValidDateString(movement.date)) {
+      throw new Error(
+        `movement ${movement.id}: date "${movement.date}" is not a valid YYYY-MM-DD date`,
+      );
+    }
+    assertSafeInteger(movement.amount, `movement ${movement.id}: amount`);
+    seenMovements.add(movement.id);
+  }
+
+  let cashAvailable = 0;
+  for (const id of selectedAccountIds) {
+    const balance = balances.get(id);
+    if (balance === undefined) {
+      continue;
+    }
+    cashAvailable += balance;
+    assertSafeInteger(cashAvailable, `account ${id}: cash available`);
+  }
+
+  const dailyTotals = new Map<string, Map<string, DailyTotals>>();
+  for (const movement of movements) {
+    if (!selected.has(movement.account)) {
+      continue;
+    }
+    if (movement.date <= asOf || movement.date > horizonEnd) {
+      continue;
+    }
+    let byDate = dailyTotals.get(movement.account);
+    if (byDate === undefined) {
+      byDate = new Map<string, DailyTotals>();
+      dailyTotals.set(movement.account, byDate);
+    }
+    let totals = byDate.get(movement.date);
+    if (totals === undefined) {
+      totals = { inflow: 0, outflow: 0 };
+      byDate.set(movement.date, totals);
+    }
+    if (movement.amount > 0) {
+      totals.inflow += movement.amount;
+      assertSafeInteger(
+        totals.inflow,
+        `movement ${movement.id}: inflow for account "${movement.account}" on ${movement.date}`,
+      );
+    } else if (movement.amount < 0) {
+      totals.outflow += movement.amount;
+      assertSafeInteger(
+        totals.outflow,
+        `movement ${movement.id}: outflow for account "${movement.account}" on ${movement.date}`,
+      );
+    }
+  }
+
+  const projections: AccountCashProjection[] = [];
+  for (const id of selectedAccountIds) {
+    const balance = balances.get(id);
+    if (balance === undefined) {
+      continue;
+    }
+    let closing = balance;
+    let minimum = balance;
+    let firstShortfallDate: string | null = balance < 0 ? asOf : null;
+
+    const datesMap = dailyTotals.get(id);
+    if (datesMap !== undefined) {
+      const dates = [...datesMap.keys()].sort();
+      for (const date of dates) {
+        const totals = datesMap.get(date);
+        if (totals === undefined) {
+          continue;
+        }
+        closing += totals.inflow + totals.outflow;
+        assertSafeInteger(closing, `account ${id}: closing balance on ${date}`);
+        minimum = Math.min(minimum, closing);
+        if (firstShortfallDate === null && closing < 0) {
+          firstShortfallDate = date;
+        }
+      }
+    }
+
+    projections.push({
+      accountId: id,
+      currentBalance: normalizeZero(balance),
+      projectedEndingBalance: normalizeZero(closing),
+      minimumDailyClosingBalance: normalizeZero(minimum),
+      firstShortfallDate,
+    });
+  }
+
+  let projectedCash = 0;
+  for (const projection of projections) {
+    projectedCash += projection.projectedEndingBalance;
+    assertSafeInteger(
+      projectedCash,
+      `account ${projection.accountId}: projected cash`,
+    );
+  }
+
+  return {
+    cashAvailable: normalizeZero(cashAvailable),
+    projectedCash: normalizeZero(projectedCash),
+    accounts: projections,
+  };
+}
