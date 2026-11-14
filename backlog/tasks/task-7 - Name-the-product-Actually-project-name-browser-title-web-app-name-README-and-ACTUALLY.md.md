@@ -3,15 +3,23 @@ id: TASK-7
 title: >-
   Name the product Actually: project name, browser title, web-app name, README
   and ACTUALLY.md
-status: Review
+status: Done
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-14T06:20:00Z'
+updated_date: '2026-11-14T06:23:00Z'
 labels:
   - naming
 dependencies:
   - TASK-1
   - TASK-2
+modified_files:
+  - .github/actions/release-notes/generate/action.yml
+  - ACTUALLY.md
+  - README.md
+  - package.json
+  - packages/desktop-client/index.html
+  - packages/desktop-client/public/site.webmanifest
+  - yarn.lock
 priority: low
 ordinal: 7000
 ---
@@ -24,9 +32,9 @@ SPEC sections 1 and 9: the first milestone named the root project, the browser t
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The root package name, the browser tab title and the installable web-app (manifest) name read Actually; workspace package names (@actual-app/...) are unchanged.
-- [ ] #2 README.md states that Actually is a fork of Actual Budget (https://github.com/actualbudget/actual), keeps the MIT license notice and attribution, and links to ACTUALLY.md, which summarizes the period-budget design from docs/SPEC.md without contradicting it.
-- [ ] #3 The gate `node .yarn/releases/yarn-4.17.1.cjs typecheck && node .yarn/releases/yarn-4.17.1.cjs lint && node .yarn/releases/yarn-4.17.1.cjs test` passes.
+- [x] #1 The root package name, the browser tab title and the installable web-app (manifest) name read Actually; workspace package names (@actual-app/...) are unchanged.
+- [x] #2 README.md states that Actually is a fork of Actual Budget (https://github.com/actualbudget/actual), keeps the MIT license notice and attribution, and links to ACTUALLY.md, which summarizes the period-budget design from docs/SPEC.md without contradicting it.
+- [x] #3 The gate `node .yarn/releases/yarn-4.17.1.cjs typecheck && node .yarn/releases/yarn-4.17.1.cjs lint && node .yarn/releases/yarn-4.17.1.cjs test` passes.
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -38,3 +46,9 @@ Review round 1 (rung 1, candidate 940ce66aa): REQUEST CHANGES. (1) blocking: .gi
 
 Review round 2 (rung 1, candidate 281f13b3d): APPROVE. All nine replacements match; criteria 1-3 pass; gate exit 0. Landing; because the branch renames the root workspace in yarn.lock, the main checkout's install state (.yarn/install-state.gz and node_modules/.yarn-state.yml) is replaced with the branch worktree's before the gate runs (backups in /tmp/actually-orch/main-install-backup-task7).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Landed task-7-name-actually as e5724e2d8 on 2026-11-13.
+<!-- SECTION:FINAL_SUMMARY:END -->
