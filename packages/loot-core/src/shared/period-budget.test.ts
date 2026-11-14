@@ -2614,4 +2614,304 @@ describe('projectPeriodCharges', () => {
       expect(result.periods[0].expectedRemaining).toBe(0);
     });
   });
+
+  test('R1: occurrence in the second period', () => {
+    const periods = [
+      makePeriod({
+        id: 'p1',
+        category: 'Rent',
+        start: '2027-04-01',
+        end: '2027-05-01',
+        budget: 30000,
+      }),
+      makePeriod({
+        id: 'p2',
+        category: 'Utilities',
+        start: '2027-04-01',
+        end: '2027-05-01',
+        budget: 30000,
+      }),
+    ];
+    const occurrences = [makeOccurrence({ id: 'o1', periodId: 'p2' })];
+    const result = projectPeriodCharges({
+      periods,
+      postings: [],
+      offsets: [],
+      occurrences,
+      asOf: '2027-04-20',
+    });
+    expect(result.periods[0]).toEqual({
+      period: periods[0],
+      remaining: 30000,
+      outstandingCharges: 0,
+      expectedRemaining: 30000,
+      outstandingOccurrenceIds: [],
+    });
+    expect(result.periods[1]).toEqual({
+      period: periods[1],
+      remaining: 30000,
+      outstandingCharges: 10000,
+      expectedRemaining: 20000,
+      outstandingOccurrenceIds: ['o1'],
+    });
+  });
+
+  test('R2: amount checks apply to posted occurrences (unsafe)', () => {
+    const periods = [
+      makePeriod({
+        id: 'p1',
+        category: 'Rent',
+        start: '2027-04-01',
+        end: '2027-05-01',
+        budget: 30000,
+      }),
+    ];
+    const postings = [
+      { id: 'tx1', category: 'Rent', date: '2027-04-10', amount: -11000 },
+    ];
+    expect(() =>
+      projectPeriodCharges({
+        periods,
+        postings,
+        offsets: [],
+        occurrences: [
+          makeOccurrence({
+            state: 'posted',
+            transactionId: 'tx1',
+            amount: 1.5,
+          }),
+        ],
+        asOf: '2027-04-20',
+      }),
+    ).toThrow('occurrence o1: amount must be a safe integer, got 1.5');
+  });
+
+  test('R2: amount checks apply to posted occurrences (negative)', () => {
+    const periods = [
+      makePeriod({
+        id: 'p1',
+        category: 'Rent',
+        start: '2027-04-01',
+        end: '2027-05-01',
+        budget: 30000,
+      }),
+    ];
+    const postings = [
+      { id: 'tx1', category: 'Rent', date: '2027-04-10', amount: -11000 },
+    ];
+    expect(() =>
+      projectPeriodCharges({
+        periods,
+        postings,
+        offsets: [],
+        occurrences: [
+          makeOccurrence({
+            state: 'posted',
+            transactionId: 'tx1',
+            amount: -100,
+          }),
+        ],
+        asOf: '2027-04-20',
+      }),
+    ).toThrow('occurrence o1: amount must be nonnegative, got -100');
+  });
+
+  test('R3: calendar-invalid date', () => {
+    const periods = [
+      makePeriod({
+        id: 'p1',
+        category: 'Rent',
+        start: '2027-04-01',
+        end: '2027-05-01',
+        budget: 30000,
+      }),
+    ];
+    expect(() =>
+      projectPeriodCharges({
+        periods,
+        postings: [],
+        offsets: [],
+        occurrences: [makeOccurrence({ date: '2027-02-30' })],
+        asOf: '2027-04-20',
+      }),
+    ).toThrow(
+      'occurrence o1: date "2027-02-30" is not a valid YYYY-MM-DD date',
+    );
+  });
+
+  test('R4: input order preserved for unsorted occurrence ids', () => {
+    const periods = [
+      makePeriod({
+        id: 'p1',
+        category: 'Rent',
+        start: '2027-04-01',
+        end: '2027-05-01',
+        budget: 30000,
+      }),
+    ];
+    const occurrences = [
+      makeOccurrence({ id: 'z' }),
+      makeOccurrence({ id: 'a' }),
+    ];
+    const result = projectPeriodCharges({
+      periods,
+      postings: [],
+      offsets: [],
+      occurrences,
+      asOf: '2027-04-20',
+    });
+    expect(result.periods[0].outstandingOccurrenceIds).toEqual(['z', 'a']);
+  });
+
+  test('R4: input order preserved for unsorted period ids', () => {
+    const periods = [
+      makePeriod({
+        id: 'z',
+        category: 'Rent',
+        start: '2027-04-01',
+        end: '2027-05-01',
+        budget: 30000,
+      }),
+      makePeriod({
+        id: 'a',
+        category: 'Utilities',
+        start: '2027-04-01',
+        end: '2027-05-01',
+        budget: 30000,
+      }),
+    ];
+    const result = projectPeriodCharges({
+      periods,
+      postings: [],
+      offsets: [],
+      occurrences: [],
+      asOf: '2027-04-20',
+    });
+    expect(result.periods.map(entry => entry.period.id)).toEqual(['z', 'a']);
+  });
+
+  test('R5: a scheduled occurrence transactionId is not a link', () => {
+    const periods = [
+      makePeriod({
+        id: 'p1',
+        category: 'Rent',
+        start: '2027-04-01',
+        end: '2027-05-01',
+        budget: 30000,
+      }),
+    ];
+    const postings = [
+      { id: 'tx1', category: 'Rent', date: '2027-04-10', amount: -11000 },
+    ];
+    const o1 = makeOccurrence({ state: 'scheduled', transactionId: 'tx1' });
+    const o2 = makeOccurrence({
+      id: 'o2',
+      date: '2027-04-10',
+      state: 'posted',
+      transactionId: 'tx1',
+    });
+    const result = projectPeriodCharges({
+      periods,
+      postings,
+      offsets: [],
+      occurrences: [o1, o2],
+      asOf: '2027-04-20',
+    });
+    expect(result.periods[0].remaining).toBe(19000);
+    expect(result.periods[0].outstandingCharges).toBe(10000);
+    expect(result.periods[0].expectedRemaining).toBe(9000);
+    expect(result.periods[0].outstandingOccurrenceIds).toEqual(['o1']);
+    expect(o1.transactionId).toBe('tx1');
+  });
+
+  test('R6: duplicate id checked before unknown period', () => {
+    const periods = [
+      makePeriod({
+        id: 'p1',
+        category: 'Rent',
+        start: '2027-04-01',
+        end: '2027-05-01',
+        budget: 30000,
+      }),
+    ];
+    expect(() =>
+      projectPeriodCharges({
+        periods,
+        postings: [],
+        offsets: [],
+        occurrences: [
+          makeOccurrence({}),
+          makeOccurrence({ id: 'o1', periodId: 'missing' }),
+        ],
+        asOf: '2027-04-20',
+      }),
+    ).toThrow('duplicate occurrence id "o1"');
+  });
+
+  test('R6: unknown period checked before invalid date', () => {
+    const periods = [
+      makePeriod({
+        id: 'p1',
+        category: 'Rent',
+        start: '2027-04-01',
+        end: '2027-05-01',
+        budget: 30000,
+      }),
+    ];
+    expect(() =>
+      projectPeriodCharges({
+        periods,
+        postings: [],
+        offsets: [],
+        occurrences: [
+          makeOccurrence({ periodId: 'missing', date: '2027-02-30' }),
+        ],
+        asOf: '2027-04-20',
+      }),
+    ).toThrow('occurrence o1: period "missing" does not exist');
+  });
+
+  test('R6: invalid date checked before unsafe amount', () => {
+    const periods = [
+      makePeriod({
+        id: 'p1',
+        category: 'Rent',
+        start: '2027-04-01',
+        end: '2027-05-01',
+        budget: 30000,
+      }),
+    ];
+    expect(() =>
+      projectPeriodCharges({
+        periods,
+        postings: [],
+        offsets: [],
+        occurrences: [makeOccurrence({ date: '2027-02-30', amount: 1.5 })],
+        asOf: '2027-04-20',
+      }),
+    ).toThrow(
+      'occurrence o1: date "2027-02-30" is not a valid YYYY-MM-DD date',
+    );
+  });
+
+  test('R6: unsafe amount checked before negative amount', () => {
+    const periods = [
+      makePeriod({
+        id: 'p1',
+        category: 'Rent',
+        start: '2027-04-01',
+        end: '2027-05-01',
+        budget: 30000,
+      }),
+    ];
+    expect(() =>
+      projectPeriodCharges({
+        periods,
+        postings: [],
+        offsets: [],
+        occurrences: [makeOccurrence({ amount: -1.5 })],
+        asOf: '2027-04-20',
+      }),
+    ).toThrow('occurrence o1: amount must be a safe integer, got -1.5');
+  });
 });
