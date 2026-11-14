@@ -1,10 +1,10 @@
 ---
 id: TASK-9
 title: 'Ledger adapter: Actual transactions to period postings'
-status: In Progress
+status: Review
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-14T06:17:00Z'
+updated_date: '2026-11-14T06:27:00Z'
 labels:
   - integration
 dependencies:
