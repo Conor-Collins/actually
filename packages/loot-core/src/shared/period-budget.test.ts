@@ -4096,4 +4096,188 @@ describe('projectCashBalances', () => {
       }),
     ).toEqual(expected);
   });
+
+  test('R1 cash available overflows in the middle of the selection', () => {
+    expect(() =>
+      projectCashBalances({
+        accounts: [
+          { id: 'z', balance: MAX },
+          { id: 'a', balance: 1 },
+          { id: 'b', balance: -1 },
+        ],
+        selectedAccountIds: ['z', 'a', 'b'],
+        movements: [],
+        asOf: '2027-04-20',
+        horizonEnd: '2027-05-31',
+      }),
+    ).toThrow(
+      'account a: cash available must be a safe integer, got 9007199254740992',
+    );
+  });
+
+  test('R2 projected cash overflows in the middle of the selection', () => {
+    expect(() =>
+      projectCashBalances({
+        accounts: [
+          { id: 'z', balance: MAX - 1 },
+          { id: 'a', balance: 0 },
+          { id: 'b', balance: 0 },
+        ],
+        selectedAccountIds: ['z', 'a', 'b'],
+        movements: [
+          { id: 'm1', account: 'a', date: '2027-05-01', amount: 2 },
+          { id: 'm2', account: 'b', date: '2027-05-01', amount: -2 },
+        ],
+        asOf: '2027-04-20',
+        horizonEnd: '2027-05-31',
+      }),
+    ).toThrow(
+      'account a: projected cash must be a safe integer, got 9007199254740992',
+    );
+  });
+
+  test('R3 projected cash underflows', () => {
+    expect(() =>
+      projectCashBalances({
+        accounts: [
+          { id: 'a', balance: -MAX + 1 },
+          { id: 'b', balance: 0 },
+        ],
+        selectedAccountIds: ['a', 'b'],
+        movements: [{ id: 'm1', account: 'b', date: '2027-05-01', amount: -2 }],
+        asOf: '2027-04-20',
+        horizonEnd: '2027-05-31',
+      }),
+    ).toThrow(
+      'account b: projected cash must be a safe integer, got -9007199254740992',
+    );
+  });
+
+  test('R4 movements of an unknown account never overflow', () => {
+    expect(
+      projectCashBalances({
+        accounts: [],
+        selectedAccountIds: [],
+        movements: [
+          { id: 'm1', account: 'ghost', date: '2027-05-01', amount: MAX },
+          { id: 'm2', account: 'ghost', date: '2027-05-01', amount: 1 },
+        ],
+        asOf: '2027-04-20',
+        horizonEnd: '2027-05-31',
+      }),
+    ).toEqual({ cashAvailable: 0, projectedCash: 0, accounts: [] });
+  });
+
+  test('R5 opposite same-day movements at the safe limit keep a small balance exact', () => {
+    const expected = {
+      cashAvailable: 2,
+      projectedCash: 2,
+      accounts: [
+        {
+          accountId: 'checking',
+          currentBalance: 2,
+          projectedEndingBalance: 2,
+          minimumDailyClosingBalance: 2,
+          firstShortfallDate: null,
+        },
+      ],
+    };
+    expect(
+      projectCashBalances({
+        accounts: [{ id: 'checking', balance: 2 }],
+        selectedAccountIds: ['checking'],
+        movements: [
+          { id: 'm1', account: 'checking', date: '2027-05-01', amount: MAX },
+          { id: 'm2', account: 'checking', date: '2027-05-01', amount: -MAX },
+        ],
+        asOf: '2027-04-20',
+        horizonEnd: '2027-05-31',
+      }),
+    ).toEqual(expected);
+    expect(
+      projectCashBalances({
+        accounts: [{ id: 'checking', balance: 2 }],
+        selectedAccountIds: ['checking'],
+        movements: [
+          { id: 'm2', account: 'checking', date: '2027-05-01', amount: -MAX },
+          { id: 'm1', account: 'checking', date: '2027-05-01', amount: MAX },
+        ],
+        asOf: '2027-04-20',
+        horizonEnd: '2027-05-31',
+      }),
+    ).toEqual(expected);
+  });
+
+  test('R6 two account ids that share a prefix each get their own movement', () => {
+    expect(
+      projectCashBalances({
+        accounts: [
+          { id: 'a', balance: 100 },
+          { id: 'a|b', balance: 200 },
+        ],
+        selectedAccountIds: ['a', 'a|b'],
+        movements: [
+          { id: 'm1', account: 'a', date: '2027-05-01', amount: -10 },
+          { id: 'm2', account: 'a|b', date: '2027-05-01', amount: -50 },
+        ],
+        asOf: '2027-04-20',
+        horizonEnd: '2027-05-31',
+      }),
+    ).toEqual({
+      cashAvailable: 300,
+      projectedCash: 240,
+      accounts: [
+        {
+          accountId: 'a',
+          currentBalance: 100,
+          projectedEndingBalance: 90,
+          minimumDailyClosingBalance: 90,
+          firstShortfallDate: null,
+        },
+        {
+          accountId: 'a|b',
+          currentBalance: 200,
+          projectedEndingBalance: 150,
+          minimumDailyClosingBalance: 150,
+          firstShortfallDate: null,
+        },
+      ],
+    });
+  });
+
+  test('R7 an opening balance of zero is not a shortfall', () => {
+    expect(
+      projectCashBalances({
+        accounts: [{ id: 'checking', balance: 0 }],
+        selectedAccountIds: ['checking'],
+        movements: [],
+        asOf: '2027-04-20',
+        horizonEnd: '2027-05-31',
+      }),
+    ).toEqual({
+      cashAvailable: 0,
+      projectedCash: 0,
+      accounts: [
+        {
+          accountId: 'checking',
+          currentBalance: 0,
+          projectedEndingBalance: 0,
+          minimumDailyClosingBalance: 0,
+          firstShortfallDate: null,
+        },
+      ],
+    });
+  });
+
+  test('R8 an invalid horizonEnd is reported before the date order', () => {
+    expect(() =>
+      projectCashBalances({
+        accounts: [],
+        selectedAccountIds: [],
+        movements: [],
+        asOf: '2027-04-20',
+        horizonEnd: '2027-02-30',
+      }),
+    ).toThrow('horizonEnd "2027-02-30" is not a valid YYYY-MM-DD date');
+  });
 });
