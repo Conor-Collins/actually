@@ -191,6 +191,125 @@ describe('createBudgetPeriod', () => {
       }),
     ).toThrow(/carryover must be a safe integer/);
   });
+
+  test('rejects an unsafe carryover', () => {
+    expect(() =>
+      createBudgetPeriod({
+        id: 'p1',
+        category: 'Rent',
+        start: '2027-01-01',
+        end: '2028-01-01',
+        budget: 150000,
+        carryover: Number.MAX_SAFE_INTEGER + 1,
+      }),
+    ).toThrow(/carryover must be a safe integer/);
+  });
+
+  test('accepts a period starting before year 100', () => {
+    const period = createBudgetPeriod({
+      id: 'p1',
+      category: 'Rent',
+      start: '0099-01-01',
+      end: '0100-01-01',
+      budget: 150000,
+    });
+    expect(period.start).toBe('0099-01-01');
+    expect(period.end).toBe('0100-01-01');
+  });
+
+  test('accepts Feb 29 in a leap year', () => {
+    const period = createBudgetPeriod({
+      id: 'p1',
+      category: 'Rent',
+      start: '2028-02-29',
+      end: '2029-01-01',
+      budget: 150000,
+    });
+    expect(period.start).toBe('2028-02-29');
+  });
+
+  test('accepts Feb 29 in a year divisible by 400', () => {
+    const period = createBudgetPeriod({
+      id: 'p1',
+      category: 'Rent',
+      start: '2000-02-29',
+      end: '2001-01-01',
+      budget: 150000,
+    });
+    expect(period.start).toBe('2000-02-29');
+  });
+
+  test('rejects Feb 29 in a non-leap year', () => {
+    expect(() =>
+      createBudgetPeriod({
+        id: 'p1',
+        category: 'Rent',
+        start: '2027-02-29',
+        end: '2028-01-01',
+        budget: 150000,
+      }),
+    ).toThrow(/start "2027-02-29"/);
+  });
+
+  test('rejects Feb 29 in a century year that is not a leap year', () => {
+    expect(() =>
+      createBudgetPeriod({
+        id: 'p1',
+        category: 'Rent',
+        start: '2100-02-29',
+        end: '2101-01-01',
+        budget: 150000,
+      }),
+    ).toThrow(/start "2100-02-29"/);
+  });
+
+  test('rejects month 13', () => {
+    expect(() =>
+      createBudgetPeriod({
+        id: 'p1',
+        category: 'Rent',
+        start: '2027-13-01',
+        end: '2028-01-01',
+        budget: 150000,
+      }),
+    ).toThrow(/start "2027-13-01"/);
+  });
+
+  test('rejects month 0', () => {
+    expect(() =>
+      createBudgetPeriod({
+        id: 'p1',
+        category: 'Rent',
+        start: '2027-00-10',
+        end: '2028-01-01',
+        budget: 150000,
+      }),
+    ).toThrow(/start "2027-00-10"/);
+  });
+
+  test('rejects a day beyond the length of the month', () => {
+    expect(() =>
+      createBudgetPeriod({
+        id: 'p1',
+        category: 'Rent',
+        start: '2027-04-31',
+        end: '2028-01-01',
+        budget: 150000,
+      }),
+    ).toThrow(/start "2027-04-31"/);
+  });
+
+  test('rejects day 0', () => {
+    expect(() =>
+      createBudgetPeriod({
+        id: 'p1',
+        category: 'Rent',
+        start: '2027-01-00',
+        end: '2028-01-01',
+        budget: 150000,
+      }),
+    ).toThrow(/start "2027-01-00"/);
+  });
 });
 
 describe('copyBudgetPeriod', () => {
@@ -218,21 +337,62 @@ describe('copyBudgetPeriod', () => {
   });
 
   test('does not modify the source, and changing the copy leaves the source intact', () => {
-    const before = makePeriod({
-      id: 'p1',
-      category: 'Rent',
-      budget: 150000,
-      carryover: -2500,
-    });
-    const copy = copyBudgetPeriod(before, {
+    const snapshot = { ...source };
+    const copy = copyBudgetPeriod(source, {
       id: 'p2',
       start: '2028-01-01',
       end: '2029-01-01',
     });
-    expect(copy).not.toBe(before);
+    expect(copy).not.toBe(source);
+    copy.id = 'x';
+    copy.category = 'Groceries';
+    copy.start = '2030-01-01';
+    copy.end = '2031-01-01';
     copy.budget = 1;
-    expect(before.budget).toBe(150000);
-    expect(before.carryover).toBe(-2500);
+    copy.carryover = 2;
+    expect(source).toEqual(snapshot);
+  });
+
+  test('keeps an explicit carryover', () => {
+    const copy = copyBudgetPeriod(source, {
+      id: 'p2',
+      start: '2028-01-01',
+      end: '2029-01-01',
+      carryover: 123,
+    });
+    expect(copy.carryover).toBe(123);
+  });
+
+  test('keeps a negative explicit carryover', () => {
+    const copy = copyBudgetPeriod(source, {
+      id: 'p2',
+      start: '2028-01-01',
+      end: '2029-01-01',
+      carryover: -500,
+    });
+    expect(copy.carryover).toBe(-500);
+  });
+
+  test('rejects a fractional carryover', () => {
+    expect(() =>
+      copyBudgetPeriod(source, {
+        id: 'p2',
+        start: '2028-01-01',
+        end: '2029-01-01',
+        carryover: 12.5,
+      }),
+    ).toThrow(/carryover must be a safe integer/);
+  });
+
+  test('rejects an unsafe carryover', () => {
+    expect(() =>
+      copyBudgetPeriod(source, {
+        id: 'p2',
+        start: '2028-01-01',
+        end: '2029-01-01',
+        carryover: Number.MAX_SAFE_INTEGER + 1,
+      }),
+    ).toThrow(/carryover must be a safe integer/);
   });
 
   test('rejects an id equal to the source id', () => {
@@ -360,5 +520,81 @@ describe('validateBudgetPeriods', () => {
         }),
       ]),
     ).toThrow(/periods "a" and "b" overlap in category "Rent"/);
+  });
+
+  test('rejects an overlap given with the later period first', () => {
+    expect(() =>
+      validateBudgetPeriods([
+        makePeriod({
+          id: 'b',
+          category: 'Rent',
+          start: '2027-06-01',
+          end: '2028-01-01',
+        }),
+        makePeriod({
+          id: 'a',
+          category: 'Rent',
+          start: '2027-01-01',
+          end: '2027-07-01',
+        }),
+      ]),
+    ).toThrow(/periods "b" and "a" overlap in category "Rent"/);
+  });
+
+  test('rejects an overlap given with the earlier period first', () => {
+    expect(() =>
+      validateBudgetPeriods([
+        makePeriod({
+          id: 'a',
+          category: 'Rent',
+          start: '2027-01-01',
+          end: '2027-07-01',
+        }),
+        makePeriod({
+          id: 'b',
+          category: 'Rent',
+          start: '2027-06-01',
+          end: '2028-01-01',
+        }),
+      ]),
+    ).toThrow(/periods "a" and "b" overlap in category "Rent"/);
+  });
+
+  test('rejects a period wholly inside another, outer first', () => {
+    expect(() =>
+      validateBudgetPeriods([
+        makePeriod({
+          id: 'a',
+          category: 'Rent',
+          start: '2027-01-01',
+          end: '2028-01-01',
+        }),
+        makePeriod({
+          id: 'b',
+          category: 'Rent',
+          start: '2027-04-06',
+          end: '2027-07-01',
+        }),
+      ]),
+    ).toThrow(/periods "a" and "b" overlap in category "Rent"/);
+  });
+
+  test('rejects a period wholly inside another, inner first', () => {
+    expect(() =>
+      validateBudgetPeriods([
+        makePeriod({
+          id: 'b',
+          category: 'Rent',
+          start: '2027-04-06',
+          end: '2027-07-01',
+        }),
+        makePeriod({
+          id: 'a',
+          category: 'Rent',
+          start: '2027-01-01',
+          end: '2028-01-01',
+        }),
+      ]),
+    ).toThrow(/periods "b" and "a" overlap in category "Rent"/);
   });
 });

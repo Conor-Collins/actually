@@ -25,6 +25,10 @@ type CopyBudgetPeriodOptions = {
   carryover?: IntegerAmount;
 };
 
+function isLeapYear(year: number): boolean {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+}
+
 function isValidDateString(value: string): boolean {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
   if (match === null) {
@@ -33,12 +37,12 @@ function isValidDateString(value: string): boolean {
   const year = Number(match[1]);
   const month = Number(match[2]);
   const day = Number(match[3]);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  return (
-    date.getUTCFullYear() === year &&
-    date.getUTCMonth() === month - 1 &&
-    date.getUTCDate() === day
-  );
+  if (month < 1 || month > 12) {
+    return false;
+  }
+  const daysInMonth = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  const maxDay = month === 2 && isLeapYear(year) ? 29 : daysInMonth[month - 1];
+  return day >= 1 && day <= maxDay;
 }
 
 function validateDates(id: string, start: string, end: string): void {
