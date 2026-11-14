@@ -3,9 +3,10 @@ id: TASK-4
 title: >-
   summarizePeriodBudgets: attribution, offsets, monthly actuals, remaining and
   overspending
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
+updated_date: '2026-11-14T03:49:00Z'
 labels:
   - calculation
 dependencies:
@@ -34,3 +35,9 @@ Code goes in packages/loot-core/src/shared/period-budget.ts, tests in packages/l
 - [ ] #6 A test reproduces SPEC section 8 at 2027-04-20: monthly actual 2,230.00, combined active remaining 970.00, overspending 80.00; the March 15 insurance payment stays in the insurance period's spending when viewed at 2027-04-20, 2027-08-15 and 2027-12-31 and is not in those months' actual spending. Tests also cover an early offset (2026-12-20 into the 2027 period) and a late offset (January 2028 into the 2027 period).
 - [ ] #7 The gate `node .yarn/releases/yarn-4.17.1.cjs typecheck && node .yarn/releases/yarn-4.17.1.cjs lint && node .yarn/releases/yarn-4.17.1.cjs test` passes.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Orchestrator: started 2026-11-13 at rung 1 (qwen3.8-27b), reviewer GPT Sol xhigh. Brief also asks for the zero-allowance test left over from TASK-3 review round 3.
+<!-- SECTION:NOTES:END -->
