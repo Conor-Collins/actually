@@ -1,10 +1,10 @@
 ---
 id: TASK-1
 title: Merge upstream Actual v26.11.0 into main
-status: In Progress
+status: Review
 assignee: []
 created_date: '2026-11-13T16:07:00Z'
-updated_date: '2026-11-13T16:14:00Z'
+updated_date: '2026-11-14T03:02:00Z'
 labels:
   - base
   - upstream
