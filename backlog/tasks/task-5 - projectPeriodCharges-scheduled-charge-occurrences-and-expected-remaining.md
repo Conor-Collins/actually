@@ -1,10 +1,10 @@
 ---
 id: TASK-5
 title: 'projectPeriodCharges: scheduled-charge occurrences and expected remaining'
-status: In Progress
+status: Review
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-14T05:11:00Z'
+updated_date: '2026-11-14T05:16:00Z'
 labels:
   - calculation
 dependencies:
