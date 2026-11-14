@@ -1,9 +1,10 @@
 ---
 id: TASK-6
 title: 'projectCashBalances: selected-account cash, projections and shortfalls'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
+updated_date: '2026-11-14T05:22:00Z'
 labels:
   - calculation
 dependencies:
@@ -29,3 +30,9 @@ Code goes in packages/loot-core/src/shared/period-budget.ts, tests in packages/l
 - [ ] #5 A test shows that income arriving after a shortfall leaves the first shortfall date and the negative minimum reported even though the ending balance is positive.
 - [ ] #6 The gate `node .yarn/releases/yarn-4.17.1.cjs typecheck && node .yarn/releases/yarn-4.17.1.cjs lint && node .yarn/releases/yarn-4.17.1.cjs test` passes.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Orchestrator: rung 1 (qwen3.8-27b) round 1 started; branch task-6-project-cash-balances. Brief fixes: output shape {cashAvailable, projectedCash, accounts[]}, validation order, per-day inflow/outflow totals so same-day order cannot change the result.
+<!-- SECTION:NOTES:END -->
