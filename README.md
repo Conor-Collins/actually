@@ -1,3 +1,11 @@
+# Actually
+
+Actually is a fork of [Actual Budget](https://github.com/actualbudget/actual). It adds a period-based budget: every category gets a budget for its own period, for example a month or a year, and the month, the longer periods and the cash in your accounts are shown in one view. The design is described in [ACTUALLY.md](ACTUALLY.md). The period budget is under development and is not yet part of the app's screens.
+
+Actually is built on Actual Budget and keeps its attribution and its MIT license; see [LICENSE.txt](LICENSE.txt). Everything below this line is Actual Budget's own README, and its links lead to the Actual Budget project.
+
+---
+
 <p align="center">
   <img src="/demo.png" alt="Actualbudget" />
 </p>
