@@ -1,9 +1,10 @@
 ---
 id: TASK-5
 title: 'projectPeriodCharges: scheduled-charge occurrences and expected remaining'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
+updated_date: '2026-11-14T04:40:00Z'
 labels:
   - calculation
 dependencies:
@@ -29,3 +30,9 @@ Code goes in packages/loot-core/src/shared/period-budget.ts, tests in packages/l
 - [ ] #5 A test reproduces SPEC section 8: the taxes period (2027-04-01 to 2027-07-01, allowance 900.00) with a 900.00 charge scheduled for 2027-04-28 has remaining 900.00 and expected remaining 0.00 at 2027-04-20.
 - [ ] #6 The gate `node .yarn/releases/yarn-4.17.1.cjs typecheck && node .yarn/releases/yarn-4.17.1.cjs lint && node .yarn/releases/yarn-4.17.1.cjs test` passes.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Orchestrator: started 2026-11-13 at rung 1 (qwen3.8-27b), reviewer GPT Sol xhigh.
+<!-- SECTION:NOTES:END -->
