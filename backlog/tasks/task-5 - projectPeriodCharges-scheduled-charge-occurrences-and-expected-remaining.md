@@ -1,10 +1,10 @@
 ---
 id: TASK-5
 title: 'projectPeriodCharges: scheduled-charge occurrences and expected remaining'
-status: Review
+status: In Progress
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-14T05:04:00Z'
+updated_date: '2026-11-14T05:11:00Z'
 labels:
   - calculation
 dependencies:
@@ -35,4 +35,6 @@ Code goes in packages/loot-core/src/shared/period-budget.ts, tests in packages/l
 
 <!-- SECTION:NOTES:BEGIN -->
 Orchestrator: started 2026-11-13 at rung 1 (qwen3.8-27b), reviewer GPT Sol xhigh.
+
+Round 1 (rung 1): candidate c9d923f50 REQUEST CHANGES by GPT Sol xhigh. Implementation passed all direct probes; 13 of 41 mutations survive the tests. Blocking: no occurrence in a second period (AC1); amount checks untested for posted occurrences (AC4). Should-fix: calendar-invalid occurrence date, input order with unsorted fixtures, scheduled occurrence sharing a transaction id with a posted one. Note: validation order untested. Back to the coder for round 2 (tests only).
 <!-- SECTION:NOTES:END -->
