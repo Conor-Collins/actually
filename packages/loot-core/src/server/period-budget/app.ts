@@ -25,6 +25,9 @@ import type {
   PeriodScheduleLinkRow,
 } from '#types/models';
 
+import { calculatePeriodBudget } from './calculate';
+import type { PeriodBudgetCalculation } from './calculate';
+
 export type PeriodWriteResult = { id: string } | { error: string };
 
 type PeriodTable =
@@ -56,6 +59,7 @@ export type PeriodBudgetHandlers = {
   'period-budget/include-account': typeof includeAccount;
   'period-budget/get-planned-periods': typeof getPlannedPeriods;
   'period-budget/store-due-periods': typeof storeDuePeriodsNow;
+  'period-budget/calculate': typeof calculate;
 };
 
 export const app = createApp<PeriodBudgetHandlers>();
@@ -83,6 +87,7 @@ app.method('period-budget/exclude-account', mutator(undoable(excludeAccount)));
 app.method('period-budget/include-account', mutator(undoable(includeAccount)));
 app.method('period-budget/get-planned-periods', getPlannedPeriods);
 app.method('period-budget/store-due-periods', mutator(storeDuePeriodsNow));
+app.method('period-budget/calculate', calculate);
 
 app.events.on('sync', event => {
   void storeDuePeriodsAfterSync(event);
@@ -652,6 +657,34 @@ async function getPlannedPeriods({
     return [];
   }
   return planAll(until);
+}
+
+// Works out the periods, charges and cash forecast for one as-of day. Periods
+// that follow from a cadence up to the end of the horizon are included.
+async function calculate({
+  asOf,
+  horizonEnd,
+}: {
+  asOf: string;
+  horizonEnd: string;
+}): Promise<PeriodBudgetCalculation | { error: string }> {
+  if (!isValidDay(asOf)) {
+    return { error: `as-of date "${String(asOf)}" is not a valid date` };
+  }
+  if (!isValidDay(horizonEnd)) {
+    return { error: `horizon end "${String(horizonEnd)}" is not a valid date` };
+  }
+  if (horizonEnd < asOf) {
+    return {
+      error: `horizon end ${horizonEnd} must not be before as-of date ${asOf}`,
+    };
+  }
+  return calculatePeriodBudget({
+    rows: await getRows(),
+    planned: await planAll(horizonEnd),
+    asOf,
+    horizonEnd,
+  });
 }
 
 export async function storeDuePeriods(today: string): Promise<string[]> {
