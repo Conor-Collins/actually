@@ -40,4 +40,6 @@ Outline only. Needs a plan in docs/plans/ from the owner before it is started: t
 2026-11-15: the owner approved plan B ("Plan B, all approved"). The plan is docs/plans/period-budget.md (commit 6f90e400f); section references in the acceptance criteria (B1 to B9, S1 to S8) are to that file. Acceptance criteria set from its section B9.
 
 2026-11-15: started. Pyramid-loop rung 1 (opencode studio/qwen3.8-27b high), branch task-8-period-storage, staged in steps with a commit after each. Reviewer: codex gpt-6.1-sol xhigh.
+
+2026-11-15: rung 1, round 1 candidate c3d471dc6 (steps 1 to 7: 46d219e3a, 2e195a66b, 7746d42ee, 563ffedc9, b8edbf728, 89b4a99f8, bcd5bf2fa, format c3d471dc6). Gate passed in the worktree (typecheck, lint, test). The orchestrator wrote the step files and, for the server handlers, the four test files and a reference used to check the brief; the coder wrote the production code from rule lists. Sent to independent review (codex gpt-6.1-sol xhigh), brief /tmp/actually-orch/task-8-review-brief.md. GPU slot released.
 <!-- SECTION:NOTES:END -->
