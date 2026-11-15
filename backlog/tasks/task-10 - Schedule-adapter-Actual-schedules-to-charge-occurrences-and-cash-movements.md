@@ -4,7 +4,7 @@ title: 'Schedule adapter: Actual schedules to charge occurrences and cash moveme
 status: Review
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-15T20:15:00Z'
+updated_date: '2026-11-15T20:54:00Z'
 labels:
   - integration
 dependencies:
@@ -42,4 +42,6 @@ Outline only. Waits on the owner's decisions (SPEC section 10): whether offsets 
 2026-11-15: in progress. The orchestrator wrote the code and the tests (shared/period-charges.ts, server/period-budget/calculate.ts, handler period-budget/calculate) and delivers them as two patches; the rung-1 coder applies them, runs the checks and commits on branch task-10-schedule-adapter; an independent reviewer (codex gpt-6.1-sol xhigh) reviews the candidate. Briefs: /tmp/actually-orch/task-10-brief.md and task-10-review-brief.md.
 
 Review round 1 (codex gpt-6.1-sol xhigh) on 2969346c6: REQUEST CHANGES. Blocking: matching changed with the as-of date (fixed 366-day look-back); an entered payment of an unlinked schedule dated after the as-of day vanished from the cash forecast; one unreadable rule rejected the whole calculation. Should-fix: isbetween coverage. Note: matching worse than linear. Round 2 candidate acb61858c (rung 1; orchestrator-written fix patch applied by the coder): real preceding due date, entered future-dated scheduled transactions planned on their own day (new isPosted flag), unreadable schedules left out, binary search and period index with a scaling test. Gate exit 0 (/tmp/actually-orch/t10/gate-r2.log). Review round 2 running.
+
+Review round 2 (rung 1, candidate acb61858c): REQUEST CHANGES. Blocking: 6 (a named payment of a charge outside the range changed matching with the as-of day), 7 (one-step transfer rule changed combined cash), 8 (an early entered payment of an unlinked schedule counted twice); keep the is_child guard and test it. Round 3 (last at rung 1) in preparation: named due dates count on every as-of day and horizon; transfers are followed to every leg; payments of unlinked schedules settle their nearest due date; parts of splits pay the schedules they carry; randomized same-answer tests added.
 <!-- SECTION:NOTES:END -->
