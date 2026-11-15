@@ -515,7 +515,7 @@ describe('loadPeriodBudgetInput: charges', () => {
     for (const extra of [
       { state: 'posted' },
       { state: 'posted', transactionId: '' },
-    ]) {
+    ] as const) {
       const result = load({
         periods: [A],
         occurrences: [charge('c1', 'A', '2027-01-05', extra)],

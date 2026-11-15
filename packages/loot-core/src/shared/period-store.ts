@@ -82,7 +82,9 @@ export function planPeriods({ cadence, periods, until }: PlanPeriodsInput): Peri
     ids.add(row.id);
   }
 
-  let latest: PeriodBudgetRow | undefined;
+  let latestEnd: string | null = null;
+  let latestId = '';
+  let latestBudget: number | null = null;
   for (const row of periods) {
     if (
       row.category !== category ||
@@ -94,20 +96,22 @@ export function planPeriods({ cadence, periods, until }: PlanPeriodsInput): Peri
       continue;
     }
     if (
-      latest === undefined ||
-      row.end_date > latest.end_date ||
-      (row.end_date === latest.end_date && row.id > latest.id)
+      latestEnd === null ||
+      row.end_date > latestEnd ||
+      (row.end_date === latestEnd && row.id > latestId)
     ) {
-      latest = row;
+      latestEnd = row.end_date;
+      latestId = row.id;
+      latestBudget = row.budget;
     }
   }
-  if (latest === undefined) {
+  if (latestEnd === null) {
     return [];
   }
 
-  const budget = isWholeNumber(latest.budget) && latest.budget >= 0 ? latest.budget : 0;
+  const budget = isWholeNumber(latestBudget) && latestBudget >= 0 ? latestBudget : 0;
 
-  let start = latest.end_date;
+  let start = latestEnd;
   const planned: PeriodBudgetRow[] = [];
   for (let i = 0; i < 1000 && start <= until; i++) {
     const baseId = `${category}:${start}`;
@@ -153,10 +157,10 @@ type CheckPeriodWriteInput = {
 
 export function checkPeriodWrite({ candidate, periods }: CheckPeriodWriteInput): string | null {
   if (!isValidDay(candidate.start_date)) {
-    return `start date "${candidate.start_date}" is not a valid date`;
+    return `start date "${String(candidate.start_date)}" is not a valid date`;
   }
   if (!isValidDay(candidate.end_date)) {
-    return `end date "${candidate.end_date}" is not a valid date`;
+    return `end date "${String(candidate.end_date)}" is not a valid date`;
   }
   if (candidate.end_date <= candidate.start_date) {
     return `end date ${candidate.end_date} must be after start date ${candidate.start_date}`;
