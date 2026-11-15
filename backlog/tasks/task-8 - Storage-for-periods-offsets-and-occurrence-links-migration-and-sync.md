@@ -1,10 +1,10 @@
 ---
 id: TASK-8
 title: Storage for periods, offsets and occurrence links (migration and sync)
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-15T16:13:00Z'
+updated_date: '2026-11-15T16:26:00Z'
 labels:
   - integration
 dependencies:
@@ -38,4 +38,6 @@ Outline only. Needs a plan in docs/plans/ from the owner before it is started: t
 2026-11-15: two candidate plans (A stored records, B cadence and derivation) are in /data/t3-work/actually-approvals/plans-2026-11-15/ and wait for the owner's choice. Scope and acceptance criteria are unchanged until then.
 
 2026-11-15: the owner approved plan B ("Plan B, all approved"). The plan is docs/plans/period-budget.md (commit 6f90e400f); section references in the acceptance criteria (B1 to B9, S1 to S8) are to that file. Acceptance criteria set from its section B9.
+
+2026-11-15: started. Pyramid-loop rung 1 (opencode studio/qwen3.8-27b high), branch task-8-period-storage, staged in steps with a commit after each. Reviewer: codex gpt-6.1-sol xhigh.
 <!-- SECTION:NOTES:END -->
