@@ -1,15 +1,18 @@
 import { createApp } from '#server/app';
 import { aqlQuery } from '#server/aql';
 import * as db from '#server/db';
-import { mutator } from '#server/mutators';
-import { batchMessages } from '#server/sync';
+import { mutator, runMutator } from '#server/mutators';
+import * as prefs from '#server/prefs';
+import { batchMessages, checkSyncingMode } from '#server/sync';
 import { undoable } from '#server/undo';
+import { currentDay } from '#shared/months';
 import {
   cadenceEnd,
   checkPeriodWrite,
   isValidDay,
   isWholeNumber,
   newPeriodId,
+  planPeriods,
 } from '#shared/period-store';
 import { q } from '#shared/query';
 import type {
@@ -51,6 +54,8 @@ export type PeriodBudgetHandlers = {
   'period-budget/clear-charge-override': typeof clearChargeOverride;
   'period-budget/exclude-account': typeof excludeAccount;
   'period-budget/include-account': typeof includeAccount;
+  'period-budget/get-planned-periods': typeof getPlannedPeriods;
+  'period-budget/store-due-periods': typeof storeDuePeriodsNow;
 };
 
 export const app = createApp<PeriodBudgetHandlers>();
@@ -76,6 +81,12 @@ app.method(
 );
 app.method('period-budget/exclude-account', mutator(undoable(excludeAccount)));
 app.method('period-budget/include-account', mutator(undoable(includeAccount)));
+app.method('period-budget/get-planned-periods', getPlannedPeriods);
+app.method('period-budget/store-due-periods', mutator(storeDuePeriodsNow));
+
+app.events.on('sync', event => {
+  void storeDuePeriodsAfterSync(event);
+});
 
 // Reads every row of a table, deleted rows too, sorted by id.
 async function readTable<T extends { id: string }>(
@@ -545,4 +556,83 @@ async function includeAccount({
   accountId: string;
 }): Promise<PeriodWriteResult> {
   return setAccountExcluded(accountId, false);
+}
+
+async function planAll(until: string): Promise<PeriodBudgetRow[]> {
+  const cadences = await readTable<PeriodCadenceRow>('period_cadences');
+  const periods = await readTable<PeriodBudgetRow>('period_budgets');
+  const planned: PeriodBudgetRow[] = [];
+  for (const cadence of cadences) {
+    if (!(await exists('categories', cadence.id))) {
+      continue;
+    }
+    planned.push(...planPeriods({ cadence, periods, until }));
+  }
+  return planned;
+}
+
+async function getPlannedPeriods({
+  until,
+}: {
+  until: string;
+}): Promise<PeriodBudgetRow[]> {
+  if (!isValidDay(until)) {
+    return [];
+  }
+  return planAll(until);
+}
+
+export async function storeDuePeriods(today: string): Promise<string[]> {
+  if (!isValidDay(today)) {
+    return [];
+  }
+  const planned = await planAll(today);
+  await batchMessages(async () => {
+    for (const row of planned) {
+      await db.insertWithSchema('period_budgets', {
+        id: row.id,
+        category: row.category,
+        start_date: row.start_date,
+        end_date: row.end_date,
+        budget: row.budget,
+        carryover: 0,
+        carried_from: null,
+      });
+    }
+  });
+  return planned.map(row => row.id);
+}
+
+async function storeDuePeriodsNow({
+  today,
+}: {
+  today?: string;
+} = {}): Promise<{ stored: string[]; waitingForSync: boolean }> {
+  const loaded = prefs.getPrefs();
+  if (loaded && loaded.groupId) {
+    return { stored: [], waitingForSync: true };
+  }
+  return {
+    stored: await storeDuePeriods(today ?? currentDay()),
+    waitingForSync: false,
+  };
+}
+
+// A "success" event is also sent when syncing is switched off or offline
+// and nothing was fetched, so the mode is checked too.
+export async function storeDuePeriodsAfterSync(event: {
+  type: string;
+}): Promise<string[]> {
+  const loaded = prefs.getPrefs();
+  if (
+    event.type !== 'success' ||
+    !loaded ||
+    !loaded.groupId ||
+    checkSyncingMode('disabled') ||
+    checkSyncingMode('offline') ||
+    !db.getDatabase()
+  ) {
+    return [];
+  }
+  return runMutator(() => storeDuePeriods(currentDay()));
 }
