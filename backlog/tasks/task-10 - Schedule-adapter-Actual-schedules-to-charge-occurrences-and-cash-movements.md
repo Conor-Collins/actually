@@ -4,7 +4,7 @@ title: 'Schedule adapter: Actual schedules to charge occurrences and cash moveme
 status: Review
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-15T21:18:00Z'
+updated_date: '2026-11-15T22:31:00Z'
 labels:
   - integration
 dependencies:
@@ -46,4 +46,6 @@ Review round 1 (codex gpt-6.1-sol xhigh) on 2969346c6: REQUEST CHANGES. Blocking
 Review round 2 (rung 1, candidate acb61858c): REQUEST CHANGES. Blocking: 6 (a named payment of a charge outside the range changed matching with the as-of day), 7 (one-step transfer rule changed combined cash), 8 (an early entered payment of an unlinked schedule counted twice); keep the is_child guard and test it. Round 3 (last at rung 1) in preparation: named due dates count on every as-of day and horizon; transfers are followed to every leg; payments of unlinked schedules settle their nearest due date; parts of splits pay the schedules they carry; randomized same-answer tests added.
 
 Round 3 (rung 1, last round at this rung), 2026-11-15 21:19Z: candidate 16abde4ab05b590852218ccc018c831747bcddda (one commit after acb61858c). Fixes for review findings 6, 7, 8 and the is_child guard, a rule for parts of splits, and a randomized test file (calculate.random.test.ts). Focused tests 720 passed (11 files); full gate exit 0 (/tmp/actually-orch/t10/gate-r3.log). Orchestrator mutation run: pure 70 of 70 killed; server run of 85 in progress, five survivors expected and judged without visible effect. Code and tests written by the orchestrator, applied and committed by the rung-1 coder. Round-3 review started on gpt-6.1-sol xhigh.
+
+Review round 3 (2026-11-15 21:28Z) on 16abde4ab05b590852218ccc018c831747bcddda: REQUEST CHANGES. Findings 6, 7, 8 and the is_child guard closed. New: 9 blocking (a part's own charge period overwritten by its split's), 10 blocking (a named split settles an unlinked schedule through a part that carries the same schedule), 11 should-fix (a part without its split still counted as budget spending). Rung 1 has used its three reviewed rounds; round 4 runs at rung 2 (opencode studio/flash-next). Work held 21:29Z to 22:30Z for a Paradox quiet window on the shared machine.
 <!-- SECTION:NOTES:END -->
