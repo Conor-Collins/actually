@@ -2,7 +2,20 @@ import type { PeriodBudgetRow, PeriodCadenceRow } from '#types/models';
 
 function daysInMonth(year: number, month: number): number {
   const isLeapYear = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
-  const days = [31, isLeapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  const days = [
+    31,
+    isLeapYear ? 29 : 28,
+    31,
+    30,
+    31,
+    30,
+    31,
+    31,
+    30,
+    31,
+    30,
+    31,
+  ];
   return days[month - 1];
 }
 
@@ -44,14 +57,19 @@ export function newPeriodId(
   return `${base}:${n}`;
 }
 
-export function cadenceEnd(start: string, months: number, anchorDay: number): string {
+export function cadenceEnd(
+  start: string,
+  months: number,
+  anchorDay: number,
+): string {
   const year = Number(start.slice(0, 4));
   const month = Number(start.slice(5, 7));
   const day = Number(start.slice(8, 10));
   const total = year * 12 + (month - 1) + months;
   const endYear = Math.floor(total / 12);
   const endMonth = (total % 12) + 1;
-  const wantedDay = day === Math.min(anchorDay, daysInMonth(year, month)) ? anchorDay : day;
+  const wantedDay =
+    day === Math.min(anchorDay, daysInMonth(year, month)) ? anchorDay : day;
   const endDay = Math.min(wantedDay, daysInMonth(endYear, endMonth));
   return `${String(endYear).padStart(4, '0')}-${String(endMonth).padStart(2, '0')}-${String(endDay).padStart(2, '0')}`;
 }
@@ -62,7 +80,11 @@ type PlanPeriodsInput = {
   until: string; // YYYY-MM-DD; plan every period that starts on or before this day
 };
 
-export function planPeriods({ cadence, periods, until }: PlanPeriodsInput): PeriodBudgetRow[] {
+export function planPeriods({
+  cadence,
+  periods,
+  until,
+}: PlanPeriodsInput): PeriodBudgetRow[] {
   if (
     cadence.tombstone ||
     cadence.active !== true ||
@@ -109,7 +131,8 @@ export function planPeriods({ cadence, periods, until }: PlanPeriodsInput): Peri
     return [];
   }
 
-  const budget = isWholeNumber(latestBudget) && latestBudget >= 0 ? latestBudget : 0;
+  const budget =
+    isWholeNumber(latestBudget) && latestBudget >= 0 ? latestBudget : 0;
 
   let start = latestEnd;
   const planned: PeriodBudgetRow[] = [];
@@ -155,7 +178,10 @@ type CheckPeriodWriteInput = {
   periods: readonly PeriodBudgetRow[];
 };
 
-export function checkPeriodWrite({ candidate, periods }: CheckPeriodWriteInput): string | null {
+export function checkPeriodWrite({
+  candidate,
+  periods,
+}: CheckPeriodWriteInput): string | null {
   if (!isValidDay(candidate.start_date)) {
     return `start date "${String(candidate.start_date)}" is not a valid date`;
   }
@@ -182,7 +208,10 @@ export function checkPeriodWrite({ candidate, periods }: CheckPeriodWriteInput):
     ) {
       continue;
     }
-    if (row.start_date < candidate.end_date && candidate.start_date < row.end_date) {
+    if (
+      row.start_date < candidate.end_date &&
+      candidate.start_date < row.end_date
+    ) {
       return `overlaps period ${row.id} (${row.start_date} to ${row.end_date})`;
     }
   }

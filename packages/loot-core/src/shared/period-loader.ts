@@ -281,7 +281,8 @@ export function loadPeriodBudgetInput({
     }
     if (
       occurrence.state === 'posted' &&
-      (occurrence.transactionId === undefined || occurrence.transactionId === '')
+      (occurrence.transactionId === undefined ||
+        occurrence.transactionId === '')
     ) {
       setAside.push({
         table: 'charges',
@@ -355,7 +356,10 @@ export function loadPeriodBudgetInput({
       });
       continue;
     }
-    if (typeof occurrence.transactionDate === 'string' && occurrence.transactionDate > asOf) {
+    if (
+      typeof occurrence.transactionDate === 'string' &&
+      occurrence.transactionDate > asOf
+    ) {
       resultOccurrences.push({
         id: occurrence.id,
         periodId: occurrence.periodId,

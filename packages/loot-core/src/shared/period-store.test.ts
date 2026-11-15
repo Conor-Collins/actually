@@ -1,5 +1,13 @@
-import { cadenceEnd, checkPeriodWrite, isValidDay, isWholeNumber, newPeriodId, planPeriods } from './period-store';
 import type { PeriodBudgetRow, PeriodCadenceRow } from '#types/models';
+
+import {
+  cadenceEnd,
+  checkPeriodWrite,
+  isValidDay,
+  isWholeNumber,
+  newPeriodId,
+  planPeriods,
+} from './period-store';
 import type { PeriodCandidate } from './period-store';
 
 function row(
@@ -37,25 +45,31 @@ const JAN = row('cat1:2027-01-01', '2027-01-01', '2027-02-01');
 
 describe('newPeriodId', () => {
   it('uses category and start date when the id is free', () => {
-    expect(newPeriodId('cat1', '2027-01-01', new Set())).toBe('cat1:2027-01-01');
+    expect(newPeriodId('cat1', '2027-01-01', new Set())).toBe(
+      'cat1:2027-01-01',
+    );
   });
 
   it('adds :2 when the id is taken', () => {
-    expect(newPeriodId('cat1', '2027-01-01', new Set(['cat1:2027-01-01']))).toBe(
-      'cat1:2027-01-01:2',
-    );
+    expect(
+      newPeriodId('cat1', '2027-01-01', new Set(['cat1:2027-01-01'])),
+    ).toBe('cat1:2027-01-01:2');
   });
 
   it('adds :3 when :2 is taken too', () => {
     expect(
-      newPeriodId('cat1', '2027-01-01', new Set(['cat1:2027-01-01', 'cat1:2027-01-01:2'])),
+      newPeriodId(
+        'cat1',
+        '2027-01-01',
+        new Set(['cat1:2027-01-01', 'cat1:2027-01-01:2']),
+      ),
     ).toBe('cat1:2027-01-01:3');
   });
 
   it('uses the plain id when only :2 is taken', () => {
-    expect(newPeriodId('cat1', '2027-01-01', new Set(['cat1:2027-01-01:2']))).toBe(
-      'cat1:2027-01-01',
-    );
+    expect(
+      newPeriodId('cat1', '2027-01-01', new Set(['cat1:2027-01-01:2'])),
+    ).toBe('cat1:2027-01-01');
   });
 });
 
@@ -129,11 +143,15 @@ describe('isValidDay and isWholeNumber', () => {
 
 describe('planPeriods', () => {
   it('plans nothing without a stored period', () => {
-    expect(planPeriods({ cadence: cadence(), periods: [], until: '2027-12-31' })).toEqual([]);
+    expect(
+      planPeriods({ cadence: cadence(), periods: [], until: '2027-12-31' }),
+    ).toEqual([]);
   });
 
   it('plans nothing before the next start date', () => {
-    expect(planPeriods({ cadence: cadence(), periods: [JAN], until: '2027-01-31' })).toEqual([]);
+    expect(
+      planPeriods({ cadence: cadence(), periods: [JAN], until: '2027-01-31' }),
+    ).toEqual([]);
   });
 
   it('plans the next period on its start date', () => {
@@ -172,7 +190,10 @@ describe('planPeriods', () => {
     expect(
       planPeriods({
         cadence: cadence(),
-        periods: [row('cat1:2027-02-01', '2027-02-01', '2027-03-01', 65000), JAN],
+        periods: [
+          row('cat1:2027-02-01', '2027-02-01', '2027-03-01', 65000),
+          JAN,
+        ],
         until: '2027-03-01',
       }),
     ).toEqual([row('cat1:2027-03-01', '2027-03-01', '2027-04-01', 65000)]);
@@ -180,13 +201,21 @@ describe('planPeriods', () => {
 
   it('plans nothing for a deleted cadence', () => {
     expect(
-      planPeriods({ cadence: cadence({ tombstone: true }), periods: [JAN], until: '2027-12-31' }),
+      planPeriods({
+        cadence: cadence({ tombstone: true }),
+        periods: [JAN],
+        until: '2027-12-31',
+      }),
     ).toEqual([]);
   });
 
   it('plans nothing for a cadence that is switched off', () => {
     expect(
-      planPeriods({ cadence: cadence({ active: false }), periods: [JAN], until: '2027-12-31' }),
+      planPeriods({
+        cadence: cadence({ active: false }),
+        periods: [JAN],
+        until: '2027-12-31',
+      }),
     ).toEqual([]);
   });
 
@@ -199,7 +228,9 @@ describe('planPeriods', () => {
       cadence({ anchor_date: 'x' }),
     ];
     for (const c of cadences) {
-      expect(planPeriods({ cadence: c, periods: [JAN], until: '2027-12-31' })).toEqual([]);
+      expect(
+        planPeriods({ cadence: c, periods: [JAN], until: '2027-12-31' }),
+      ).toEqual([]);
     }
   });
 
@@ -207,7 +238,11 @@ describe('planPeriods', () => {
     expect(
       planPeriods({
         cadence: cadence(),
-        periods: [row('cat2:2027-01-01', '2027-01-01', '2027-02-01', 60000, { category: 'cat2' })],
+        periods: [
+          row('cat2:2027-01-01', '2027-01-01', '2027-02-01', 60000, {
+            category: 'cat2',
+          }),
+        ],
         until: '2027-12-31',
       }),
     ).toEqual([]);
@@ -217,7 +252,12 @@ describe('planPeriods', () => {
     expect(
       planPeriods({
         cadence: cadence(),
-        periods: [JAN, row('cat1:2027-02-01', '2027-02-01', '2027-03-01', 70000, { tombstone: true })],
+        periods: [
+          JAN,
+          row('cat1:2027-02-01', '2027-02-01', '2027-03-01', 70000, {
+            tombstone: true,
+          }),
+        ],
         until: '2027-02-15',
       }),
     ).toEqual([]);
@@ -227,7 +267,12 @@ describe('planPeriods', () => {
     expect(
       planPeriods({
         cadence: cadence(),
-        periods: [JAN, row('cat1:2027-02-01', '2027-02-01', '2027-03-01', 70000, { tombstone: true })],
+        periods: [
+          JAN,
+          row('cat1:2027-02-01', '2027-02-01', '2027-03-01', 70000, {
+            tombstone: true,
+          }),
+        ],
         until: '2027-03-01',
       }),
     ).toEqual([row('cat1:2027-03-01', '2027-03-01', '2027-04-01', 60000)]);
@@ -237,7 +282,12 @@ describe('planPeriods', () => {
     expect(
       planPeriods({
         cadence: cadence(),
-        periods: [JAN, row('cat1:2027-02-01', '2027-02-01', '2027-02-15', 70000, { tombstone: true })],
+        periods: [
+          JAN,
+          row('cat1:2027-02-01', '2027-02-01', '2027-02-15', 70000, {
+            tombstone: true,
+          }),
+        ],
         until: '2027-02-20',
       }),
     ).toEqual([row('cat1:2027-02-15', '2027-02-15', '2027-03-15', 60000)]);
@@ -247,7 +297,12 @@ describe('planPeriods', () => {
     expect(
       planPeriods({
         cadence: cadence(),
-        periods: [JAN, row('cat1:2027-02-01', '2027-02-01', null, 70000, { tombstone: true })],
+        periods: [
+          JAN,
+          row('cat1:2027-02-01', '2027-02-01', null, 70000, {
+            tombstone: true,
+          }),
+        ],
         until: '2027-03-01',
       }),
     ).toEqual([row('cat1:2027-03-01', '2027-03-01', '2027-04-01', 60000)]);
@@ -268,7 +323,11 @@ describe('planPeriods', () => {
 
   it('ignores live rows with invalid dates', () => {
     expect(
-      planPeriods({ cadence: cadence(), periods: [JAN, row('cat1:x', null, null, 99)], until: '2027-02-01' }),
+      planPeriods({
+        cadence: cadence(),
+        periods: [JAN, row('cat1:x', null, null, 99)],
+        until: '2027-02-01',
+      }),
     ).toEqual([row('cat1:2027-02-01', '2027-02-01', '2027-03-01', 60000)]);
   });
 
@@ -309,9 +368,10 @@ describe('planPeriods', () => {
   });
 
   it('stops after 1000 periods', () => {
-    expect(planPeriods({ cadence: cadence(), periods: [JAN], until: '9999-12-31' }).length).toBe(
-      1000,
-    );
+    expect(
+      planPeriods({ cadence: cadence(), periods: [JAN], until: '9999-12-31' })
+        .length,
+    ).toBe(1000);
   });
 
   it('does not change its input', () => {
@@ -336,46 +396,68 @@ describe('checkPeriodWrite', () => {
   }
 
   it('accepts a valid period', () => {
-    expect(checkPeriodWrite({ candidate: candidate(), periods: [JAN] })).toBe(null);
+    expect(checkPeriodWrite({ candidate: candidate(), periods: [JAN] })).toBe(
+      null,
+    );
   });
 
   it('refuses an invalid start date', () => {
-    expect(checkPeriodWrite({ candidate: candidate({ start_date: 'x' }), periods: [] })).toBe(
-      'start date "x" is not a valid date',
-    );
+    expect(
+      checkPeriodWrite({
+        candidate: candidate({ start_date: 'x' }),
+        periods: [],
+      }),
+    ).toBe('start date "x" is not a valid date');
   });
 
   it('refuses an invalid end date', () => {
-    expect(checkPeriodWrite({ candidate: candidate({ end_date: '2027-02-30' }), periods: [] })).toBe(
-      'end date "2027-02-30" is not a valid date',
-    );
+    expect(
+      checkPeriodWrite({
+        candidate: candidate({ end_date: '2027-02-30' }),
+        periods: [],
+      }),
+    ).toBe('end date "2027-02-30" is not a valid date');
   });
 
   it('refuses an end date that is not after the start date', () => {
-    expect(checkPeriodWrite({ candidate: candidate({ end_date: '2027-02-01' }), periods: [] })).toBe(
-      'end date 2027-02-01 must be after start date 2027-02-01',
-    );
+    expect(
+      checkPeriodWrite({
+        candidate: candidate({ end_date: '2027-02-01' }),
+        periods: [],
+      }),
+    ).toBe('end date 2027-02-01 must be after start date 2027-02-01');
   });
 
   it('refuses a negative or fractional budget', () => {
-    expect(checkPeriodWrite({ candidate: candidate({ budget: -1 }), periods: [] })).toBe(
-      'budget must be a whole number that is not negative',
-    );
-    expect(checkPeriodWrite({ candidate: candidate({ budget: 1.5 }), periods: [] })).toBe(
-      'budget must be a whole number that is not negative',
-    );
+    expect(
+      checkPeriodWrite({ candidate: candidate({ budget: -1 }), periods: [] }),
+    ).toBe('budget must be a whole number that is not negative');
+    expect(
+      checkPeriodWrite({ candidate: candidate({ budget: 1.5 }), periods: [] }),
+    ).toBe('budget must be a whole number that is not negative');
   });
 
   it('refuses a fractional carryover', () => {
-    expect(checkPeriodWrite({ candidate: candidate({ carryover: 0.5 }), periods: [] })).toBe(
-      'carryover must be a whole number',
-    );
-    expect(checkPeriodWrite({ candidate: candidate({ carryover: -80 }), periods: [] })).toBe(null);
+    expect(
+      checkPeriodWrite({
+        candidate: candidate({ carryover: 0.5 }),
+        periods: [],
+      }),
+    ).toBe('carryover must be a whole number');
+    expect(
+      checkPeriodWrite({
+        candidate: candidate({ carryover: -80 }),
+        periods: [],
+      }),
+    ).toBe(null);
   });
 
   it('refuses an overlap with a live period of the category', () => {
     expect(
-      checkPeriodWrite({ candidate: candidate({ start_date: '2027-01-15' }), periods: [JAN] }),
+      checkPeriodWrite({
+        candidate: candidate({ start_date: '2027-01-15' }),
+        periods: [JAN],
+      }),
     ).toBe('overlaps period cat1:2027-01-01 (2027-01-01 to 2027-02-01)');
   });
 
@@ -391,8 +473,16 @@ describe('checkPeriodWrite', () => {
   it('ignores deleted periods, other categories, itself and invalid rows', () => {
     const c = candidate({ start_date: '2027-01-15' });
     const periodLists = [
-      [row('cat1:2027-01-01', '2027-01-01', '2027-02-01', 60000, { tombstone: true })],
-      [row('cat2:2027-01-01', '2027-01-01', '2027-02-01', 60000, { category: 'cat2' })],
+      [
+        row('cat1:2027-01-01', '2027-01-01', '2027-02-01', 60000, {
+          tombstone: true,
+        }),
+      ],
+      [
+        row('cat2:2027-01-01', '2027-01-01', '2027-02-01', 60000, {
+          category: 'cat2',
+        }),
+      ],
       [row('cat1:2027-02-01', '2027-01-01', '2027-02-10')],
       [row('cat1:x', '2027-01-20', null)],
     ];
@@ -404,7 +494,10 @@ describe('checkPeriodWrite', () => {
   it('reports the first overlapping period in input order', () => {
     expect(
       checkPeriodWrite({
-        candidate: candidate({ start_date: '2027-01-15', end_date: '2027-03-15' }),
+        candidate: candidate({
+          start_date: '2027-01-15',
+          end_date: '2027-03-15',
+        }),
         periods: [row('cat1:2027-03-01', '2027-03-01', '2027-04-01'), JAN],
       }),
     ).toBe('overlaps period cat1:2027-03-01 (2027-03-01 to 2027-04-01)');
