@@ -37,7 +37,15 @@ function kept(
   end: string,
   extra: Partial<BudgetPeriod> = {},
 ): BudgetPeriod {
-  return { id, category: 'cat1', start, end, budget: 1000, carryover: 0, ...extra };
+  return {
+    id,
+    category: 'cat1',
+    start,
+    end,
+    budget: 1000,
+    carryover: 0,
+    ...extra,
+  };
 }
 
 function offset(
@@ -147,10 +155,17 @@ describe('loadPeriodBudgetInput: periods', () => {
   });
 
   it('sets aside a second row with the same id', () => {
-    const result = load({ periods: [A, period('A', '2027-03-01', '2027-04-01')] });
+    const result = load({
+      periods: [A, period('A', '2027-03-01', '2027-04-01')],
+    });
     expect(result.periods).toEqual([KEPT_A]);
     expect(result.setAside).toEqual([
-      aside('period_budgets', 'A', 'duplicate-id', 'another row has the same id'),
+      aside(
+        'period_budgets',
+        'A',
+        'duplicate-id',
+        'another row has the same id',
+      ),
     ]);
   });
 
@@ -205,7 +220,12 @@ describe('loadPeriodBudgetInput: periods', () => {
   it('sets aside a period with an invalid end date', () => {
     const result = load({ periods: [period('A', '2027-01-01', null)] });
     expect(result.setAside).toEqual([
-      aside('period_budgets', 'A', 'invalid-period', 'end date is not a valid date'),
+      aside(
+        'period_budgets',
+        'A',
+        'invalid-period',
+        'end date is not a valid date',
+      ),
     ]);
     expect(result.periods).toEqual([]);
   });
@@ -304,7 +324,10 @@ describe('loadPeriodBudgetInput: periods', () => {
 
   it('keeps overlapping periods of different categories', () => {
     const result = load({
-      periods: [A, period('B', '2027-01-15', '2027-02-15', { category: 'cat2' })],
+      periods: [
+        A,
+        period('B', '2027-01-15', '2027-02-15', { category: 'cat2' }),
+      ],
     });
     expect(result.periods.map(p => p.id)).toEqual(['A', 'B']);
     expect(result.setAside).toEqual([]);
@@ -384,7 +407,11 @@ describe('loadPeriodBudgetInput: offsets', () => {
 
   it('sets aside an offset to a set-aside period and counts the payment by its date', () => {
     const postings = [posting('t1', '2027-01-20')];
-    const result = load({ periods: [A, B], offsets: [offset('t1', 'B')], postings });
+    const result = load({
+      periods: [A, B],
+      offsets: [offset('t1', 'B')],
+      postings,
+    });
     expect(result.offsets).toEqual([]);
     expect(result.setAside).toEqual([
       aside('period_budgets', 'B', 'overlap', 'overlaps period A'),
@@ -429,19 +456,36 @@ describe('loadPeriodBudgetInput: offsets', () => {
   });
 
   it('sets aside a second offset with the same id', () => {
-    const result = load({ periods: [A], offsets: [offset('t1', 'A'), offset('t1', 'A')] });
+    const result = load({
+      periods: [A],
+      offsets: [offset('t1', 'A'), offset('t1', 'A')],
+    });
     expect(result.offsets).toEqual([{ transactionId: 't1', periodId: 'A' }]);
     expect(result.setAside).toEqual([
-      aside('period_offsets', 't1', 'duplicate-id', 'another row has the same id'),
+      aside(
+        'period_offsets',
+        't1',
+        'duplicate-id',
+        'another row has the same id',
+      ),
     ]);
   });
 });
 
 describe('loadPeriodBudgetInput: charges', () => {
   it('keeps a scheduled charge', () => {
-    const result = load({ periods: [A], occurrences: [charge('c1', 'A', '2027-01-05')] });
+    const result = load({
+      periods: [A],
+      occurrences: [charge('c1', 'A', '2027-01-05')],
+    });
     expect(result.occurrences).toEqual([
-      { id: 'c1', periodId: 'A', date: '2027-01-05', amount: 500, state: 'scheduled' },
+      {
+        id: 'c1',
+        periodId: 'A',
+        date: '2027-01-05',
+        amount: 500,
+        state: 'scheduled',
+      },
     ]);
     expect(result.setAside).toEqual([]);
     expect(result.paidOutsideBudget).toEqual([]);
@@ -450,7 +494,10 @@ describe('loadPeriodBudgetInput: charges', () => {
   it('sets aside a second charge with the same id', () => {
     const result = load({
       periods: [A],
-      occurrences: [charge('c1', 'A', '2027-01-05'), charge('c1', 'A', '2027-01-06')],
+      occurrences: [
+        charge('c1', 'A', '2027-01-05'),
+        charge('c1', 'A', '2027-01-06'),
+      ],
     });
     expect(result.occurrences.map(o => o.date)).toEqual(['2027-01-05']);
     expect(result.setAside).toEqual([
@@ -459,7 +506,10 @@ describe('loadPeriodBudgetInput: charges', () => {
   });
 
   it('sets aside a charge whose period is missing', () => {
-    const result = load({ periods: [A], occurrences: [charge('c1', 'x', '2027-01-05')] });
+    const result = load({
+      periods: [A],
+      occurrences: [charge('c1', 'x', '2027-01-05')],
+    });
     expect(result.occurrences).toEqual([]);
     expect(result.setAside).toEqual([
       aside(
@@ -472,7 +522,10 @@ describe('loadPeriodBudgetInput: charges', () => {
   });
 
   it('sets aside a charge whose period was set aside', () => {
-    const result = load({ periods: [A, B], occurrences: [charge('c1', 'B', '2027-02-05')] });
+    const result = load({
+      periods: [A, B],
+      occurrences: [charge('c1', 'B', '2027-02-05')],
+    });
     expect(result.occurrences).toEqual([]);
     expect(result.setAside).toEqual([
       aside('period_budgets', 'B', 'overlap', 'overlaps period A'),
@@ -486,7 +539,10 @@ describe('loadPeriodBudgetInput: charges', () => {
   });
 
   it('sets aside a charge with an invalid date', () => {
-    const result = load({ periods: [A], occurrences: [charge('c1', 'A', '2027-01-32')] });
+    const result = load({
+      periods: [A],
+      occurrences: [charge('c1', 'A', '2027-01-32')],
+    });
     expect(result.occurrences).toEqual([]);
     expect(result.setAside).toEqual([
       aside('charges', 'c1', 'invalid-charge', 'date is not a valid date'),
@@ -522,7 +578,12 @@ describe('loadPeriodBudgetInput: charges', () => {
       });
       expect(result.occurrences).toEqual([]);
       expect(result.setAside).toEqual([
-        aside('charges', 'c1', 'invalid-charge', 'posted without a transaction'),
+        aside(
+          'charges',
+          'c1',
+          'invalid-charge',
+          'posted without a transaction',
+        ),
       ]);
     }
   });
@@ -560,17 +621,60 @@ describe('loadPeriodBudgetInput: charges', () => {
     ]);
   });
 
+  it('counts a charge as paid when its payment is in another category', () => {
+    const postings = [posting('t1', '2027-01-06', -100, 'cat2')];
+    const result = load({
+      periods: [A],
+      postings,
+      occurrences: [
+        charge('c1', 'A', '2027-01-05', {
+          state: 'posted',
+          transactionId: 't1',
+          transactionDate: '2027-01-06',
+        }),
+      ],
+    });
+    expect(result.setAside).toEqual([]);
+    expect(result.occurrences.map(o => `${o.id}:${o.state}`)).toEqual([
+      'c1:posted',
+    ]);
+    const projection = projectPeriodCharges({
+      periods: result.periods,
+      postings,
+      offsets: result.offsets,
+      occurrences: result.occurrences,
+      asOf: '2027-06-15',
+    });
+    expect(projection.periods.map(p => p.outstandingOccurrenceIds)).toEqual([
+      [],
+    ]);
+    expect(projection.summary.periods.map(p => p.netSpending)).toEqual([0]);
+    expect(projection.summary.unassignedPostingIds).toEqual(['t1']);
+  });
+
   it('lets one payment settle only the charge with the earlier due date', () => {
     const result = load({
       periods: [A],
       postings: [posting('t1', '2027-01-06')],
       occurrences: [
-        charge('c2', 'A', '2027-01-20', { state: 'posted', transactionId: 't1' }),
-        charge('c1', 'A', '2027-01-05', { state: 'posted', transactionId: 't1' }),
+        charge('c2', 'A', '2027-01-20', {
+          state: 'posted',
+          transactionId: 't1',
+        }),
+        charge('c1', 'A', '2027-01-05', {
+          state: 'posted',
+          transactionId: 't1',
+        }),
       ],
     });
     expect(result.occurrences).toEqual([
-      { id: 'c2', periodId: 'A', date: '2027-01-20', amount: 500, state: 'scheduled' },
+      {
+        id: 'c2',
+        periodId: 'A',
+        date: '2027-01-20',
+        amount: 500,
+        state: 'scheduled',
+      },
       {
         id: 'c1',
         periodId: 'A',
@@ -595,8 +699,14 @@ describe('loadPeriodBudgetInput: charges', () => {
       periods: [A],
       postings: [posting('t1', '2027-01-06')],
       occurrences: [
-        charge('cb', 'A', '2027-01-05', { state: 'posted', transactionId: 't1' }),
-        charge('ca', 'A', '2027-01-05', { state: 'posted', transactionId: 't1' }),
+        charge('cb', 'A', '2027-01-05', {
+          state: 'posted',
+          transactionId: 't1',
+        }),
+        charge('ca', 'A', '2027-01-05', {
+          state: 'posted',
+          transactionId: 't1',
+        }),
       ],
     });
     expect(result.occurrences.map(o => `${o.id}:${o.state}`)).toEqual([
@@ -608,7 +718,12 @@ describe('loadPeriodBudgetInput: charges', () => {
   it('counts a charge as paid when its transaction is not a posting', () => {
     const result = load({
       periods: [A],
-      occurrences: [charge('c1', 'A', '2027-01-05', { state: 'posted', transactionId: 't9' })],
+      occurrences: [
+        charge('c1', 'A', '2027-01-05', {
+          state: 'posted',
+          transactionId: 't9',
+        }),
+      ],
     });
     expect(result.occurrences).toEqual([]);
     expect(result.paidOutsideBudget).toEqual(['c1']);
@@ -627,7 +742,13 @@ describe('loadPeriodBudgetInput: charges', () => {
       ],
     });
     expect(result.occurrences).toEqual([
-      { id: 'c1', periodId: 'A', date: '2027-01-05', amount: 500, state: 'scheduled' },
+      {
+        id: 'c1',
+        periodId: 'A',
+        date: '2027-01-05',
+        amount: 500,
+        state: 'scheduled',
+      },
     ]);
     expect(result.paidOutsideBudget).toEqual([]);
   });
@@ -651,12 +772,24 @@ describe('loadPeriodBudgetInput: charges', () => {
     const result = load({
       periods: [A],
       occurrences: [
-        charge('c1', 'A', '2027-01-05', { state: 'posted', transactionId: 't9' }),
-        charge('c2', 'A', '2027-01-20', { state: 'posted', transactionId: 't9' }),
+        charge('c1', 'A', '2027-01-05', {
+          state: 'posted',
+          transactionId: 't9',
+        }),
+        charge('c2', 'A', '2027-01-20', {
+          state: 'posted',
+          transactionId: 't9',
+        }),
       ],
     });
     expect(result.occurrences).toEqual([
-      { id: 'c2', periodId: 'A', date: '2027-01-20', amount: 500, state: 'scheduled' },
+      {
+        id: 'c2',
+        periodId: 'A',
+        date: '2027-01-20',
+        amount: 500,
+        state: 'scheduled',
+      },
     ]);
     expect(result.paidOutsideBudget).toEqual(['c1']);
   });
@@ -683,10 +816,19 @@ describe('loadPeriodBudgetInput: charges', () => {
         offset('t4', null),
       ],
       occurrences: [
-        charge('c1', 'A', '2027-01-05', { state: 'posted', transactionId: 't1' }),
-        charge('c2', 'A', '2027-01-20', { state: 'posted', transactionId: 't1' }),
+        charge('c1', 'A', '2027-01-05', {
+          state: 'posted',
+          transactionId: 't1',
+        }),
+        charge('c2', 'A', '2027-01-20', {
+          state: 'posted',
+          transactionId: 't1',
+        }),
         charge('c3', 'B', '2027-02-05'),
-        charge('c4', 'E', '2027-02-05', { state: 'posted', transactionId: 't9' }),
+        charge('c4', 'E', '2027-02-05', {
+          state: 'posted',
+          transactionId: 't9',
+        }),
         charge('c5', 'E', 'bad'),
         charge('c1', 'E', '2027-02-06'),
         charge('c6', 'E', '2027-02-07', { state: 'posted' }),
@@ -778,10 +920,9 @@ describe('listOverridesWithoutCharge', () => {
   });
 
   it('includes the first and the last day of the range', () => {
-    expect(list(['s1:2027-01-01', 's1:2027-12-31'], []).map(s => s.id)).toEqual([
-      's1:2027-01-01',
-      's1:2027-12-31',
-    ]);
+    expect(list(['s1:2027-01-01', 's1:2027-12-31'], []).map(s => s.id)).toEqual(
+      ['s1:2027-01-01', 's1:2027-12-31'],
+    );
   });
 
   it('lists an override whose id has no due date', () => {

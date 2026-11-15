@@ -495,10 +495,28 @@ async function setChargeOverride({
   const overrides = await readTable<PeriodChargeOverrideRow>(
     'period_charge_overrides',
   );
-  const isLive = overrides.some(o => o.id === id && !o.tombstone);
-  const fields: Record<string, FieldValue> = isLive
-    ? {}
-    : { amount: null, skipped: false, transaction_id: null, open_amount: null };
+  const existing = overrides.find(o => o.id === id);
+  // Only the given fields are sent, so two devices that set different fields
+  // of one charge both keep their change. An override that was cleared
+  // starts again from the defaults.
+  const fields: Record<string, FieldValue> =
+    existing !== undefined && existing.tombstone
+      ? {
+          amount: null,
+          skipped: false,
+          transaction_id: null,
+          open_amount: null,
+        }
+      : {};
+  if (
+    existing === undefined &&
+    amount === undefined &&
+    skipped === undefined &&
+    transactionId === undefined &&
+    openAmount === undefined
+  ) {
+    fields.skipped = false;
+  }
   if (amount !== undefined) {
     fields.amount = amount;
   }
