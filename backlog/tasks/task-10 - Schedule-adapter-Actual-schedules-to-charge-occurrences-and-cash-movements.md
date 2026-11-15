@@ -61,6 +61,8 @@ Round 4 (rung 2, opencode studio/flash-next): candidate d579ca7b864c8b44bbef6bd7
 Review round 4 (rung 2, round 1 of 3), 23:05Z: REQUEST CHANGES on d579ca7b8. Findings 9, 10, 11 closed. New finding 12 (blocking): account balances in calculate.ts are added without checking intermediate sums, so amounts that cancel can give a rounded cash balance (-MAX_SAFE_INTEGER, 2, MAX_SAFE_INTEGER gives 1, not 2). Round 5 follows at rung 2.
 
 Round 5 (rung 2, round 2 of 3): candidate 05006583a sent to review at 23:21Z. Finding 12 answered: account balances are added exactly (bigint); no cash plan when a selected account has an amount that is no whole number or a balance too large. 734 focused tests, gate exit 0 (23:20Z), 13 of 14 balance mutants killed (1 equivalent: planCash refuses the same balance).
+
+Review round 5, 23:27Z: APPROVE on 05006583ae48ad9a4e199086fad3936e44544b91 (finding 12 closed; finding 13 is a non-blocking test note, filed as its own ticket). Landed as c79359e7e at 23:29Z; landing gate exit 0. Ledger: rung 1 rounds 1 to 3 (2969346c6, acb61858c, 16abde4ab), rung 2 rounds 4 and 5 (d579ca7b8, 05006583a).
 <!-- SECTION:NOTES:END -->
 
 ## Final Summary
