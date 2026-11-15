@@ -273,6 +273,39 @@ describe('period-budget charge overrides', () => {
     ]);
   });
 
+  it('sets an amount back to none and keeps the other fields', async () => {
+    await handlers['period-budget/set-charge-override']({
+      scheduleId: 'sched1',
+      dueDate: '2027-01-05',
+      amount: 1200,
+      skipped: true,
+      openAmount: 300,
+    });
+    await handlers['period-budget/set-charge-override']({
+      scheduleId: 'sched1',
+      dueDate: '2027-01-05',
+      amount: null,
+    });
+    expect((await rows()).chargeOverrides).toEqual([
+      {
+        id: 'sched1:2027-01-05',
+        amount: null,
+        skipped: true,
+        transaction_id: null,
+        open_amount: 300,
+        tombstone: false,
+      },
+    ]);
+    await handlers['period-budget/set-charge-override']({
+      scheduleId: 'sched1',
+      dueDate: '2027-01-05',
+      openAmount: null,
+    });
+    expect((await rows()).chargeOverrides).toMatchObject([
+      { amount: null, skipped: true, open_amount: null },
+    ]);
+  });
+
   it('refuses an invalid override and says why', async () => {
     expect(
       await handlers['period-budget/set-charge-override']({

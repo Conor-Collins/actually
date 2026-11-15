@@ -117,9 +117,31 @@ async function getRows(): Promise<PeriodBudgetRows> {
   };
 }
 
+// Inserts a new row. An insert sends no sync message for a field that is
+// null, so the null fields are sent as an update in the same batch: another
+// device's older value for such a field must not survive this write.
+async function insertRow(
+  table: PeriodTable,
+  id: string,
+  fields: Record<string, FieldValue>,
+): Promise<void> {
+  const nulls: Record<string, null> = {};
+  for (const [name, value] of Object.entries(fields)) {
+    if (value === null) {
+      nulls[name] = null;
+    }
+  }
+  await batchMessages(async () => {
+    await db.insertWithSchema(table, { id, ...fields });
+    if (Object.keys(nulls).length > 0) {
+      await db.updateWithSchema(table, { id, ...nulls });
+    }
+  });
+}
+
 // Inserts the row, or updates it when the id exists (a deleted row comes
-// back). Sending `tombstone: false` lets the later of "clear" and "set" win
-// when two devices disagree.
+// back). Sending `tombstone: false`, also for a new row, lets the later of
+// "clear" and "set" win when two devices disagree.
 async function writeRow(
   table: PeriodTable,
   id: string,
@@ -130,7 +152,7 @@ async function writeRow(
     [id],
   );
   if (existing === null) {
-    await db.insertWithSchema(table, { id, ...fields });
+    await insertRow(table, id, { ...fields, tombstone: false });
     return;
   }
   await db.updateWithSchema(table, { id, ...fields, tombstone: false });
@@ -251,8 +273,7 @@ async function createPeriod({
   if (error !== null) {
     return { error };
   }
-  await db.insertWithSchema('period_budgets', {
-    id,
+  await insertRow('period_budgets', id, {
     category,
     start_date: start,
     end_date: end,
@@ -361,6 +382,9 @@ async function carry({
   }
   if (!isWholeNumber(amount)) {
     return { error: 'carryover must be a whole number' };
+  }
+  if (!isWholeNumber((row.budget ?? 0) + amount)) {
+    return { error: 'budget plus carryover is too large' };
   }
   if (fromPeriodId === null) {
     if (amount !== 0) {
@@ -607,8 +631,7 @@ export async function storeDuePeriods(today: string): Promise<string[]> {
   const planned = await planAll(today);
   await batchMessages(async () => {
     for (const row of planned) {
-      await db.insertWithSchema('period_budgets', {
-        id: row.id,
+      await insertRow('period_budgets', row.id, {
         category: row.category,
         start_date: row.start_date,
         end_date: row.end_date,

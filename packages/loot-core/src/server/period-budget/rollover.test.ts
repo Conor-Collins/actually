@@ -217,6 +217,39 @@ describe('storeDuePeriods', () => {
     ]);
   });
 
+  it('leaves a deleted :2 period deleted and continues after it', async () => {
+    await setMonthlyCadence();
+    await handlers['period-budget/create-period']({
+      category: 'cat1',
+      start: '2027-03-01',
+      end: '2027-04-01',
+      budget: 700,
+    });
+    await handlers['period-budget/update-period']({
+      id: 'cat1:2027-03-01',
+      start: '2027-02-01',
+      end: '2027-03-01',
+    });
+    await storeDuePeriods('2027-03-01');
+    await handlers['period-budget/delete-period']({ id: 'cat1:2027-03-01:2' });
+    expect(await storeDuePeriods('2027-03-20')).toEqual([]);
+    expect(await storeDuePeriods('2027-04-01')).toEqual(['cat1:2027-04-01']);
+    expect(await describePeriods()).toEqual([
+      'cat1:2027-01-01 2027-01-01 2027-02-01 500',
+      'cat1:2027-03-01 2027-02-01 2027-03-01 700',
+      'cat1:2027-03-01:2 2027-03-01 2027-04-01 700 deleted',
+      'cat1:2027-04-01 2027-04-01 2027-05-01 700',
+    ]);
+  });
+
+  it('stores every period after a long time away', async () => {
+    await setMonthlyCadence();
+    const stored = await storeDuePeriods('2127-01-01');
+    expect(stored.length).toBe(1200);
+    expect(stored[1199]).toBe('cat1:2127-01-01');
+    expect(await storeDuePeriods('2127-01-01')).toEqual([]);
+  });
+
   it('stores nothing for a cadence that is off or has no period yet', async () => {
     await handlers['period-budget/set-cadence']({
       category: 'cat2',
