@@ -1,14 +1,30 @@
 ---
 id: TASK-8
 title: Storage for periods, offsets and occurrence links (migration and sync)
-status: Review
+status: Done
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-15T18:30:00Z'
+updated_date: '2026-11-15T18:40:00Z'
 labels:
   - integration
 dependencies:
   - TASK-6
+modified_files:
+  - packages/loot-core/migrations/1794787200000_add_period_budget_tables.sql
+  - packages/loot-core/src/server/aql/schema/index.ts
+  - packages/loot-core/src/server/main.ts
+  - packages/loot-core/src/server/period-budget/app.ts
+  - packages/loot-core/src/server/period-budget/links.test.ts
+  - packages/loot-core/src/server/period-budget/periods.test.ts
+  - packages/loot-core/src/server/period-budget/rollover.test.ts
+  - packages/loot-core/src/server/period-budget/two-devices.test.ts
+  - packages/loot-core/src/shared/period-loader.test.ts
+  - packages/loot-core/src/shared/period-loader.ts
+  - packages/loot-core/src/shared/period-store.test.ts
+  - packages/loot-core/src/shared/period-store.ts
+  - packages/loot-core/src/types/handlers.ts
+  - packages/loot-core/src/types/models/index.ts
+  - packages/loot-core/src/types/models/period-budget.ts
 priority: medium
 ordinal: 8000
 ---
@@ -23,13 +39,13 @@ Outline only. Needs a plan in docs/plans/ from the owner before it is started: t
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 One additive migration creates the six tables of B1; each is in the query schema and has a model type.
-- [ ] #2 Handlers exist, each undoable: set and switch off a cadence; create, edit, delete, restore and carry a period; set and clear an offset; link and unlink a schedule; set and clear a charge override; exclude and include an account.
-- [ ] #3 Storing the next period follows B2: after a successful sync or on a file without a server, with the fixed id, the allowance copied as its own value, no carry, and never over an existing id. Tests cover a deleted id and a moved period.
-- [ ] #4 Planned rows are derived for any date range and carry the id they will get.
-- [ ] #5 A handler refuses a write that is invalid on its own device (overlap, end not after start, offset to another category) and says why.
-- [ ] #6 The loader turns any stored rows into input the landed calculation accepts, and returns the set-aside rows with reasons. Each rule of S2 has a test.
-- [ ] #7 Each row of B7 has a test that applies two devices' changes in both orders and gets the stated result both times.
+- [x] #1 One additive migration creates the six tables of B1; each is in the query schema and has a model type.
+- [x] #2 Handlers exist, each undoable: set and switch off a cadence; create, edit, delete, restore and carry a period; set and clear an offset; link and unlink a schedule; set and clear a charge override; exclude and include an account.
+- [x] #3 Storing the next period follows B2: after a successful sync or on a file without a server, with the fixed id, the allowance copied as its own value, no carry, and never over an existing id. Tests cover a deleted id and a moved period.
+- [x] #4 Planned rows are derived for any date range and carry the id they will get.
+- [x] #5 A handler refuses a write that is invalid on its own device (overlap, end not after start, offset to another category) and says why.
+- [x] #6 The loader turns any stored rows into input the landed calculation accepts, and returns the set-aside rows with reasons. Each rule of S2 has a test.
+- [x] #7 Each row of B7 has a test that applies two devices' changes in both orders and gets the stated result both times.
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -51,3 +67,9 @@ Round 2 (rung 1, local coder; reviewer gpt-6.1-sol xhigh): candidate 0f81a4b26, 
 
 Round 3 candidate 057ad61ec81cc2a1fb786b03685dc27e9553eb52 (rung 1): full gate passed (typecheck, lint, test). Authorship: the orchestrator wrote the round-3 code and tests in a scratch worktree (209 focused tests, 25 mutants killed); the local coder copied the eight files in and committed them, and wrote no code itself. The files on the branch are byte-identical to the prototype. Sent to the independent reviewer (gpt-6.1-sol xhigh) as round 3.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Landed task-8-period-storage as c521c4143 on 2026-11-15.
+<!-- SECTION:FINAL_SUMMARY:END -->
