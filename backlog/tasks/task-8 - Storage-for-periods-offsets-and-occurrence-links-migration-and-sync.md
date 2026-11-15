@@ -1,10 +1,10 @@
 ---
 id: TASK-8
 title: Storage for periods, offsets and occurrence links (migration and sync)
-status: In Progress
+status: Review
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-15T17:59:00Z'
+updated_date: '2026-11-15T18:07:00Z'
 labels:
   - integration
 dependencies:
