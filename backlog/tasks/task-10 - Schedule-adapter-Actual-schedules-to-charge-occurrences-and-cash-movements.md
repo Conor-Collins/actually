@@ -1,16 +1,23 @@
 ---
 id: TASK-10
 title: 'Schedule adapter: Actual schedules to charge occurrences and cash movements'
-status: Review
+status: Done
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-15T23:20:00Z'
+updated_date: '2026-11-15T23:29:00Z'
 labels:
   - integration
 dependencies:
   - TASK-5
   - TASK-6
   - TASK-8
+modified_files:
+  - packages/loot-core/src/server/period-budget/app.ts
+  - packages/loot-core/src/server/period-budget/calculate.random.test.ts
+  - packages/loot-core/src/server/period-budget/calculate.test.ts
+  - packages/loot-core/src/server/period-budget/calculate.ts
+  - packages/loot-core/src/shared/period-charges.test.ts
+  - packages/loot-core/src/shared/period-charges.ts
 priority: medium
 ordinal: 10000
 ---
@@ -25,11 +32,11 @@ Outline only. Waits on the owner's decisions (SPEC section 10): whether offsets 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 For the linked schedules and a date range, it returns the charges of B4 with their ids, periods and amounts, with overrides applied.
-- [ ] #2 The matching rule of B4 has tests for: paid early, paid late, a different amount, two payments for one charge, a part payment with "still expected", a skipped charge, a named match that differs from the calculated one, and a payment after the as-of date.
-- [ ] #3 Derived offsets follow B3; a manual offset wins; monthly actual spending is the same with and without them.
-- [ ] #4 Future cash movements for the selected accounts come from Actual's schedules inside the horizon: transfers have two legs, nothing already posted is repeated, an overdue charge is placed on the as-of date.
-- [ ] #5 With the rows of the spec's worked example stored (section 8), the results are 2,230 spent in April, 970 remaining, 80 overspent, 0 expected remaining for taxes, 4,200 cash and a 200 transfer needed.
+- [x] #1 For the linked schedules and a date range, it returns the charges of B4 with their ids, periods and amounts, with overrides applied.
+- [x] #2 The matching rule of B4 has tests for: paid early, paid late, a different amount, two payments for one charge, a part payment with "still expected", a skipped charge, a named match that differs from the calculated one, and a payment after the as-of date.
+- [x] #3 Derived offsets follow B3; a manual offset wins; monthly actual spending is the same with and without them.
+- [x] #4 Future cash movements for the selected accounts come from Actual's schedules inside the horizon: transfers have two legs, nothing already posted is repeated, an overdue charge is placed on the as-of date.
+- [x] #5 With the rows of the spec's worked example stored (section 8), the results are 2,230 spent in April, 970 remaining, 80 overspent, 0 expected remaining for taxes, 4,200 cash and a 200 transfer needed.
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -55,3 +62,9 @@ Review round 4 (rung 2, round 1 of 3), 23:05Z: REQUEST CHANGES on d579ca7b8. Fin
 
 Round 5 (rung 2, round 2 of 3): candidate 05006583a sent to review at 23:21Z. Finding 12 answered: account balances are added exactly (bigint); no cash plan when a selected account has an amount that is no whole number or a balance too large. 734 focused tests, gate exit 0 (23:20Z), 13 of 14 balance mutants killed (1 equivalent: planCash refuses the same balance).
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Landed task-10-schedule-adapter as c79359e7e on 2026-11-15.
+<!-- SECTION:FINAL_SUMMARY:END -->
