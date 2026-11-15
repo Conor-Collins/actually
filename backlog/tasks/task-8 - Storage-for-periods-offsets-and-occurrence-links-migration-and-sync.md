@@ -1,10 +1,10 @@
 ---
 id: TASK-8
 title: Storage for periods, offsets and occurrence links (migration and sync)
-status: Review
+status: In Progress
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-15T18:07:00Z'
+updated_date: '2026-11-15T18:26:00Z'
 labels:
   - integration
 dependencies:
@@ -46,4 +46,6 @@ Outline only. Needs a plan in docs/plans/ from the owner before it is started: t
 Round 1 review (codex gpt-6.1-sol xhigh) of c3d471dc6: REQUEST CHANGES, 7 findings. Blocking: (1) set-cadence always sent start date, length and active, so a length change undid another device's start-date change; (2) inserts send no message for null fields (override amount back to none, rollover's empty carry source); (4) a deleted period with a :2 id was planned again as :3; (5) B7 rows 2 and 11 were not really replayed in both orders / used no real schedule edit. Should-fix: (3) new set-style rows sent no tombstone message; (6) budget plus carryover can exceed the safe range; (7) planner stopped silently after 1000 periods. Reviewer killed 8 of 10 mutants. Round 2 (rung 1) started: orchestrator prototyped fixes and tests, coder applies them in three steps (/tmp/actually-orch/task-8-fix1..3.md).
 
 Round 2 (rung 1) candidate 0f81a4b26: fix commits d4e1ff345 (planner suffix walk, no 1000 cap, budget plus carryover check in store and loader), 1793f7fe8 (inserts send null fields, new set-style rows send tombstone false, carry refuses an unsafe sum), 0f81a4b26 (set-cadence sends only changed fields; two-device tests for rows 2 and 11 strengthened). All 7 round-1 findings and both surviving mutants addressed. Full gate passed (typecheck, lint, test: exit 0). 188 focused tests. Authorship: the orchestrator prototyped the production fixes and wrote the tests; the coder applied them; the reviewer is independent. Sent for review round 2.
+
+Round 2 (rung 1, local coder; reviewer gpt-6.1-sol xhigh): candidate 0f81a4b26, gate passed, verdict REQUEST CHANGES. All 7 round-1 findings closed. New: finding 8 (should-fix, AC #6): the loader returns rows that are each valid but whose amounts together make the calculation refuse; finding 9 (should-fix, AC #4): a planned period can end on 10000-01-01 and storing it fails. Mutation: 12 run, 10 killed, 2 survived (cadence always re-sends active; period insert revives a deleted period). Round 3 (last reviewed round at rung 1) started: the orchestrator prototyped fixes and tests (209 focused tests, 25 mutants killed); the coder applies them.
 <!-- SECTION:NOTES:END -->
