@@ -4,10 +4,9 @@ title: Opt-in Period Budget page with period editing and payment drill-down
 status: To Do
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-15T14:31:00Z'
+updated_date: '2026-11-15T16:13:00Z'
 labels:
   - ui
-  - needs-decision
 dependencies:
   - TASK-8
   - TASK-9
@@ -25,11 +24,18 @@ Outline only. Waits on the owner's decisions (SPEC section 10): how a user creat
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Acceptance criteria are set from the owner's decisions before this task is started.
+- [ ] #1 The sidebar page of S7 exists, hidden by default; Actual's budget page is unchanged.
+- [ ] #2 Header and category rows show what B6 lists, with period bars, payment dots and charge dots on the shared axis and the as-of line. Every money figure has a label; the combined remaining is never labelled as a monthly limit or as cash (spec section 5).
+- [ ] #3 Selecting a bar opens the row with its payments, charges and actions, without the full graph. Each bar and dot has a text equivalent for keyboard and screen-reader use.
+- [ ] #4 Cadence setup, schedule links, period edits, carry, offsets and overrides work from the page.
+- [ ] #5 "Needs attention" lists set-aside rows, unassigned spending, charges without a period and overrides without a date, each with its fixing action.
+- [ ] #6 The phone "Month" and "Periods" tabs of B6 work at 360 px width.
 <!-- AC:END -->
 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
 2026-11-15: two candidate plans (A stored records, B cadence and derivation) are in /data/t3-work/actually-approvals/plans-2026-11-15/ and wait for the owner's choice. Scope and acceptance criteria are unchanged until then.
+
+2026-11-15: the owner approved plan B ("Plan B, all approved"). The plan is docs/plans/period-budget.md (commit 6f90e400f); section references in the acceptance criteria (B1 to B9, S1 to S8) are to that file. Acceptance criteria set from its section B9.
 <!-- SECTION:NOTES:END -->
