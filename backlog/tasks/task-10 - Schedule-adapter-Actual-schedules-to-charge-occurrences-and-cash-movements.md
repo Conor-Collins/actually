@@ -4,7 +4,7 @@ title: 'Schedule adapter: Actual schedules to charge occurrences and cash moveme
 status: Review
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-15T22:31:00Z'
+updated_date: '2026-11-15T22:56:00Z'
 labels:
   - integration
 dependencies:
@@ -48,4 +48,6 @@ Review round 2 (rung 1, candidate acb61858c): REQUEST CHANGES. Blocking: 6 (a na
 Round 3 (rung 1, last round at this rung), 2026-11-15 21:19Z: candidate 16abde4ab05b590852218ccc018c831747bcddda (one commit after acb61858c). Fixes for review findings 6, 7, 8 and the is_child guard, a rule for parts of splits, and a randomized test file (calculate.random.test.ts). Focused tests 720 passed (11 files); full gate exit 0 (/tmp/actually-orch/t10/gate-r3.log). Orchestrator mutation run: pure 70 of 70 killed; server run of 85 in progress, five survivors expected and judged without visible effect. Code and tests written by the orchestrator, applied and committed by the rung-1 coder. Round-3 review started on gpt-6.1-sol xhigh.
 
 Review round 3 (2026-11-15 21:28Z) on 16abde4ab05b590852218ccc018c831747bcddda: REQUEST CHANGES. Findings 6, 7, 8 and the is_child guard closed. New: 9 blocking (a part's own charge period overwritten by its split's), 10 blocking (a named split settles an unlinked schedule through a part that carries the same schedule), 11 should-fix (a part without its split still counted as budget spending). Rung 1 has used its three reviewed rounds; round 4 runs at rung 2 (opencode studio/flash-next). Work held 21:29Z to 22:30Z for a Paradox quiet window on the shared machine.
+
+Round 4 (rung 2, opencode studio/flash-next): candidate d579ca7b864c8b44bbef6bd7b1d649980c6e1cfe, 730 focused tests, gate exit 0 at 22:56Z (/tmp/actually-orch/t10/gate-r4.log); mutation run pure 77 of 77 killed, server 82 of 87 killed (5 judged equivalent, unchanged from round 3). Sent to review round 4 at 22:57Z.
 <!-- SECTION:NOTES:END -->
