@@ -4,7 +4,7 @@ title: 'Schedule adapter: Actual schedules to charge occurrences and cash moveme
 status: Review
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-15T19:35:00Z'
+updated_date: '2026-11-15T20:15:00Z'
 labels:
   - integration
 dependencies:
@@ -40,4 +40,6 @@ Outline only. Waits on the owner's decisions (SPEC section 10): whether offsets 
 2026-11-15: the owner approved plan B ("Plan B, all approved"). The plan is docs/plans/period-budget.md (commit 6f90e400f); section references in the acceptance criteria (B1 to B9, S1 to S8) are to that file. Acceptance criteria set from its section B9.
 
 2026-11-15: in progress. The orchestrator wrote the code and the tests (shared/period-charges.ts, server/period-budget/calculate.ts, handler period-budget/calculate) and delivers them as two patches; the rung-1 coder applies them, runs the checks and commits on branch task-10-schedule-adapter; an independent reviewer (codex gpt-6.1-sol xhigh) reviews the candidate. Briefs: /tmp/actually-orch/task-10-brief.md and task-10-review-brief.md.
+
+Review round 1 (codex gpt-6.1-sol xhigh) on 2969346c6: REQUEST CHANGES. Blocking: matching changed with the as-of date (fixed 366-day look-back); an entered payment of an unlinked schedule dated after the as-of day vanished from the cash forecast; one unreadable rule rejected the whole calculation. Should-fix: isbetween coverage. Note: matching worse than linear. Round 2 candidate acb61858c (rung 1; orchestrator-written fix patch applied by the coder): real preceding due date, entered future-dated scheduled transactions planned on their own day (new isPosted flag), unreadable schedules left out, binary search and period index with a scaling test. Gate exit 0 (/tmp/actually-orch/t10/gate-r2.log). Review round 2 running.
 <!-- SECTION:NOTES:END -->
