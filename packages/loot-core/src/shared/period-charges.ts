@@ -15,8 +15,8 @@ export type ChargeSchedule = {
   id: string;
   category: string; // the linked category
   amount: number; // the expected charge: a whole number above zero
-  // Every due date of the schedule in ascending order, from its first one up
-  // to at least one after the latest payment and after `end`, when there is one.
+  // Due dates of the schedule: every one from the last before `start` to the
+  // first after `end`, and any other one the user named a payment for.
   dueDates: readonly string[];
   // An unpaid charge that is due before this day is closed: Actual no longer
   // expects it. null: every unpaid charge is closed (a completed schedule).
@@ -28,7 +28,9 @@ export type ChargeTransaction = {
   date: string;
   schedule: string | null; // the schedule id the transaction carries
   category: string | null;
-  parentId: string | null; // set on a part of a split transaction
+  // Set on a part of a split transaction. The caller leaves out a part whose
+  // split it does not pass.
+  parentId: string | null;
 };
 
 export type DerivedChargeStatus = 'expected' | 'paid' | 'skipped' | 'closed';
@@ -64,6 +66,9 @@ export type DerivedCharges = {
   occurrences: LoaderOccurrence[]; // what the loader takes
   offsets: PeriodOffsetRow[]; // the stored rows, then the derived ones
   derivedOffsetIds: string[]; // transaction ids of the derived offsets
+  // The transactions the user named as the payment of a charge, also of a
+  // charge that is due outside `start` to `end`.
+  namedPayments: Array<{ id: string; scheduleId: string }>;
   setAside: SetAsideRow[];
 };
 
@@ -262,15 +267,28 @@ export function deriveCharges({
       } else {
         children.push(transaction);
       }
+    }
+  }
+  // A transaction is a payment of the schedule it carries. So is a part of a
+  // split, unless the split carries the same schedule: then the split is the
+  // payment.
+  for (const transaction of transactionById.values()) {
+    const scheduleId = transaction.schedule;
+    if (scheduleId === null || scheduleId === '') {
       continue;
     }
-    if (transaction.schedule !== null && transaction.schedule !== '') {
-      const payments = paymentsByScheduleId.get(transaction.schedule);
-      if (payments === undefined) {
-        paymentsByScheduleId.set(transaction.schedule, [transaction]);
-      } else {
-        payments.push(transaction);
-      }
+    if (
+      transaction.parentId !== null &&
+      transaction.parentId !== '' &&
+      transactionById.get(transaction.parentId)?.schedule === scheduleId
+    ) {
+      continue;
+    }
+    const payments = paymentsByScheduleId.get(scheduleId);
+    if (payments === undefined) {
+      paymentsByScheduleId.set(scheduleId, [transaction]);
+    } else {
+      payments.push(transaction);
     }
   }
 
@@ -375,6 +393,7 @@ export function deriveCharges({
   // Part C: payments the user named. The charge with the earlier due date
   // keeps a payment that two charges name.
   const takenBy = new Map<string, string>();
+  const namedPayments: Array<{ id: string; scheduleId: string }> = [];
   for (const working of allWorking) {
     const namedId = working.namedId;
     if (namedId === null) {
@@ -391,6 +410,7 @@ export function deriveCharges({
       continue;
     }
     takenBy.set(namedId, working.charge.id);
+    namedPayments.push({ id: namedId, scheduleId: working.schedule.id });
     working.charge.status = 'paid';
     working.charge.paymentId = transaction.id;
     working.charge.paymentDate = transaction.date;
@@ -574,8 +594,30 @@ export function deriveCharges({
     occurrences,
     offsets: [...offsets, ...derivedRows],
     derivedOffsetIds,
+    namedPayments,
     setAside,
   };
+}
+
+// The due dates that have a payment: every payment belongs to its nearest due
+// date, as in `deriveCharges`, whatever the day it is dated. Days that are not
+// valid are left out.
+export function settledDueDates(
+  dueDates: readonly string[],
+  paymentDays: readonly string[],
+): string[] {
+  const sorted = cleanDueDates(dueDates);
+  const settled = new Set<string>();
+  for (const day of paymentDays) {
+    if (!isValidDay(day)) {
+      continue;
+    }
+    const index = nearestDueIndex(sorted, day);
+    if (index !== -1) {
+      settled.add(sorted[index]);
+    }
+  }
+  return [...settled].sort();
 }
 
 // What the cash forecast plans for a charge on its due date: the whole amount

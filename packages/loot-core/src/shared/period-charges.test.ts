@@ -6,6 +6,7 @@ import {
   deriveCharges,
   placeCashMovements,
   planCash,
+  settledDueDates,
   unpaidChargeAmount,
 } from './period-charges';
 import type { ChargeSchedule, ChargeTransaction } from './period-charges';
@@ -1035,6 +1036,57 @@ describe('deriveCharges: derived offsets', () => {
     ]);
   });
 
+  it('the parts of a split pay the schedules they carry, beside the schedule of the split', () => {
+    const result = derive({
+      schedules: [
+        schedule(),
+        schedule({ id: 's2', dueDates: ['2027-03-15'] }),
+        schedule({ id: 's3', dueDates: ['2027-04-15'] }),
+      ],
+      transactions: [
+        payment('parent', '2027-02-20', { category: null }),
+        payment('part1', '2027-02-20', { parentId: 'parent', schedule: 's2' }),
+        payment('part2', '2027-02-20', { parentId: 'parent', schedule: 's3' }),
+        payment('part3', '2027-02-20', { parentId: 'parent', schedule: 's3' }),
+        payment('part4', '2027-02-20', { parentId: 'parent' }),
+      ],
+    });
+    expect(
+      result.charges
+        .filter(c => c.status === 'paid')
+        .map(c => [c.id, c.paymentId, c.furtherPaymentIds]),
+    ).toEqual([
+      ['s1:2027-03-01', 'parent', []],
+      ['s2:2027-03-15', 'part1', []],
+      ['s3:2027-04-15', 'part2', ['part3']],
+    ]);
+    // Each part counts once, in the period of the charge it pays itself.
+    expect(result.offsets).toEqual([
+      { id: 'part1', period_id: 'cat:2027-03-01', tombstone: false },
+      { id: 'part2', period_id: 'cat:2027-04-01', tombstone: false },
+      { id: 'part3', period_id: 'cat:2027-04-01', tombstone: false },
+      { id: 'part4', period_id: 'cat:2027-03-01', tombstone: false },
+    ]);
+  });
+
+  it('a part that carries a schedule pays its charge when the split carries none', () => {
+    const result = derive({
+      transactions: [
+        payment('parent', '2027-02-20', { category: null, schedule: null }),
+        payment('part1', '2027-02-20', { parentId: 'parent' }),
+        payment('part2', '2027-02-20', { parentId: 'parent', schedule: null }),
+      ],
+    });
+    expect(chargeOf(result, 's1:2027-03-01')).toMatchObject({
+      status: 'paid',
+      paymentId: 'part1',
+      furtherPaymentIds: [],
+    });
+    expect(result.offsets).toEqual([
+      { id: 'part1', period_id: 'cat:2027-03-01', tombstone: false },
+    ]);
+  });
+
   it('a 20 December payment of a 1 January bill counts in the new year', () => {
     const years: BudgetPeriod[] = [
       {
@@ -1399,6 +1451,108 @@ describe('unpaidChargeAmount', () => {
     });
     expect(unpaidChargeAmount(chargeOf(result, 's1:2027-03-01'))).toBe(4000);
     expect(unpaidChargeAmount(chargeOf(result, 's1:2027-04-01'))).toBe(0);
+  });
+});
+
+describe('deriveCharges: named payments', () => {
+  it('lists the payments the user named with their schedule, also of a charge outside the days asked for', () => {
+    const result = derive({
+      schedules: [
+        schedule(),
+        schedule({ id: 's2', dueDates: ['2027-03-10', '2027-09-10'] }),
+      ],
+      overrides: [
+        override('s1:2027-02-01', { transaction_id: 'named-early' }),
+        override('s1:2027-04-01', { transaction_id: 'named-april' }),
+        override('s2:2027-09-10', { transaction_id: 'named-late' }),
+        // Named by two charges: the one that is due earlier keeps it.
+        override('s2:2027-03-10', { transaction_id: 'named-early' }),
+        override('s1:2027-05-01', { transaction_id: 'gone' }),
+        override('s1:2027-06-01', {
+          transaction_id: 'named-skipped',
+          skipped: true,
+        }),
+      ],
+      transactions: [
+        payment('named-early', '2027-02-03', { schedule: null }),
+        payment('named-april', '2027-04-02', { schedule: null }),
+        payment('named-late', '2027-04-03', { schedule: null }),
+        payment('named-skipped', '2027-06-01', { schedule: null }),
+        payment('matched', '2027-03-01'),
+      ],
+      start: '2027-03-01',
+      end: '2027-04-30',
+    });
+    expect(result.namedPayments).toEqual([
+      { id: 'named-early', scheduleId: 's1' },
+      { id: 'named-april', scheduleId: 's1' },
+      { id: 'named-late', scheduleId: 's2' },
+    ]);
+    expect(result.charges.map(charge => [charge.id, charge.paymentId])).toEqual(
+      [
+        ['s1:2027-03-01', 'matched'],
+        ['s2:2027-03-10', null],
+        ['s1:2027-04-01', 'named-april'],
+      ],
+    );
+  });
+
+  it('a payment named for a charge outside the days asked for is not matched to the charge it is nearest to', () => {
+    const result = derive({
+      schedules: [schedule({ dueDates: [...MONTH_STARTS, '2027-12-01'] })],
+      overrides: [override('s1:2027-12-01', { transaction_id: 't1' })],
+      transactions: [payment('t1', '2027-03-02')],
+      start: '2027-01-01',
+      end: '2027-06-30',
+    });
+    expect(chargeOf(result, 's1:2027-03-01')).toMatchObject({
+      status: 'expected',
+      paymentId: null,
+    });
+    expect(result.namedPayments).toEqual([{ id: 't1', scheduleId: 's1' }]);
+  });
+});
+
+describe('settledDueDates', () => {
+  it('gives the nearest due date of every payment once, in order', () => {
+    expect(
+      settledDueDates(
+        ['2027-03-01', '2027-04-01', '2027-05-01', '2027-06-01'],
+        ['2027-05-03', '2027-03-20', '2027-04-28', '2027-03-01'],
+      ),
+    ).toEqual(['2027-03-01', '2027-04-01', '2027-05-01']);
+  });
+
+  it('a payment as near to two due dates belongs to the earlier one', () => {
+    expect(
+      settledDueDates(['2027-03-01', '2027-03-11'], ['2027-03-06']),
+    ).toEqual(['2027-03-01']);
+  });
+
+  it('a payment further from the first or the last due date than half the way to its neighbour belongs to none', () => {
+    const dueDates = ['2027-03-01', '2027-03-11'];
+    expect(settledDueDates(dueDates, ['2027-02-24', '2027-03-16'])).toEqual([
+      '2027-03-01',
+      '2027-03-11',
+    ]);
+    expect(settledDueDates(dueDates, ['2027-02-23', '2027-03-17'])).toEqual([]);
+  });
+
+  it('every payment belongs to a single due date, however far away', () => {
+    expect(
+      settledDueDates(['2027-04-28'], ['2020-01-01', '2031-12-31']),
+    ).toEqual(['2027-04-28']);
+    expect(settledDueDates(['2027-04-28'], [])).toEqual([]);
+    expect(settledDueDates([], ['2027-04-28'])).toEqual([]);
+  });
+
+  it('takes the due dates in any order and leaves out days that are not valid', () => {
+    expect(
+      settledDueDates(
+        ['2027-05-01', 'soon', '2027-03-01', '2027-05-01', '2027-02-30'],
+        ['2027-04-29', '2027-02-31', ''],
+      ),
+    ).toEqual(['2027-05-01']);
   });
 });
 

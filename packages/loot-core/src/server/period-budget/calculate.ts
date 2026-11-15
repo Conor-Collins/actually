@@ -19,6 +19,7 @@ import {
   deriveCharges,
   placeCashMovements,
   planCash,
+  settledDueDates,
   unpaidChargeAmount,
 } from '#shared/period-charges';
 import type {
@@ -41,11 +42,7 @@ import type { SetAsideRow } from '#shared/period-loader';
 import { isValidDay } from '#shared/period-store';
 import { q } from '#shared/query';
 import { extractScheduleConds, getNextDateAfter } from '#shared/schedules';
-import type {
-  PeriodBudgetRow,
-  PeriodBudgetRows,
-  TransactionEntity,
-} from '#types/models';
+import type { PeriodBudgetRow, PeriodBudgetRows } from '#types/models';
 
 export type ScheduledCashMovement = PlannedCashMovement & {
   scheduleId: string;
@@ -187,6 +184,16 @@ function listDueDates(
   }
 }
 
+function isDueDate(schedule: ScheduleData, day: string): boolean {
+  try {
+    return getScheduleDates(schedule._date, { start: day, end: day }).includes(
+      day,
+    );
+  } catch {
+    return false;
+  }
+}
+
 function hasUsableDates(schedule: ScheduleData, end: Date): boolean {
   try {
     getFutureOccurrenceDates(schedule, end);
@@ -312,25 +319,96 @@ export async function calculatePeriodBudget({
       start = item.expectedFrom;
     }
   }
+  // A due date the user named a payment for counts on every as-of day and
+  // for every horizon: the charge that is due earlier keeps a payment that
+  // two charges name, also when it is due outside the days asked for.
+  const namedDueDates = new Map<string, string[]>();
+  for (const row of rows.chargeOverrides) {
+    const index = row.id.lastIndexOf(':');
+    if (
+      row.tombstone ||
+      row.transaction_id === null ||
+      row.transaction_id === '' ||
+      index <= 0
+    ) {
+      continue;
+    }
+    const scheduleId = row.id.slice(0, index);
+    const dueDate = row.id.slice(index + 1);
+    const schedule = linked.get(scheduleId)?.schedule;
+    if (schedule === undefined || !isDueDate(schedule, dueDate)) {
+      continue;
+    }
+    const found = namedDueDates.get(scheduleId);
+    if (found === undefined) {
+      namedDueDates.set(scheduleId, [dueDate]);
+    } else {
+      found.push(dueDate);
+    }
+  }
   const chargeSchedules: ChargeSchedule[] = pending.map(item => ({
     id: item.schedule.id,
     category: item.category,
     amount: Math.round(-item.schedule._amount),
-    dueDates: listDueDates(item.schedule, start, end),
+    dueDates: [
+      ...listDueDates(item.schedule, start, end),
+      ...(namedDueDates.get(item.schedule.id) ?? []),
+    ],
     expectedFrom: item.expectedFrom,
   }));
 
   // Step 5: charges, their payments and the offsets that follow from them.
-  const chargeTransactions: ChargeTransaction[] = transactions.map(
-    transaction => ({
-      id: transaction.id,
-      date: transaction.date,
-      schedule: transaction.schedule,
-      category: transaction.category ?? null,
-      parentId:
-        transaction.is_child === true ? (transaction.parent_id ?? null) : null,
-    }),
-  );
+  // A part of a split belongs to its whole transaction, and a part without
+  // one is left out. A split that carries no schedule itself is planned under
+  // the schedule of its part with the smallest id that carries one.
+  const wholeIds = new Set<string>();
+  for (const transaction of transactions) {
+    if (transaction.is_child !== true) {
+      wholeIds.add(transaction.id);
+    }
+  }
+  const entered: TransactionRow[] = [];
+  const parentIdById = new Map<string, string>();
+  const scheduleByWholeId = new Map<string, string>();
+  const partsWithSchedule: Array<{ parentId: string; scheduleId: string }> = [];
+  for (const transaction of [...transactions].sort((a, b) =>
+    a.id < b.id ? -1 : 1,
+  )) {
+    const scheduleId = transaction.schedule;
+    const hasSchedule = scheduleId !== null && scheduleId !== undefined;
+    if (transaction.is_child !== true) {
+      entered.push(transaction);
+      if (hasSchedule) {
+        scheduleByWholeId.set(transaction.id, scheduleId);
+      }
+      continue;
+    }
+    const parentId = transaction.parent_id;
+    if (
+      parentId === null ||
+      parentId === undefined ||
+      !wholeIds.has(parentId)
+    ) {
+      continue;
+    }
+    entered.push(transaction);
+    parentIdById.set(transaction.id, parentId);
+    if (hasSchedule) {
+      partsWithSchedule.push({ parentId, scheduleId });
+    }
+  }
+  for (const part of partsWithSchedule) {
+    if (!scheduleByWholeId.has(part.parentId)) {
+      scheduleByWholeId.set(part.parentId, part.scheduleId);
+    }
+  }
+  const chargeTransactions: ChargeTransaction[] = entered.map(transaction => ({
+    id: transaction.id,
+    date: transaction.date,
+    schedule: transaction.schedule ?? null,
+    category: transaction.category ?? null,
+    parentId: parentIdById.get(transaction.id) ?? null,
+  }));
   const derived = deriveCharges({
     schedules: chargeSchedules,
     overrides: rows.chargeOverrides,
@@ -457,27 +535,61 @@ export async function calculatePeriodBudget({
   const ruleAccountsById = new Map(
     liveAccounts.map(account => [account.id, account]),
   );
-  // What Actual needs to see that an occurrence is already posted.
-  const posted: TransactionEntity[] = [];
-  for (const transaction of transactions) {
-    if (transaction.schedule !== null && transaction.schedule !== undefined) {
-      posted.push({
-        id: transaction.id,
-        account: transaction.account,
-        date: transaction.date,
-        amount: transaction.amount,
-        schedule: transaction.schedule,
-      });
+  // An occurrence of a schedule that is not linked is entered already when a
+  // transaction or a part of a split that carries the schedule belongs to it.
+  // As for a charge (plan B4), that is its nearest due date, whatever the day
+  // it is dated: paid early or late, it is not expected again. A payment the
+  // user named for a charge pays that charge and nothing else.
+  const namedIds = new Set(derived.namedPayments.map(payment => payment.id));
+  const paymentDaysByScheduleId = new Map<string, string[]>();
+  for (const transaction of entered) {
+    const scheduleId = transaction.schedule;
+    if (
+      scheduleId === null ||
+      scheduleId === undefined ||
+      namedIds.has(transaction.id)
+    ) {
+      continue;
+    }
+    const found = paymentDaysByScheduleId.get(scheduleId);
+    if (found === undefined) {
+      paymentDaysByScheduleId.set(scheduleId, [transaction.date]);
+    } else {
+      found.push(transaction.date);
+    }
+  }
+  const forecastSchedules = others.filter(schedule =>
+    hasUsableDates(schedule, horizonDate),
+  );
+  const enteredOccurrenceIds = new Set<string>();
+  for (const schedule of forecastSchedules) {
+    const paymentDays = paymentDaysByScheduleId.get(schedule.id);
+    const forecastDates = getFutureOccurrenceDates(schedule, horizonDate);
+    if (paymentDays === undefined || forecastDates.length === 0) {
+      continue;
+    }
+    const dueDates = [
+      ...forecastDates,
+      ...listDueDates(schedule, forecastDates[0], horizonEnd),
+    ];
+    for (const dueDate of settledDueDates(dueDates, paymentDays)) {
+      const id = `forecast-${schedule.id}-${dueDate}`;
+      enteredOccurrenceIds.add(id);
+      enteredOccurrenceIds.add(`${id}-transfer`);
     }
   }
   const occurrences = [
-    ...(await buildFutureScheduleOccurrences(
-      others.filter(schedule => hasUsableDates(schedule, horizonDate)),
-      horizonDate,
-      accountsById,
-      ruleAccountsById,
-      posted,
-    )),
+    ...(
+      await buildFutureScheduleOccurrences(
+        forecastSchedules,
+        horizonDate,
+        accountsById,
+        ruleAccountsById,
+        [],
+      )
+    ).filter(
+      occurrence => !enteredOccurrenceIds.has(occurrence.transaction.id),
+    ),
     ...(await buildFutureScheduleOccurrences(
       chargeMovements,
       horizonDate,
@@ -498,59 +610,49 @@ export async function calculatePeriodBudget({
   const movements: CashMovement[] = [];
 
   // An entered transaction dated after the as-of day is not in the balances.
-  // It is a movement on its own day when it carries a schedule or pays a
-  // charge, and so is the other leg when it is a transfer. The forecast above
-  // leaves out what such a transaction posts, and what is still expected of
-  // its charge does not hold the payment.
-  const paidScheduleById = new Map<string, string>();
-  for (const charge of derived.charges) {
-    if (charge.paymentId !== null) {
-      paidScheduleById.set(charge.paymentId, charge.scheduleId);
+  // It is a movement on its own day when it carries a schedule or the user
+  // named it as the payment of a charge. So is every transaction that
+  // transfers join to it, however many steps away, so that every transfer
+  // that is planned has both legs. A part of a split leaves the account with
+  // the whole transaction. A named payment is shown under the schedule of
+  // its charge; a split with a part that is named keeps a schedule it has. A
+  // transaction without a schedule of its own gets the one of the transaction
+  // it was reached from.
+  const enteredScheduleById = new Map(scheduleByWholeId);
+  for (const payment of derived.namedPayments) {
+    const wholeId = parentIdById.get(payment.id);
+    if (wholeId === undefined) {
+      enteredScheduleById.set(payment.id, payment.scheduleId);
+    } else if (!enteredScheduleById.has(wholeId)) {
+      enteredScheduleById.set(wholeId, payment.scheduleId);
     }
   }
-  // A part of a split leaves the account with the whole transaction.
-  const parentIdById = new Map<string, string>();
+  const otherLegsById = new Map<string, string[]>();
   for (const transaction of transactions) {
-    const parentId = transaction.parent_id;
-    if (
-      transaction.is_child === true &&
-      parentId !== null &&
-      parentId !== undefined
-    ) {
-      parentIdById.set(transaction.id, parentId);
-    }
-  }
-  const enteredScheduleById = new Map<string, string>();
-  for (const transaction of transactions) {
-    const scheduleId =
-      transaction.schedule ?? paidScheduleById.get(transaction.id);
-    if (scheduleId !== undefined) {
-      enteredScheduleById.set(
-        parentIdById.get(transaction.id) ?? transaction.id,
-        scheduleId,
-      );
-    }
-  }
-  const otherLegScheduleById = new Map<string, string>();
-  for (const transaction of transactions) {
-    const scheduleId = enteredScheduleById.get(
-      parentIdById.get(transaction.id) ?? transaction.id,
-    );
     const otherLeg = transaction.transfer_id;
-    if (
-      scheduleId !== undefined &&
-      otherLeg !== null &&
-      otherLeg !== undefined
-    ) {
-      otherLegScheduleById.set(
-        parentIdById.get(otherLeg) ?? otherLeg,
-        scheduleId,
-      );
+    if (otherLeg === null || otherLeg === undefined) {
+      continue;
+    }
+    const id = parentIdById.get(transaction.id) ?? transaction.id;
+    const otherId = parentIdById.get(otherLeg) ?? otherLeg;
+    const found = otherLegsById.get(id);
+    if (found === undefined) {
+      otherLegsById.set(id, [otherId]);
+    } else {
+      found.push(otherId);
     }
   }
-  for (const [id, scheduleId] of otherLegScheduleById) {
-    if (!enteredScheduleById.has(id)) {
-      enteredScheduleById.set(id, scheduleId);
+  const reached = [...enteredScheduleById.keys()].sort();
+  for (const id of reached) {
+    const scheduleId = enteredScheduleById.get(id);
+    if (scheduleId === undefined) {
+      continue;
+    }
+    for (const otherId of otherLegsById.get(id) ?? []) {
+      if (!enteredScheduleById.has(otherId)) {
+        enteredScheduleById.set(otherId, scheduleId);
+        reached.push(otherId);
+      }
     }
   }
   for (const transaction of transactions) {
