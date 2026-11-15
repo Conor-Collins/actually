@@ -40,7 +40,7 @@ import {
   loadPeriodBudgetInput,
 } from '#shared/period-loader';
 import type { SetAsideRow } from '#shared/period-loader';
-import { isValidDay } from '#shared/period-store';
+import { isValidDay, isWholeNumber } from '#shared/period-store';
 import { q } from '#shared/query';
 import { extractScheduleConds, getNextDateAfter } from '#shared/schedules';
 import type { PeriodBudgetRow, PeriodBudgetRows } from '#types/models';
@@ -64,7 +64,7 @@ export type PeriodBudgetCalculation = {
   paidOutsideBudget: string[]; // charges paid by a transaction that is not budget spending
   needsAttention: SetAsideRow[];
   unresolved: UnresolvedExpense[];
-  cash: CashPlan | null; // null when the amounts are too large to add up
+  cash: CashPlan | null; // null when an amount is no whole number or the amounts are too large
   movements: ScheduledCashMovement[]; // by date, then id
 };
 
@@ -485,7 +485,13 @@ export async function calculatePeriodBudget({
         !excluded.has(account.id),
     )
     .map(account => account.id);
-  const balanceById = new Map<string, number>();
+  // The balance of an account on the as-of day. The amounts are added as
+  // whole numbers without a largest size, so the balance is exact whatever
+  // the order of the transactions, also when large amounts cancel each other.
+  // An account is without a balance when it cannot be given exactly: one of
+  // its amounts is no whole number, or the balance is too large.
+  const exactBalanceById = new Map<string, bigint>();
+  const withoutBalance = new Set<string>();
   for (const transaction of transactions) {
     if (
       transaction.is_child === true ||
@@ -494,10 +500,24 @@ export async function calculatePeriodBudget({
     ) {
       continue;
     }
-    balanceById.set(
+    if (!isWholeNumber(transaction.amount)) {
+      withoutBalance.add(transaction.account);
+      continue;
+    }
+    exactBalanceById.set(
       transaction.account,
-      (balanceById.get(transaction.account) ?? 0) + transaction.amount,
+      (exactBalanceById.get(transaction.account) ?? BigInt(0)) +
+        BigInt(transaction.amount),
     );
+  }
+  const balanceById = new Map<string, number>();
+  for (const [id, exact] of exactBalanceById) {
+    const balance = Number(exact);
+    if (isWholeNumber(balance)) {
+      balanceById.set(id, balance);
+    } else {
+      withoutBalance.add(id);
+    }
   }
   const snapshots: AccountSnapshot[] = selectedAccountIds.map(id => ({
     id,
@@ -698,13 +718,16 @@ export async function calculatePeriodBudget({
     asOf,
     horizonEnd,
   });
-  const cash = planCash({
-    accounts: snapshots,
-    selectedAccountIds,
-    movements: placed,
-    asOf,
-    horizonEnd,
-  });
+  // There is no cash plan when a selected account is without a balance.
+  const cash = selectedAccountIds.some(id => withoutBalance.has(id))
+    ? null
+    : planCash({
+        accounts: snapshots,
+        selectedAccountIds,
+        movements: placed,
+        asOf,
+        horizonEnd,
+      });
 
   return {
     asOf,

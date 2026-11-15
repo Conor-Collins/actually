@@ -2419,6 +2419,78 @@ describe('period-budget/calculate: cash movements', () => {
       accountOf(await calculate('2027-04-21'), 'checking').currentBalance,
     ).toBe(68766);
   });
+
+  it('gives the exact balance when large amounts cancel each other', async () => {
+    const large = Number.MAX_SAFE_INTEGER;
+    // Actual lists the latest transaction first. Added as plain numbers in
+    // that order, the balances would come out as 1 and -1.
+    await spend('opening', '2027-01-01', -large, null);
+    await spend('small', '2027-01-02', 2, null);
+    await spend('large', '2027-01-03', large, null);
+    await spend('s-opening', '2027-01-04', large, null, { account: 'savings' });
+    await spend('s-small', '2027-01-05', -2, null, { account: 'savings' });
+    await spend('s-large', '2027-01-06', -large, null, { account: 'savings' });
+    const result = await calculate();
+    expect(accountOf(result, 'checking').currentBalance).toBe(2);
+    expect(accountOf(result, 'savings').currentBalance).toBe(-2);
+    expect(result.cash).toMatchObject({
+      cashAvailable: 0,
+      inAccounts: 2,
+      owed: 2,
+      projectedCash: 0,
+    });
+    // The amounts of the first two days do not cancel: the balance is exact
+    // there too.
+    expect(
+      accountOf(await calculate('2027-01-02'), 'checking').currentBalance,
+    ).toBe(2 - large);
+  });
+
+  it('gives no cash plan when the balance of a selected account is too large', async () => {
+    const taxSchedule = await storeExample();
+    await spend('huge', '2027-04-21', Number.MAX_SAFE_INTEGER, null);
+    expect((await calculate()).cash?.cashAvailable).toBe(420000);
+    const result = await calculate('2027-04-21');
+    expect(result.cash).toBeNull();
+    // The rest of the calculation is there.
+    expect(remainingOf(result, 'groceries:2027-04-01').remaining).toBe(-8000);
+    expect(result.movements.map(m => m.id)).toEqual([
+      `forecast-${taxSchedule}-2027-04-28`,
+    ]);
+  });
+
+  it('gives no cash plan when an amount of a selected account is no whole number', async () => {
+    await storeExample();
+    // Two halves add up to a whole number, and are still no amounts.
+    await spend('half-1', '2027-04-21', 1, null, { account: 'savings' });
+    await spend('half-2', '2027-04-21', 1, null, { account: 'savings' });
+    db.runQuery('UPDATE transactions SET amount = 0.5 WHERE id IN (?, ?)', [
+      'half-1',
+      'half-2',
+    ]);
+    expect((await calculate()).cash?.cashAvailable).toBe(420000);
+    expect((await calculate('2027-04-21')).cash).toBeNull();
+
+    await handlers['period-budget/exclude-account']({ accountId: 'savings' });
+    expect((await calculate('2027-04-21')).cash?.cashAvailable).toBe(70000);
+  });
+
+  it('an account that is not selected and has no exact balance leaves the cash plan as it is', async () => {
+    await storeExample();
+    await db.insertAccount({ id: 'old', name: 'Old', closed: 1 });
+    await db.insertAccount({ id: 'loan', name: 'Loan', offbudget: 1 });
+    const large = Number.MAX_SAFE_INTEGER;
+    await spend('old-1', '2027-01-01', 3, null, { account: 'old' });
+    db.runQuery('UPDATE transactions SET amount = 0.5 WHERE id = ?', ['old-1']);
+    await spend('loan-1', '2027-01-01', -large, null, { account: 'loan' });
+    await spend('loan-2', '2027-01-02', -large, null, { account: 'loan' });
+    const result = await calculate();
+    expect(result.cash?.accounts.map(a => a.accountId)).toEqual([
+      'checking',
+      'savings',
+    ]);
+    expect(result.cash?.cashAvailable).toBe(420000);
+  });
 });
 
 describe('period-budget/calculate: planned periods', () => {
