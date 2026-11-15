@@ -1,10 +1,10 @@
 ---
 id: TASK-8
 title: Storage for periods, offsets and occurrence links (migration and sync)
-status: Review
+status: In Progress
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-15T17:40:00Z'
+updated_date: '2026-11-15T17:59:00Z'
 labels:
   - integration
 dependencies:
@@ -42,4 +42,6 @@ Outline only. Needs a plan in docs/plans/ from the owner before it is started: t
 2026-11-15: started. Pyramid-loop rung 1 (opencode studio/qwen3.8-27b high), branch task-8-period-storage, staged in steps with a commit after each. Reviewer: codex gpt-6.1-sol xhigh.
 
 2026-11-15: rung 1, round 1 candidate c3d471dc6 (steps 1 to 7: 46d219e3a, 2e195a66b, 7746d42ee, 563ffedc9, b8edbf728, 89b4a99f8, bcd5bf2fa, format c3d471dc6). Gate passed in the worktree (typecheck, lint, test). The orchestrator wrote the step files and, for the server handlers, the four test files and a reference used to check the brief; the coder wrote the production code from rule lists. Sent to independent review (codex gpt-6.1-sol xhigh), brief /tmp/actually-orch/task-8-review-brief.md. GPU slot released.
+
+Round 1 review (codex gpt-6.1-sol xhigh) of c3d471dc6: REQUEST CHANGES, 7 findings. Blocking: (1) set-cadence always sent start date, length and active, so a length change undid another device's start-date change; (2) inserts send no message for null fields (override amount back to none, rollover's empty carry source); (4) a deleted period with a :2 id was planned again as :3; (5) B7 rows 2 and 11 were not really replayed in both orders / used no real schedule edit. Should-fix: (3) new set-style rows sent no tombstone message; (6) budget plus carryover can exceed the safe range; (7) planner stopped silently after 1000 periods. Reviewer killed 8 of 10 mutants. Round 2 (rung 1) started: orchestrator prototyped fixes and tests, coder applies them in three steps (/tmp/actually-orch/task-8-fix1..3.md).
 <!-- SECTION:NOTES:END -->
