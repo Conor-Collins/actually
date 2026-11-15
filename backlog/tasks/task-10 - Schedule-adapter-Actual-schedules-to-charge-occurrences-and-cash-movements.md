@@ -1,10 +1,10 @@
 ---
 id: TASK-10
 title: 'Schedule adapter: Actual schedules to charge occurrences and cash movements'
-status: In Progress
+status: Review
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-15T19:29:00Z'
+updated_date: '2026-11-15T19:35:00Z'
 labels:
   - integration
 dependencies:
