@@ -9,9 +9,11 @@ import { app } from './app';
 import type { PeriodBudgetCalculation } from './calculate';
 
 // Books made from a seed, worked out on several as-of days and with several
-// horizons. What must not change between them is compared; no figure is
-// written down here. Every transaction dated after the first as-of day
-// carries a schedule or belongs to one that does: one without is not planned.
+// horizons. What must not change between them is compared, and the period
+// every payment counts in is worked out a second time from the charges. No
+// figure is written down here. Every transaction dated after the first as-of
+// day carries a schedule or belongs to one that does: one without is not
+// planned.
 
 const handlers = app.handlers;
 const createSchedule = createScheduleBase as (args: {
@@ -49,6 +51,125 @@ function day(n: number): string {
 // How many random books each test works out.
 const SEEDS = 40;
 
+const PERIOD_STARTS = [
+  '2027-03-01',
+  '2027-04-01',
+  '2027-05-01',
+  '2027-06-01',
+  '2027-07-01',
+];
+
+// The period of category `fun` that a day lies in.
+function periodIdOf(date: string): string | null {
+  for (let i = 0; i < PERIOD_STARTS.length - 1; i++) {
+    if (date >= PERIOD_STARTS[i] && date < PERIOD_STARTS[i + 1]) {
+      return `fun:${PERIOD_STARTS[i]}`;
+    }
+  }
+  return null;
+}
+
+type Entered = {
+  id: string;
+  date: string;
+  amount: number;
+  category: string | null;
+  schedule: string | null;
+  parent: string | null;
+  isParent: boolean;
+};
+
+// Where plan B3 counts every payment, worked out from the charges of a result
+// and the book, not from the offsets of the result. A transaction has a
+// charge of its own when the user named it, or when it carries a linked
+// schedule that its split does not carry. It counts in the period of the
+// charge it pays, a part without a charge of its own in the period of the
+// charge its split pays, and everything else (also a payment of a charge
+// without a period or outside the days asked for, and one that is matched to
+// no charge) in the period of its date.
+function expectedAttribution(
+  rows: readonly Entered[],
+  namedIds: ReadonlySet<string>,
+  linkedIds: ReadonlySet<string>,
+  result: PeriodBudgetCalculation,
+): { offsetIds: string[]; spent: Array<[string, number]> } {
+  const rowById = new Map(rows.map(row => [row.id, row]));
+  const chargePeriodByPaymentId = new Map<string, string | null>();
+  for (const charge of result.charges) {
+    for (const id of [charge.paymentId, ...charge.furtherPaymentIds]) {
+      if (id !== null) {
+        chargePeriodByPaymentId.set(id, charge.periodId);
+      }
+    }
+  }
+  function paysItself(row: Entered): boolean {
+    if (namedIds.has(row.id)) {
+      return true;
+    }
+    if (row.schedule === null || !linkedIds.has(row.schedule)) {
+      return false;
+    }
+    const split = row.parent === null ? undefined : rowById.get(row.parent);
+    return split?.schedule !== row.schedule;
+  }
+  const offsetIds: string[] = [];
+  const spentById = new Map<string, number>();
+  for (const row of rows) {
+    if (row.isParent || row.category !== 'fun') {
+      continue;
+    }
+    const split = row.parent === null ? undefined : rowById.get(row.parent);
+    let payerId: string | null = null;
+    if (paysItself(row)) {
+      payerId = row.id;
+    } else if (split !== undefined && paysItself(split)) {
+      payerId = split.id;
+    }
+    const ownPeriod = periodIdOf(row.date);
+    const chargePeriod =
+      payerId === null ? null : (chargePeriodByPaymentId.get(payerId) ?? null);
+    if (chargePeriod !== null && chargePeriod !== ownPeriod) {
+      offsetIds.push(row.id);
+    }
+    const counted = chargePeriod ?? ownPeriod;
+    if (counted !== null && row.date <= result.asOf) {
+      spentById.set(counted, (spentById.get(counted) ?? 0) - row.amount);
+    }
+  }
+  return {
+    offsetIds: offsetIds.sort(),
+    spent: PERIOD_STARTS.slice(0, -1).map(start => [
+      `fun:${start}`,
+      spentById.get(`fun:${start}`) ?? 0,
+    ]),
+  };
+}
+
+// What a result says about charges, spending and cash.
+function summaryOf(result: PeriodBudgetCalculation) {
+  return {
+    charges: result.charges.map(charge => [
+      charge.id,
+      charge.status,
+      charge.paymentId,
+      charge.furtherPaymentIds,
+    ]),
+    offsets: result.derivedOffsetIds,
+    remaining: result.projection.periods.map(p => [p.period.id, p.remaining]),
+    movements: result.movements.map(m => [
+      m.id,
+      m.date,
+      m.amount,
+      m.scheduleId,
+      m.isPosted,
+    ]),
+    ending: result.cash?.accounts.map(a => [
+      a.accountId,
+      a.projectedEndingBalance,
+    ]),
+  };
+}
+
 describe('period-budget/calculate: random books, charges and payments', () => {
   for (let seed = 1; seed <= SEEDS; seed++) {
     it(`gives the same charges and cash on every as-of day and horizon, book ${seed}`, async () => {
@@ -61,16 +182,11 @@ describe('period-budget/calculate: random books, charges and payments', () => {
       await db.insertAccount({ id: 'savings', name: 'Savings' });
       const random = rng(seed);
       const pick = (n: number) => Math.floor(random() * n);
-      for (const [start, end] of [
-        ['2027-03-01', '2027-04-01'],
-        ['2027-04-01', '2027-05-01'],
-        ['2027-05-01', '2027-06-01'],
-        ['2027-06-01', '2027-07-01'],
-      ]) {
+      for (let i = 0; i < PERIOD_STARTS.length - 1; i++) {
         await handlers['period-budget/create-period']({
           category: 'fun',
-          start,
-          end,
+          start: PERIOD_STARTS[i],
+          end: PERIOD_STARTS[i + 1],
           budget: 50000,
         });
       }
@@ -129,7 +245,7 @@ describe('period-budget/calculate: random books, charges and payments', () => {
         }
         schedules.push({ id, dates, linked });
       }
-      const transactionIds: string[] = [];
+      const entered: Entered[] = [];
       const payments = pick(7);
       for (let i = 0; i < payments; i++) {
         const schedule = schedules[pick(schedules.length)];
@@ -144,55 +260,74 @@ describe('period-budget/calculate: random books, charges and payments', () => {
           if (!carries.includes(true)) {
             carries[pick(3)] = true;
           }
-          transactionIds.push(id);
-          await db.insertTransaction({
+          entered.push({
             id,
-            account: 'checking',
             date,
             amount: amounts[0] + amounts[1],
-            is_parent: true,
-            ...(carries[2] ? { schedule: schedule.id } : {}),
+            category: null,
+            schedule: carries[2] ? schedule.id : null,
+            parent: null,
+            isParent: true,
           });
           for (let part = 0; part < 2; part++) {
-            const partId = `${id}-${part}`;
-            transactionIds.push(partId);
             const partSchedule = schedules[pick(schedules.length)];
-            await db.insertTransaction({
-              id: partId,
-              account: 'checking',
+            entered.push({
+              id: `${id}-${part}`,
               date,
               amount: amounts[part],
               category: pick(2) === 0 ? 'fun' : null,
-              is_child: true,
-              parent_id: id,
-              ...(carries[part] ? { schedule: partSchedule.id } : {}),
+              schedule: carries[part] ? partSchedule.id : null,
+              parent: id,
+              isParent: false,
             });
           }
           continue;
         }
-        transactionIds.push(id);
-        await db.insertTransaction({
+        const amount = -(100 + pick(900));
+        entered.push({
           id,
-          account: 'checking',
           date,
-          amount: -(100 + pick(900)),
+          amount,
           category: pick(2) === 0 ? 'fun' : null,
           schedule: schedule.id,
+          parent: null,
+          isParent: false,
         });
       }
+      for (const row of entered) {
+        await db.insertTransaction({
+          id: row.id,
+          account: 'checking',
+          date: row.date,
+          amount: row.amount,
+          category: row.category,
+          ...(row.isParent ? { is_parent: true } : {}),
+          ...(row.parent === null
+            ? {}
+            : { is_child: true, parent_id: row.parent }),
+          ...(row.schedule === null ? {} : { schedule: row.schedule }),
+        });
+      }
+      // The transaction every charge is named for; the last one set counts.
+      const namedByChargeId = new Map<string, string>();
       const overrides = pick(4);
-      for (let i = 0; i < overrides && transactionIds.length > 0; i++) {
+      for (let i = 0; i < overrides && entered.length > 0; i++) {
         const linked = schedules.filter(s => s.linked);
         if (linked.length === 0) {
           break;
         }
         const schedule = linked[pick(linked.length)];
+        const dueDate = schedule.dates[pick(schedule.dates.length)];
+        const transactionId = entered[pick(entered.length)].id;
         await handlers['period-budget/set-charge-override']({
           scheduleId: schedule.id,
-          dueDate: schedule.dates[pick(schedule.dates.length)],
-          transactionId: transactionIds[pick(transactionIds.length)],
+          dueDate,
+          transactionId,
         });
+        namedByChargeId.set(`${schedule.id}:${dueDate}`, transactionId);
       }
+      const namedIds = new Set(namedByChargeId.values());
+      const linkedIds = new Set(schedules.filter(s => s.linked).map(s => s.id));
 
       const asOfs = ['2027-03-05', '2027-04-17', '2027-06-02', '2027-08-20'];
       const horizons = ['2027-06-30', '2027-09-30', '2028-01-31'];
@@ -228,6 +363,30 @@ describe('period-budget/calculate: random books, charges and payments', () => {
               ]);
             }
           }
+          // Every payment counts in the period plan B3 gives it.
+          const expected = expectedAttribution(
+            entered,
+            namedIds,
+            linkedIds,
+            result,
+          );
+          expect([asOf, horizon, result.derivedOffsetIds]).toEqual([
+            asOf,
+            horizon,
+            expected.offsetIds,
+          ]);
+          const spentById = new Map<string, number>();
+          for (const p of result.projection.periods) {
+            spentById.set(
+              p.period.id,
+              p.period.budget + p.period.carryover - p.remaining,
+            );
+          }
+          expect([
+            asOf,
+            horizon,
+            expected.spent.map(([id]) => [id, spentById.get(id)]),
+          ]).toEqual([asOf, horizon, expected.spent]);
           // What the account holds at the end of a horizon is the same from
           // every as-of day: a payment is in the balance or planned, once.
           const ending = result.cash?.accounts.find(
@@ -251,6 +410,23 @@ describe('period-budget/calculate: random books, charges and payments', () => {
           shorter = result;
         }
       }
+
+      // A part that carries the schedule of its split is no payment of its
+      // own: taking that schedule off the part changes nothing.
+      const withSchedules = summaryOf(
+        await calculate('2027-04-17', '2027-09-30'),
+      );
+      for (const row of entered) {
+        const split = entered.find(other => other.id === row.parent);
+        if (row.schedule !== null && split?.schedule === row.schedule) {
+          db.runQuery('UPDATE transactions SET schedule = NULL WHERE id = ?', [
+            row.id,
+          ]);
+        }
+      }
+      expect(summaryOf(await calculate('2027-04-17', '2027-09-30'))).toEqual(
+        withSchedules,
+      );
     });
   }
 });

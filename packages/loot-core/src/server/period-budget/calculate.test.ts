@@ -519,6 +519,41 @@ describe('period-budget/calculate: charges and payments', () => {
     expect(result.projection.summary.monthlyActualSpending).toBe(313000);
   });
 
+  it('a part that pays a charge itself counts in the period of that charge, not of the charge its split pays', async () => {
+    await period('taxes', '2027-03-01', '2027-04-01', 10000);
+    await period('taxes', '2027-04-01', '2027-05-01', 10000);
+    const march = await schedule(-1000, '2027-03-15');
+    const april = await schedule(-2000, '2027-04-15');
+    for (const scheduleId of [march, april]) {
+      await handlers['period-budget/link-schedule']({
+        scheduleId,
+        category: 'taxes',
+      });
+    }
+    await spend('split', '2027-04-15', -3000, null, {
+      is_parent: true,
+      schedule: march,
+    });
+    await spend('march-part', '2027-04-15', -1000, 'taxes', {
+      is_child: true,
+      parent_id: 'split',
+    });
+    await spend('april-part', '2027-04-15', -2000, 'taxes', {
+      is_child: true,
+      parent_id: 'split',
+      schedule: april,
+    });
+    const result = await calculate('2027-04-20', '2027-04-30');
+    expect(result.charges.map(c => [c.status, c.paymentId])).toEqual([
+      ['paid', 'split'],
+      ['paid', 'april-part'],
+    ]);
+    expect(result.derivedOffsetIds).toEqual(['march-part']);
+    expect(remainingOf(result, 'taxes:2027-03-01').remaining).toBe(9000);
+    expect(remainingOf(result, 'taxes:2027-04-01').remaining).toBe(8000);
+    expect(result.projection.summary.monthlyActualSpending).toBe(3000);
+  });
+
   it('applies the overrides of a charge', async () => {
     const taxSchedule = await storeExample();
     await handlers['period-budget/set-charge-override']({
@@ -1437,6 +1472,56 @@ describe('period-budget/calculate: charges and payments', () => {
     expect(accountOf(result, 'checking').projectedEndingBalance).toBe(7900);
   });
 
+  it('a named split does not settle the schedule it carries through a part that carries it too', async () => {
+    await period('taxes', '2027-04-01', '2027-05-01', 10000);
+    await spend('open', '2027-01-01', 10000, null, {
+      starting_balance_flag: true,
+    });
+    const tax = await schedule(-1000, '2027-04-28');
+    await handlers['period-budget/link-schedule']({
+      scheduleId: tax,
+      category: 'taxes',
+    });
+    const own = await schedule(-1000, '2027-04-25');
+    await spend('split', '2027-04-25', -1000, null, {
+      is_parent: true,
+      schedule: own,
+    });
+    await spend('part', '2027-04-25', -1000, 'taxes', {
+      is_child: true,
+      parent_id: 'split',
+      schedule: own,
+    });
+    // Not named, the split settles the schedule it carries, once.
+    let result = await calculate('2027-04-20', '2027-04-30');
+    expect(
+      result.movements.map(m => [m.id, m.date, m.scheduleId, m.isPosted]),
+    ).toEqual([
+      ['split', '2027-04-25', own, true],
+      [`forecast-${tax}-2027-04-28`, '2027-04-28', tax, false],
+    ]);
+    expect(accountOf(result, 'checking').projectedEndingBalance).toBe(8000);
+
+    // Named for the charge, it pays the charge and nothing else: its part is
+    // no payment of its own.
+    await handlers['period-budget/set-charge-override']({
+      scheduleId: tax,
+      dueDate: '2027-04-28',
+      transactionId: 'split',
+    });
+    result = await calculate('2027-04-20', '2027-04-30');
+    expect(result.charges.map(c => [c.status, c.paymentId])).toEqual([
+      ['paid', 'split'],
+    ]);
+    expect(
+      result.movements.map(m => [m.id, m.date, m.scheduleId, m.isPosted]),
+    ).toEqual([
+      [`forecast-${own}-2027-04-25`, '2027-04-25', own, false],
+      ['split', '2027-04-25', tax, true],
+    ]);
+    expect(accountOf(result, 'checking').projectedEndingBalance).toBe(8000);
+  });
+
   it('a split with a named part keeps the schedule it carries', async () => {
     await period('fun', '2027-04-01', '2027-05-01', 20000);
     await spend('open', '2027-01-01', 10000, null, {
@@ -1550,14 +1635,25 @@ describe('period-budget/calculate: charges and payments', () => {
     }
   });
 
-  it('a part without its split pays nothing, is not planned and cannot be named', async () => {
+  it('a part without its split is no spending, pays nothing, is not planned and cannot be named', async () => {
     const taxSchedule = await storeExample();
     await spend('lone-part', '2027-04-25', -90000, 'taxes', {
       is_child: true,
       parent_id: 'lone-part',
       schedule: taxSchedule,
     });
+    // Dated before the as-of day: no balance counts it, so no period does.
+    await spend('lone-early', '2027-04-19', -1000, 'taxes', {
+      is_child: true,
+      parent_id: 'lone-early',
+    });
     let result = await calculate();
+    expect(result.projection.summary.monthlyActualSpending).toBe(223000);
+    expect(remainingOf(result, 'taxes:2027-04-01')).toEqual({
+      remaining: 90000,
+      expectedRemaining: 0,
+    });
+    expect(accountOf(result, 'checking').currentBalance).toBe(70000);
     expect(result.charges[0]).toMatchObject({
       status: 'expected',
       paymentId: null,

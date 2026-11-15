@@ -4,6 +4,7 @@ import { projectPeriodCharges } from './period-budget';
 import type { BudgetPeriod, ExpensePosting } from './period-budget';
 import {
   deriveCharges,
+  paymentsBySchedule,
   placeCashMovements,
   planCash,
   settledDueDates,
@@ -1087,6 +1088,122 @@ describe('deriveCharges: derived offsets', () => {
     ]);
   });
 
+  it('a part dated inside the period of the charge it pays stays there, whatever its split pays', () => {
+    const result = derive({
+      schedules: [
+        schedule({ dueDates: ['2027-03-15'] }),
+        schedule({ id: 's2', dueDates: ['2027-04-15'] }),
+      ],
+      transactions: [
+        payment('parent', '2027-04-15', { category: null }),
+        payment('part1', '2027-04-15', { parentId: 'parent' }),
+        payment('part2', '2027-04-15', { parentId: 'parent', schedule: 's2' }),
+      ],
+    });
+    expect(result.charges.map(c => [c.id, c.status, c.paymentId])).toEqual([
+      ['s1:2027-03-15', 'paid', 'parent'],
+      ['s2:2027-04-15', 'paid', 'part2'],
+    ]);
+    expect(result.offsets).toEqual([
+      { id: 'part1', period_id: 'cat:2027-03-01', tombstone: false },
+    ]);
+  });
+
+  it('a part that pays a charge without a period does not follow the charge of its split', () => {
+    const result = derive({
+      schedules: [
+        schedule({ dueDates: ['2027-03-15'] }),
+        schedule({ id: 's2', dueDates: ['2027-08-15'] }),
+      ],
+      transactions: [
+        payment('parent', '2027-04-15', { category: null }),
+        payment('part1', '2027-04-15', { parentId: 'parent', schedule: 's2' }),
+      ],
+      end: '2027-08-31',
+    });
+    expect(result.charges.map(c => [c.id, c.paymentId, c.periodId])).toEqual([
+      ['s1:2027-03-15', 'parent', 'cat:2027-03-01'],
+      ['s2:2027-08-15', 'part1', null],
+    ]);
+    expect(result.offsets).toEqual([]);
+  });
+
+  it('a part that pays a charge of another category does not follow the charge of its split', () => {
+    const result = derive({
+      schedules: [
+        schedule({ dueDates: ['2027-03-15'] }),
+        schedule({ id: 's2', category: 'other', dueDates: ['2027-04-15'] }),
+      ],
+      transactions: [
+        payment('parent', '2027-04-15', { category: null }),
+        payment('part1', '2027-04-15', { parentId: 'parent', schedule: 's2' }),
+      ],
+    });
+    expect(result.charges.map(c => [c.id, c.paymentId])).toEqual([
+      ['s1:2027-03-15', 'parent'],
+      ['s2:2027-04-15', 'part1'],
+    ]);
+    expect(result.offsets).toEqual([]);
+  });
+
+  it('a part that carries a schedule with charges, but is too early for all of them, does not follow the charge of its split', () => {
+    const result = derive({
+      schedules: [
+        schedule({ dueDates: ['2027-03-15'] }),
+        schedule({ id: 's2', dueDates: ['2027-05-15', '2027-06-15'] }),
+      ],
+      transactions: [
+        payment('parent', '2027-04-15', { category: null }),
+        payment('part1', '2027-04-15', { parentId: 'parent', schedule: 's2' }),
+      ],
+    });
+    expect(result.charges.map(c => [c.id, c.status, c.paymentId])).toEqual([
+      ['s1:2027-03-15', 'paid', 'parent'],
+      ['s2:2027-05-15', 'expected', null],
+      ['s2:2027-06-15', 'expected', null],
+    ]);
+    expect(result.offsets).toEqual([]);
+  });
+
+  it('a part named for a charge without a period does not follow the charge of its split', () => {
+    const result = derive({
+      schedules: [
+        schedule({ dueDates: ['2027-03-15'] }),
+        schedule({ id: 's2', dueDates: ['2027-08-15'] }),
+      ],
+      overrides: [override('s2:2027-08-15', { transaction_id: 'part1' })],
+      transactions: [
+        payment('parent', '2027-04-15', { category: null }),
+        payment('part1', '2027-04-15', { parentId: 'parent' }),
+      ],
+      end: '2027-08-31',
+    });
+    expect(result.charges.map(c => [c.id, c.paymentId])).toEqual([
+      ['s1:2027-03-15', 'parent'],
+      ['s2:2027-08-15', 'part1'],
+    ]);
+    expect(result.offsets).toEqual([]);
+  });
+
+  it('a part that carries a schedule without charges follows the charge of its split', () => {
+    const result = derive({
+      schedules: [schedule({ dueDates: ['2027-03-15'] })],
+      transactions: [
+        payment('parent', '2027-04-15', { category: null }),
+        payment('part1', '2027-04-15', {
+          parentId: 'parent',
+          schedule: 'not-linked',
+        }),
+      ],
+    });
+    expect(result.charges.map(c => [c.id, c.paymentId])).toEqual([
+      ['s1:2027-03-15', 'parent'],
+    ]);
+    expect(result.offsets).toEqual([
+      { id: 'part1', period_id: 'cat:2027-03-01', tombstone: false },
+    ]);
+  });
+
   it('a 20 December payment of a 1 January bill counts in the new year', () => {
     const years: BudgetPeriod[] = [
       {
@@ -1510,6 +1627,48 @@ describe('deriveCharges: named payments', () => {
       paymentId: null,
     });
     expect(result.namedPayments).toEqual([{ id: 't1', scheduleId: 's1' }]);
+  });
+});
+
+describe('paymentsBySchedule', () => {
+  it('gives every transaction and part under the schedule it carries, but no part under the schedule of its split', () => {
+    const found = paymentsBySchedule([
+      payment('parent', '2027-02-20', { category: null }),
+      payment('same', '2027-02-20', { parentId: 'parent' }),
+      payment('other', '2027-02-20', { parentId: 'parent', schedule: 's2' }),
+      payment('none', '2027-02-20', { parentId: 'parent', schedule: null }),
+      payment('plain', '2027-03-02', { schedule: 's2' }),
+      payment('empty', '2027-03-02', { schedule: '' }),
+      payment('bad-day', '2027-02-30'),
+      payment('plain', '2027-04-02'),
+    ]);
+    expect(
+      [...found].map(([scheduleId, payments]) => [
+        scheduleId,
+        payments.map(p => [p.id, p.date]),
+      ]),
+    ).toEqual([
+      ['s1', [['parent', '2027-02-20']]],
+      [
+        's2',
+        [
+          ['other', '2027-02-20'],
+          ['plain', '2027-03-02'],
+        ],
+      ],
+    ]);
+  });
+
+  it('a part is a payment when its split is not among the transactions', () => {
+    const found = paymentsBySchedule([
+      payment('part', '2027-02-20', { parentId: 'gone' }),
+    ]);
+    expect(
+      [...found].map(([scheduleId, payments]) => [
+        scheduleId,
+        payments.map(p => p.id),
+      ]),
+    ).toEqual([['s1', ['part']]]);
   });
 });
 

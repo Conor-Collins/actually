@@ -17,6 +17,7 @@ import type {
 } from '#shared/period-budget';
 import {
   deriveCharges,
+  paymentsBySchedule,
   placeCashMovements,
   planCash,
   settledDueDates,
@@ -238,9 +239,32 @@ export async function calculatePeriodBudget({
     q('payees').select(['id', 'transfer_acct']),
   );
   const payees: Array<{ id: string; transfer_acct: string | null }> = payeeData;
-  const transactions = (await readTransactions()).filter(transaction =>
+  const accountRows = (await readTransactions()).filter(transaction =>
     accountIds.has(transaction.account),
   );
+  // A part of a split belongs to its whole transaction. Actual's query also
+  // gives a part without one (a part that has itself as parent, for example).
+  // No balance counts such a part, so it is left out of everything here:
+  // spending, payments and the forecast.
+  const wholeIds = new Set<string>();
+  for (const row of accountRows) {
+    if (row.is_child !== true) {
+      wholeIds.add(row.id);
+    }
+  }
+  const transactions: TransactionRow[] = [];
+  const parentIdById = new Map<string, string>();
+  for (const row of accountRows) {
+    if (row.is_child !== true) {
+      transactions.push(row);
+      continue;
+    }
+    const parentId = row.parent_id;
+    if (parentId !== null && parentId !== undefined && wholeIds.has(parentId)) {
+      transactions.push(row);
+      parentIdById.set(row.id, parentId);
+    }
+  }
 
   // Step 2: budget spending, and the periods that can be used.
   const { postings, unresolved } = toPeriodPostings({
@@ -358,42 +382,20 @@ export async function calculatePeriodBudget({
   }));
 
   // Step 5: charges, their payments and the offsets that follow from them.
-  // A part of a split belongs to its whole transaction, and a part without
-  // one is left out. A split that carries no schedule itself is planned under
-  // the schedule of its part with the smallest id that carries one.
-  const wholeIds = new Set<string>();
-  for (const transaction of transactions) {
-    if (transaction.is_child !== true) {
-      wholeIds.add(transaction.id);
-    }
-  }
-  const entered: TransactionRow[] = [];
-  const parentIdById = new Map<string, string>();
+  // A split that carries no schedule itself is planned under the schedule of
+  // its part with the smallest id that carries one.
+  const entered = [...transactions].sort((a, b) => (a.id < b.id ? -1 : 1));
   const scheduleByWholeId = new Map<string, string>();
   const partsWithSchedule: Array<{ parentId: string; scheduleId: string }> = [];
-  for (const transaction of [...transactions].sort((a, b) =>
-    a.id < b.id ? -1 : 1,
-  )) {
+  for (const transaction of entered) {
     const scheduleId = transaction.schedule;
-    const hasSchedule = scheduleId !== null && scheduleId !== undefined;
-    if (transaction.is_child !== true) {
-      entered.push(transaction);
-      if (hasSchedule) {
-        scheduleByWholeId.set(transaction.id, scheduleId);
-      }
+    if (scheduleId === null || scheduleId === undefined) {
       continue;
     }
-    const parentId = transaction.parent_id;
-    if (
-      parentId === null ||
-      parentId === undefined ||
-      !wholeIds.has(parentId)
-    ) {
-      continue;
-    }
-    entered.push(transaction);
-    parentIdById.set(transaction.id, parentId);
-    if (hasSchedule) {
+    const parentId = parentIdById.get(transaction.id);
+    if (parentId === undefined) {
+      scheduleByWholeId.set(transaction.id, scheduleId);
+    } else {
       partsWithSchedule.push({ parentId, scheduleId });
     }
   }
@@ -536,27 +538,21 @@ export async function calculatePeriodBudget({
     liveAccounts.map(account => [account.id, account]),
   );
   // An occurrence of a schedule that is not linked is entered already when a
-  // transaction or a part of a split that carries the schedule belongs to it.
-  // As for a charge (plan B4), that is its nearest due date, whatever the day
-  // it is dated: paid early or late, it is not expected again. A payment the
-  // user named for a charge pays that charge and nothing else.
+  // payment of the schedule belongs to it. The payments are those of a
+  // charge: a transaction that carries the schedule, or a part of a split
+  // whose split does not carry it. As for a charge (plan B4), a payment
+  // belongs to its nearest due date, whatever the day it is dated: paid early
+  // or late, it is not expected again. A payment the user named for a charge
+  // pays that charge and nothing else.
   const namedIds = new Set(derived.namedPayments.map(payment => payment.id));
   const paymentDaysByScheduleId = new Map<string, string[]>();
-  for (const transaction of entered) {
-    const scheduleId = transaction.schedule;
-    if (
-      scheduleId === null ||
-      scheduleId === undefined ||
-      namedIds.has(transaction.id)
-    ) {
-      continue;
-    }
-    const found = paymentDaysByScheduleId.get(scheduleId);
-    if (found === undefined) {
-      paymentDaysByScheduleId.set(scheduleId, [transaction.date]);
-    } else {
-      found.push(transaction.date);
-    }
+  for (const [scheduleId, payments] of paymentsBySchedule(chargeTransactions)) {
+    paymentDaysByScheduleId.set(
+      scheduleId,
+      payments
+        .filter(payment => !namedIds.has(payment.id))
+        .map(payment => payment.date),
+    );
   }
   const forecastSchedules = others.filter(schedule =>
     hasUsableDates(schedule, horizonDate),
@@ -659,7 +655,6 @@ export async function calculatePeriodBudget({
     const scheduleId = enteredScheduleById.get(transaction.id);
     if (
       scheduleId === undefined ||
-      transaction.is_child === true ||
       !isValidDay(transaction.date) ||
       transaction.date <= asOf
     ) {

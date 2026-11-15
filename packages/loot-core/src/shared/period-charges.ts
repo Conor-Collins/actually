@@ -236,22 +236,16 @@ function findPeriodId(
   return entry.periods[low].id;
 }
 
-// The charges of the linked schedules (plan B4) and the offsets that follow
-// from their payments (plan B3). It never throws: input it cannot use is left
-// out, and what the user should look at is listed in `setAside`.
-export function deriveCharges({
-  schedules,
-  overrides,
-  transactions,
-  periods,
-  offsets,
-  start,
-  end,
-  asOf,
-}: DeriveChargesInput): DerivedCharges {
-  const setAside: SetAsideRow[] = [];
+type IndexedTransactions = {
+  transactionById: Map<string, ChargeTransaction>;
+  childrenByParentId: Map<string, ChargeTransaction[]>;
+  paymentsByScheduleId: Map<string, ChargeTransaction[]>;
+};
 
-  // Transactions with a date that is not a valid day are left out.
+// Transactions with a date that is not a valid day are left out.
+function indexTransactions(
+  transactions: readonly ChargeTransaction[],
+): IndexedTransactions {
   const transactionById = new Map<string, ChargeTransaction>();
   const childrenByParentId = new Map<string, ChargeTransaction[]>();
   const paymentsByScheduleId = new Map<string, ChargeTransaction[]>();
@@ -291,6 +285,33 @@ export function deriveCharges({
       payments.push(transaction);
     }
   }
+  return { transactionById, childrenByParentId, paymentsByScheduleId };
+}
+
+// The payments of every schedule, for a caller that settles the due dates of
+// schedules that are not linked by the rule `deriveCharges` uses.
+export function paymentsBySchedule(
+  transactions: readonly ChargeTransaction[],
+): Map<string, ChargeTransaction[]> {
+  return indexTransactions(transactions).paymentsByScheduleId;
+}
+
+// The charges of the linked schedules (plan B4) and the offsets that follow
+// from their payments (plan B3). It never throws: input it cannot use is left
+// out, and what the user should look at is listed in `setAside`.
+export function deriveCharges({
+  schedules,
+  overrides,
+  transactions,
+  periods,
+  offsets,
+  start,
+  end,
+  asOf,
+}: DeriveChargesInput): DerivedCharges {
+  const setAside: SetAsideRow[] = [];
+  const { transactionById, childrenByParentId, paymentsByScheduleId } =
+    indexTransactions(transactions);
 
   // Part A: one charge for every due date of every schedule.
   const periodIndex = indexPeriods(periods);
@@ -456,8 +477,10 @@ export function deriveCharges({
   }
 
   // Part F: derived offsets. A payment of a charge counts in the charge's
-  // period when its category is the schedule's linked category. A stored
-  // offset wins, and a payment dated inside the period needs none.
+  // period when its category is the schedule's linked category, and so do the
+  // parts of a split payment. A part with a charge of its own follows that
+  // charge and never the one its split pays. A stored offset wins, and a
+  // payment dated inside the period needs none.
   const periodById = new Map<string, BudgetPeriod>();
   for (const period of periods) {
     if (!periodById.has(period.id)) {
@@ -479,7 +502,6 @@ export function deriveCharges({
     if (
       transaction.category !== category ||
       manualIds.has(transaction.id) ||
-      derivedById.has(transaction.id) ||
       (transaction.date >= period.start && transaction.date < period.end)
     ) {
       return;
@@ -500,15 +522,13 @@ export function deriveCharges({
     }
     return found;
   }
-  // The payments themselves first, then the parts of split payments.
-  for (const working of allWorking) {
-    const periodId = working.charge.periodId;
-    const period = periodId === null ? undefined : periodById.get(periodId);
-    if (period === undefined) {
-      continue;
-    }
-    for (const payment of paymentsOf(working)) {
-      addDerived(payment, working.charge.category, period);
+  // A part has a charge of its own when the user named it for one, or when it
+  // is a payment of a schedule with charges, also when none of the charges
+  // worked out here is the one it pays.
+  const ownPaymentIds = new Set<string>(takenBy.keys());
+  for (const { schedule } of workingBySchedule) {
+    for (const payment of paymentsByScheduleId.get(schedule.id) ?? []) {
+      ownPaymentIds.add(payment.id);
     }
   }
   for (const working of allWorking) {
@@ -518,8 +538,11 @@ export function deriveCharges({
       continue;
     }
     for (const payment of paymentsOf(working)) {
+      addDerived(payment, working.charge.category, period);
       for (const child of childrenByParentId.get(payment.id) ?? []) {
-        addDerived(child, working.charge.category, period);
+        if (!ownPaymentIds.has(child.id)) {
+          addDerived(child, working.charge.category, period);
+        }
       }
     }
   }
