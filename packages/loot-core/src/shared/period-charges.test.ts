@@ -4,9 +4,9 @@ import { projectPeriodCharges } from './period-budget';
 import type { BudgetPeriod, ExpensePosting } from './period-budget';
 import {
   deriveCharges,
-  outstandingChargeAmount,
   placeCashMovements,
   planCash,
+  unpaidChargeAmount,
 } from './period-charges';
 import type { ChargeSchedule, ChargeTransaction } from './period-charges';
 import { loadPeriodBudgetInput } from './period-loader';
@@ -232,6 +232,56 @@ describe('deriveCharges: charges', () => {
     });
     expect(result.charges.map(c => c.periodId)).toEqual([
       'cat:2027-01-01',
+      null,
+    ]);
+  });
+
+  it('of two periods that contain the due date, takes the one that starts first, then the smaller id', () => {
+    const wide: BudgetPeriod = {
+      id: 'cat:wide',
+      category: 'cat',
+      start: '2027-01-15',
+      end: '2027-04-15',
+      budget: 0,
+      carryover: 0,
+    };
+    const twin: BudgetPeriod = { ...PERIODS[2], id: 'cat:2027-03-00' };
+    const result = derive({ periods: [...PERIODS, twin, wide].reverse() });
+    expect(result.charges.map(c => c.periodId)).toEqual([
+      'cat:2027-01-01',
+      'cat:wide',
+      'cat:wide',
+      'cat:wide',
+      'cat:2027-05-01',
+      'cat:2027-06-01',
+    ]);
+    const narrow = derive({ periods: [PERIODS[2], twin, PERIODS[3]] });
+    expect(narrow.charges.map(c => c.periodId)).toEqual([
+      null,
+      null,
+      'cat:2027-03-00',
+      'cat:2027-04-01',
+      null,
+      null,
+    ]);
+  });
+
+  it('finds no period in a gap between two periods or behind a longer earlier one', () => {
+    const year: BudgetPeriod = {
+      id: 'cat:year',
+      category: 'cat',
+      start: '2026-01-01',
+      end: '2027-02-15',
+      budget: 0,
+      carryover: 0,
+    };
+    const result = derive({ periods: [year, PERIODS[0], PERIODS[3]] });
+    expect(result.charges.map(c => c.periodId)).toEqual([
+      'cat:year',
+      'cat:year',
+      null,
+      'cat:2027-04-01',
+      null,
       null,
     ]);
   });
@@ -763,9 +813,8 @@ describe('deriveCharges: matching', () => {
       transactionId: 't1',
       transactionDate: '2027-03-02',
     });
-    expect(outstandingChargeAmount(charge, '2027-02-25')).toBe(10000);
-    expect(outstandingChargeAmount(charge, '2027-03-01')).toBe(10000);
-    expect(outstandingChargeAmount(charge, '2027-03-02')).toBe(0);
+    // The cash forecast plans the payment itself, on its own day.
+    expect(unpaidChargeAmount(charge)).toBe(0);
   });
 
   it('before the first due date: matched up to half the distance to the second', () => {
@@ -1254,15 +1303,14 @@ describe('deriveCharges: with the loader and the calculation', () => {
         const projected = a.periods.find(p => p.period.id === charge.periodId);
         const isOutstanding =
           projected?.outstandingOccurrenceIds.includes(charge.id) ?? false;
-        const amount = outstandingChargeAmount(charge, asOf);
         const expected =
           charge.status === 'expected' ||
           (charge.status === 'paid' &&
             charge.paymentDate !== null &&
             charge.paymentDate > asOf);
         expect(isOutstanding).toBe(expected);
-        if (expected) {
-          expect(amount).toBe(charge.amount);
+        if (charge.status === 'expected') {
+          expect(unpaidChargeAmount(charge)).toBe(charge.amount);
         }
       }
     }
@@ -1270,35 +1318,87 @@ describe('deriveCharges: with the loader and the calculation', () => {
   });
 });
 
-describe('outstandingChargeAmount', () => {
+describe('deriveCharges: many charges', () => {
+  it('matches forty thousand payments to forty thousand charges without comparing each with each', () => {
+    // A daily schedule for about 110 years, paid on every due date, with a
+    // period for every 30 days.
+    const dueDates: string[] = [];
+    const transactions: ChargeTransaction[] = [];
+    const periods: BudgetPeriod[] = [];
+    const day = new Date(Date.UTC(1950, 0, 1));
+    for (let i = 0; i < 40000; i++) {
+      const date = day.toISOString().slice(0, 10);
+      dueDates.push(date);
+      transactions.push(payment(`t${i}`, date));
+      if (i % 30 === 0) {
+        periods.push({
+          id: `cat:${date}`,
+          category: 'cat',
+          start: date,
+          end: date,
+          budget: 0,
+          carryover: 0,
+        });
+        if (periods.length > 1) {
+          periods[periods.length - 2].end = date;
+        }
+      }
+      day.setUTCDate(day.getUTCDate() + 1);
+    }
+    periods[periods.length - 1].end = '9999-12-31';
+    const started = Date.now();
+    const result = deriveCharges({
+      schedules: [schedule({ dueDates, expectedFrom: dueDates[0] })],
+      overrides: [],
+      transactions,
+      periods,
+      offsets: [],
+      start: dueDates[0],
+      end: dueDates[dueDates.length - 1],
+      asOf: dueDates[dueDates.length - 1],
+    });
+    expect(Date.now() - started).toBeLessThan(5000);
+    expect(result.charges.length).toBe(40000);
+    expect(
+      result.charges.every(
+        (c, i) => c.status === 'paid' && c.paymentId === `t${i}`,
+      ),
+    ).toBe(true);
+    expect(result.charges[29].periodId).toBe('cat:1950-01-01');
+    expect(result.charges[30].periodId).toBe('cat:1950-01-31');
+    expect(result.charges[39999].periodId).toBe(periods[periods.length - 1].id);
+    expect(result.derivedOffsetIds).toEqual([]);
+  });
+});
+
+describe('unpaidChargeAmount', () => {
   it('is the whole amount of an expected charge', () => {
     const result = derive();
-    expect(
-      outstandingChargeAmount(chargeOf(result, 's1:2027-03-01'), '2027-06-30'),
-    ).toBe(10000);
+    expect(unpaidChargeAmount(chargeOf(result, 's1:2027-03-01'))).toBe(10000);
   });
 
-  it('is 0 for a skipped and for a closed charge', () => {
+  it('is 0 for a skipped and for a closed charge, also with a "still expected" amount', () => {
     const result = derive({
       schedules: [schedule({ expectedFrom: '2027-03-01' })],
-      overrides: [override('s1:2027-03-01', { skipped: true })],
+      overrides: [
+        override('s1:2027-02-01', { open_amount: 4000 }),
+        override('s1:2027-03-01', { skipped: true, open_amount: 4000 }),
+      ],
     });
-    expect(
-      outstandingChargeAmount(chargeOf(result, 's1:2027-02-01'), '2027-06-30'),
-    ).toBe(0);
-    expect(
-      outstandingChargeAmount(chargeOf(result, 's1:2027-03-01'), '2027-06-30'),
-    ).toBe(0);
+    expect(chargeOf(result, 's1:2027-02-01').status).toBe('closed');
+    expect(unpaidChargeAmount(chargeOf(result, 's1:2027-02-01'))).toBe(0);
+    expect(chargeOf(result, 's1:2027-03-01').status).toBe('skipped');
+    expect(unpaidChargeAmount(chargeOf(result, 's1:2027-03-01'))).toBe(0);
   });
 
-  it('is the "still expected" part once the payment is dated on or before the as-of day', () => {
+  it('is the "still expected" part of a charge with a payment, whatever the day of the payment', () => {
     const result = derive({
       overrides: [override('s1:2027-03-01', { open_amount: 4000 })],
-      transactions: [payment('t1', '2027-03-02')],
+      transactions: [payment('t1', '2027-03-02'), payment('t2', '2027-04-01')],
+      asOf: '2027-03-01',
     });
-    const charge = chargeOf(result, 's1:2027-03-01');
-    expect(outstandingChargeAmount(charge, '2027-03-01')).toBe(10000);
-    expect(outstandingChargeAmount(charge, '2027-03-02')).toBe(4000);
+    expect(unpaidChargeAmount(chargeOf(result, 's1:2027-03-01'))).toBe(4000);
+    expect(unpaidChargeAmount(chargeOf(result, 's1:2027-04-01'))).toBe(0);
   });
 });
 

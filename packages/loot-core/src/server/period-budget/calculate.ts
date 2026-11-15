@@ -17,9 +17,9 @@ import type {
 } from '#shared/period-budget';
 import {
   deriveCharges,
-  outstandingChargeAmount,
   placeCashMovements,
   planCash,
+  unpaidChargeAmount,
 } from '#shared/period-charges';
 import type {
   CashPlan,
@@ -51,6 +51,9 @@ export type ScheduledCashMovement = PlannedCashMovement & {
   scheduleId: string;
   isTransfer: boolean; // one leg of a transfer between two accounts
   isApproximate: boolean; // the schedule's amount is an estimate
+  // An entered transaction that is dated after the as-of day, with its own
+  // id; false for a movement the schedule is expected to make.
+  isPosted: boolean;
 };
 
 export type PeriodBudgetCalculation = {
@@ -76,13 +79,17 @@ type CalculateInput = {
 
 type TransactionRow = LedgerTransaction & {
   schedule: string | null;
+  transfer_id: string | null;
 };
 
 type ScheduleRow = Parameters<typeof normalizeSchedule>[0] & {
   completed: boolean;
 };
 
-const DUE_DATE_LOOKBACK_DAYS = 366;
+// The due date before the first day asked for is looked for in windows of
+// this many days, each ending where the one before it starts: about 120
+// years together.
+const EARLIER_DUE_DATE_WINDOWS = [8, 32, 128, 512, 2048, 8192, 32768];
 
 type LinkedSchedule = {
   schedule: ScheduleData;
@@ -104,6 +111,7 @@ async function readTransactions(): Promise<TransactionRow[]> {
         'is_child',
         'parent_id',
         'schedule',
+        'transfer_id',
         'starting_balance_flag',
       ]),
   );
@@ -119,10 +127,29 @@ async function readSchedules(): Promise<ScheduleRow[]> {
   return rows;
 }
 
-// The due dates of the schedule from a year before `start` up to `end`, and
-// the first one after `end`: a payment belongs to the nearer of two due
-// dates, also when one of them is outside the days asked for. A schedule
-// whose dates cannot be worked out has none.
+// A schedule Actual can forecast, or null. A rule that cannot be read (one
+// that another program stored, for example) gives null as well.
+function readSchedule(row: ScheduleRow): LinkedSchedule | null {
+  try {
+    const schedule = normalizeSchedule(row);
+    if (schedule === null) {
+      return null;
+    }
+    const amountOp: unknown = extractScheduleConds(schedule._conditions).amount
+      ?.op;
+    return {
+      schedule,
+      isApproximate: amountOp !== undefined && amountOp !== 'is',
+    };
+  } catch {
+    return null;
+  }
+}
+
+// The due dates of the schedule from `start` to `end`, the last one before
+// `start` and the first one after `end`: a payment belongs to the nearer of
+// two due dates, also when one of them is outside the days asked for. A
+// schedule whose dates cannot be worked out has none.
 function listDueDates(
   schedule: ScheduleData,
   start: string,
@@ -133,10 +160,20 @@ function listDueDates(
     return [date];
   }
   try {
-    const dates = getScheduleDates(date, {
-      start: subDays(start, DUE_DATE_LOOKBACK_DAYS),
-      end,
-    });
+    const dates = getScheduleDates(date, { start, end });
+    let windowEnd = subDays(start, 1);
+    for (const days of EARLIER_DUE_DATE_WINDOWS) {
+      const windowStart = subDays(windowEnd, days - 1);
+      const earlier = getScheduleDates(date, {
+        start: windowStart,
+        end: windowEnd,
+      });
+      if (earlier.length > 0) {
+        dates.unshift(earlier[earlier.length - 1]);
+        break;
+      }
+      windowEnd = subDays(windowStart, 1);
+    }
     const after = getNextDateAfter(
       { op: 'is', field: 'date', value: date },
       end,
@@ -236,17 +273,15 @@ export async function calculatePeriodBudget({
   const others: ScheduleData[] = [];
   const isApproximateById = new Map<string, boolean>();
   for (const row of await readSchedules()) {
-    const schedule = normalizeSchedule(row);
-    if (schedule === null || linked.has(schedule.id)) {
+    const read = readSchedule(row);
+    if (read === null || linked.has(read.schedule.id)) {
       continue;
     }
-    const amountOp: unknown = extractScheduleConds(schedule._conditions).amount
-      ?.op;
-    const isApproximate = amountOp !== undefined && amountOp !== 'is';
+    const { schedule, isApproximate } = read;
     isApproximateById.set(schedule.id, isApproximate);
     const category = linkedCategory.get(schedule.id);
     if (category !== undefined && schedule._amount < 0) {
-      linked.set(schedule.id, { schedule, isApproximate });
+      linked.set(schedule.id, read);
       pending.push({
         schedule,
         category,
@@ -389,10 +424,11 @@ export async function calculatePeriodBudget({
     balance: balanceById.get(id) ?? 0,
   }));
 
-  // A charge that is still expected is forecast as a schedule with one date.
+  // What is still expected of a charge is forecast as a schedule with one
+  // date.
   const chargeMovements: ScheduleData[] = [];
   for (const charge of derived.charges) {
-    const amount = outstandingChargeAmount(charge, asOf);
+    const amount = unpaidChargeAmount(charge);
     const schedule = linked.get(charge.scheduleId)?.schedule;
     if (schedule === undefined || amount <= 0) {
       continue;
@@ -452,20 +488,105 @@ export async function calculatePeriodBudget({
   ];
   const detailById = new Map<
     string,
-    { scheduleId: string; isTransfer: boolean; isApproximate: boolean }
+    {
+      scheduleId: string;
+      isTransfer: boolean;
+      isApproximate: boolean;
+      isPosted: boolean;
+    }
   >();
   const movements: CashMovement[] = [];
-  for (const occurrence of occurrences) {
-    const transaction = occurrence.transaction;
-    if (detailById.has(transaction.id)) {
+
+  // An entered transaction dated after the as-of day is not in the balances.
+  // It is a movement on its own day when it carries a schedule or pays a
+  // charge, and so is the other leg when it is a transfer. The forecast above
+  // leaves out what such a transaction posts, and what is still expected of
+  // its charge does not hold the payment.
+  const paidScheduleById = new Map<string, string>();
+  for (const charge of derived.charges) {
+    if (charge.paymentId !== null) {
+      paidScheduleById.set(charge.paymentId, charge.scheduleId);
+    }
+  }
+  // A part of a split leaves the account with the whole transaction.
+  const parentIdById = new Map<string, string>();
+  for (const transaction of transactions) {
+    const parentId = transaction.parent_id;
+    if (
+      transaction.is_child === true &&
+      parentId !== null &&
+      parentId !== undefined
+    ) {
+      parentIdById.set(transaction.id, parentId);
+    }
+  }
+  const enteredScheduleById = new Map<string, string>();
+  for (const transaction of transactions) {
+    const scheduleId =
+      transaction.schedule ?? paidScheduleById.get(transaction.id);
+    if (scheduleId !== undefined) {
+      enteredScheduleById.set(
+        parentIdById.get(transaction.id) ?? transaction.id,
+        scheduleId,
+      );
+    }
+  }
+  const otherLegScheduleById = new Map<string, string>();
+  for (const transaction of transactions) {
+    const scheduleId = enteredScheduleById.get(
+      parentIdById.get(transaction.id) ?? transaction.id,
+    );
+    const otherLeg = transaction.transfer_id;
+    if (
+      scheduleId !== undefined &&
+      otherLeg !== null &&
+      otherLeg !== undefined
+    ) {
+      otherLegScheduleById.set(
+        parentIdById.get(otherLeg) ?? otherLeg,
+        scheduleId,
+      );
+    }
+  }
+  for (const [id, scheduleId] of otherLegScheduleById) {
+    if (!enteredScheduleById.has(id)) {
+      enteredScheduleById.set(id, scheduleId);
+    }
+  }
+  for (const transaction of transactions) {
+    const scheduleId = enteredScheduleById.get(transaction.id);
+    if (
+      scheduleId === undefined ||
+      transaction.is_child === true ||
+      !isValidDay(transaction.date) ||
+      transaction.date <= asOf
+    ) {
       continue;
     }
+    detailById.set(transaction.id, {
+      scheduleId,
+      isTransfer:
+        transaction.transfer_id !== null &&
+        transaction.transfer_id !== undefined,
+      isApproximate: false,
+      isPosted: true,
+    });
+    movements.push({
+      id: transaction.id,
+      account: transaction.account,
+      date: transaction.date,
+      amount: transaction.amount,
+    });
+  }
+  for (const occurrence of occurrences) {
+    const transaction = occurrence.transaction;
     detailById.set(transaction.id, {
       scheduleId: occurrence.scheduleId,
       isTransfer:
         transaction.transfer_id !== undefined &&
         transaction.transfer_id !== null,
       isApproximate: isApproximateById.get(occurrence.scheduleId) ?? false,
+      isPosted: false,
     });
     movements.push({
       id: transaction.id,
@@ -504,6 +625,7 @@ export async function calculatePeriodBudget({
       scheduleId: detailById.get(movement.id)?.scheduleId ?? '',
       isTransfer: detailById.get(movement.id)?.isTransfer ?? false,
       isApproximate: detailById.get(movement.id)?.isApproximate ?? false,
+      isPosted: detailById.get(movement.id)?.isPosted ?? false,
     })),
   };
 }

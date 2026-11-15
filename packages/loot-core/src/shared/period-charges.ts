@@ -107,33 +107,37 @@ function cleanDueDates(dueDates: readonly string[]): string[] {
 // It is the nearest due date; of two equally near, the earlier. A payment
 // before the first due date or after the last one belongs to it only when it
 // is no further away than half the distance to that due date's neighbour.
+// `dueDates` is in ascending order without repeats.
 function nearestDueIndex(dueDates: readonly string[], day: string): number {
-  if (dueDates.length === 0) {
-    return -1;
+  const count = dueDates.length;
+  if (count <= 1) {
+    return count - 1;
   }
-  const target = dayNumber(day);
-  let best = 0;
-  let bestDistance = Math.abs(dayNumber(dueDates[0]) - target);
-  for (let i = 1; i < dueDates.length; i++) {
-    const distance = Math.abs(dayNumber(dueDates[i]) - target);
-    if (distance < bestDistance) {
-      best = i;
-      bestDistance = distance;
+  // The first due date that is not before the day.
+  let low = 0;
+  let high = count;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (dueDates[middle] < day) {
+      low = middle + 1;
+    } else {
+      high = middle;
     }
   }
-  if (dueDates.length === 1) {
-    return best;
+  const target = dayNumber(day);
+  if (low === 0) {
+    const first = dayNumber(dueDates[0]);
+    return (first - target) * 2 <= dayNumber(dueDates[1]) - first ? 0 : -1;
   }
-  if (day < dueDates[0]) {
-    const gap = dayNumber(dueDates[1]) - dayNumber(dueDates[0]);
-    return bestDistance * 2 <= gap ? best : -1;
+  if (low === count) {
+    const last = dayNumber(dueDates[count - 1]);
+    return (target - last) * 2 <= last - dayNumber(dueDates[count - 2])
+      ? count - 1
+      : -1;
   }
-  const last = dueDates.length - 1;
-  if (day > dueDates[last]) {
-    const gap = dayNumber(dueDates[last]) - dayNumber(dueDates[last - 1]);
-    return bestDistance * 2 <= gap ? best : -1;
-  }
-  return best;
+  const before = target - dayNumber(dueDates[low - 1]);
+  const after = dayNumber(dueDates[low]) - target;
+  return after < before ? low : low - 1;
 }
 
 function byDateThenId(
@@ -159,29 +163,72 @@ function byDueDateThenId(a: Working, b: Working): number {
   return 0;
 }
 
-function findPeriodId(
+// The periods of one category by start, then id. `latestEnd[i]` is the latest
+// end of the periods up to and including the one at `i`.
+type CategoryPeriods = {
+  periods: BudgetPeriod[];
+  latestEnd: string[];
+};
+
+function indexPeriods(
   periods: readonly BudgetPeriod[],
+): Map<string, CategoryPeriods> {
+  const byCategory = new Map<string, CategoryPeriods>();
+  for (const period of periods) {
+    const found = byCategory.get(period.category);
+    if (found === undefined) {
+      byCategory.set(period.category, { periods: [period], latestEnd: [] });
+    } else {
+      found.periods.push(period);
+    }
+  }
+  for (const entry of byCategory.values()) {
+    entry.periods.sort((a, b) => {
+      if (a.start !== b.start) {
+        return a.start < b.start ? -1 : 1;
+      }
+      if (a.id !== b.id) {
+        return a.id < b.id ? -1 : 1;
+      }
+      return 0;
+    });
+    let latest = '';
+    for (const period of entry.periods) {
+      if (period.end > latest) {
+        latest = period.end;
+      }
+      entry.latestEnd.push(latest);
+    }
+  }
+  return byCategory;
+}
+
+// The category's period that contains the day: of several, the one that
+// starts first, then the one with the smaller id.
+function findPeriodId(
+  index: Map<string, CategoryPeriods>,
   category: string,
   day: string,
 ): string | null {
-  let found: BudgetPeriod | null = null;
-  for (const period of periods) {
-    if (
-      period.category !== category ||
-      !(period.start <= day) ||
-      !(day < period.end)
-    ) {
-      continue;
-    }
-    if (
-      found === null ||
-      period.start < found.start ||
-      (period.start === found.start && period.id < found.id)
-    ) {
-      found = period;
+  const entry = index.get(category);
+  if (entry === undefined) {
+    return null;
+  }
+  // The first period that ends after the day, or one before it does.
+  let low = 0;
+  let high = entry.periods.length;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (entry.latestEnd[middle] > day) {
+      high = middle;
+    } else {
+      low = middle + 1;
     }
   }
-  return found === null ? null : found.id;
+  if (low === entry.periods.length || !(entry.periods[low].start <= day)) {
+    return null;
+  }
+  return entry.periods[low].id;
 }
 
 // The charges of the linked schedules (plan B4) and the offsets that follow
@@ -228,6 +275,7 @@ export function deriveCharges({
   }
 
   // Part A: one charge for every due date of every schedule.
+  const periodIndex = indexPeriods(periods);
   const workingById = new Map<string, Working>();
   const workingBySchedule: Array<{
     schedule: ChargeSchedule;
@@ -257,7 +305,7 @@ export function deriveCharges({
           scheduleId: schedule.id,
           category: schedule.category,
           dueDate,
-          periodId: findPeriodId(periods, schedule.category, dueDate),
+          periodId: findPeriodId(periodIndex, schedule.category, dueDate),
           amount: schedule.amount,
           status: 'expected',
           paymentId: null,
@@ -530,20 +578,15 @@ export function deriveCharges({
   };
 }
 
-// What a charge is still expected to cost on the as-of day: the whole amount
-// while it is unpaid or its payment is dated after that day, afterwards the
-// "still expected" part.
-export function outstandingChargeAmount(
-  charge: DerivedCharge,
-  asOf: string,
-): number {
+// What the cash forecast plans for a charge on its due date: the whole amount
+// while it has no payment, afterwards the "still expected" part. The payment
+// itself is in the balances, or it is a movement of its own when it is dated
+// after the as-of day.
+export function unpaidChargeAmount(charge: DerivedCharge): number {
   if (charge.status === 'expected') {
     return charge.amount;
   }
-  if (charge.status !== 'paid' || charge.paymentDate === null) {
-    return 0;
-  }
-  return charge.paymentDate > asOf ? charge.amount : charge.openAmount;
+  return charge.status === 'paid' ? charge.openAmount : 0;
 }
 
 export type PlannedCashMovement = CashMovement & {

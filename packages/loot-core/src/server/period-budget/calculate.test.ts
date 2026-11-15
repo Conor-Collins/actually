@@ -209,6 +209,7 @@ describe('period-budget/calculate: the worked example of the spec', () => {
         scheduleId: taxSchedule,
         isTransfer: false,
         isApproximate: false,
+        isPosted: false,
       },
     ]);
     expect(result.derivedOffsetIds).toEqual([]);
@@ -265,6 +266,7 @@ describe('period-budget/calculate: the worked example of the spec', () => {
         scheduleId: transfer,
         isTransfer: true,
         isApproximate: false,
+        isPosted: false,
       },
       {
         id: `forecast-${transfer}-2027-04-27-transfer`,
@@ -275,6 +277,7 @@ describe('period-budget/calculate: the worked example of the spec', () => {
         scheduleId: transfer,
         isTransfer: true,
         isApproximate: false,
+        isPosted: false,
       },
     ]);
     expect(accountOf(result, 'checking')).toMatchObject({
@@ -320,7 +323,7 @@ describe('period-budget/calculate: charges and payments', () => {
     expect(result.paidOutsideBudget).toEqual([]);
   });
 
-  it('a payment after the as-of day leaves the charge expected on that day', async () => {
+  it('a payment after the as-of day leaves the charge expected on that day and is planned on its own day', async () => {
     const taxSchedule = await storeExample();
     await spend('tax-paid', '2027-04-27', -91000, 'taxes', {
       schedule: taxSchedule,
@@ -333,13 +336,147 @@ describe('period-budget/calculate: charges and payments', () => {
       remaining: 90000,
       expectedRemaining: 0,
     });
-    expect(result.movements.map(m => [m.date, m.amount])).toEqual([
-      ['2027-04-28', -90000],
+    expect(result.movements).toEqual([
+      {
+        id: 'tax-paid',
+        account: 'checking',
+        date: '2027-04-27',
+        amount: -91000,
+        dueDate: '2027-04-27',
+        scheduleId: taxSchedule,
+        isTransfer: false,
+        isApproximate: false,
+        isPosted: true,
+      },
     ]);
     expect(accountOf(result, 'checking')).toMatchObject({
       currentBalance: 70000,
-      transferNeeded: 20000,
+      projectedEndingBalance: -21000,
+      firstShortfallDate: '2027-04-27',
+      transferNeeded: 21000,
     });
+  });
+
+  it('a part payment after the as-of day is planned beside what is still expected', async () => {
+    const taxSchedule = await storeExample();
+    await spend('tax-part', '2027-04-25', -50000, 'taxes', {
+      schedule: taxSchedule,
+    });
+    await handlers['period-budget/set-charge-override']({
+      scheduleId: taxSchedule,
+      dueDate: '2027-04-28',
+      openAmount: 40000,
+    });
+    const result = await calculate();
+    expect(
+      result.movements.map(m => [m.id, m.date, m.amount, m.isPosted]),
+    ).toEqual([
+      ['tax-part', '2027-04-25', -50000, true],
+      [`forecast-${taxSchedule}-2027-04-28`, '2027-04-28', -40000, false],
+    ]);
+    expect(accountOf(result, 'checking')).toMatchObject({
+      currentBalance: 70000,
+      projectedEndingBalance: -20000,
+    });
+  });
+
+  it('a part payment on the due date leaves what is still expected in the plan', async () => {
+    const taxSchedule = await storeExample();
+    await spend('tax-part', '2027-04-28', -50000, 'taxes', {
+      schedule: taxSchedule,
+    });
+    await handlers['period-budget/set-charge-override']({
+      scheduleId: taxSchedule,
+      dueDate: '2027-04-28',
+      openAmount: 40000,
+    });
+    const result = await calculate('2027-04-28');
+    expect(
+      result.movements.map(m => [m.id, m.date, m.amount, m.isPosted]),
+    ).toEqual([
+      [`forecast-${taxSchedule}-2027-04-28`, '2027-04-28', -40000, false],
+    ]);
+    expect(accountOf(result, 'checking')).toMatchObject({
+      currentBalance: 20000,
+      projectedEndingBalance: -20000,
+    });
+  });
+
+  it('a named payment after the as-of day is planned once, without a schedule of its own', async () => {
+    const taxSchedule = await storeExample();
+    await spend('by-hand', '2027-04-25', -90000, 'taxes');
+    await spend('no-schedule', '2027-04-26', -700, 'fun');
+    await handlers['period-budget/set-charge-override']({
+      scheduleId: taxSchedule,
+      dueDate: '2027-04-28',
+      transactionId: 'by-hand',
+    });
+    const result = await calculate();
+    expect(
+      result.movements.map(m => [m.id, m.date, m.amount, m.scheduleId]),
+    ).toEqual([['by-hand', '2027-04-25', -90000, taxSchedule]]);
+    expect(accountOf(result, 'checking').projectedEndingBalance).toBe(-20000);
+  });
+
+  it('a named payment after the as-of day that is a transfer is planned with both legs', async () => {
+    const taxSchedule = await storeExample();
+    await db.insertTransaction({
+      id: 'from-savings',
+      account: 'savings',
+      date: '2027-04-25',
+      amount: -90000,
+      category: 'taxes',
+      transfer_id: 'to-checking',
+    });
+    await spend('to-checking', '2027-04-25', 90000, null, {
+      transfer_id: 'from-savings',
+    });
+    await handlers['period-budget/set-charge-override']({
+      scheduleId: taxSchedule,
+      dueDate: '2027-04-28',
+      transactionId: 'from-savings',
+    });
+    const result = await calculate();
+    expect(
+      result.movements.map(m => [
+        m.id,
+        m.account,
+        m.amount,
+        m.scheduleId,
+        m.isTransfer,
+        m.isPosted,
+      ]),
+    ).toEqual([
+      ['from-savings', 'savings', -90000, taxSchedule, true, true],
+      ['to-checking', 'checking', 90000, taxSchedule, true, true],
+    ]);
+    expect(result.cash?.projectedCash).toBe(420000);
+  });
+
+  it('a named part of a split after the as-of day is planned with the whole transaction', async () => {
+    const taxSchedule = await storeExample();
+    await spend('split', '2027-04-25', -100000, null, { is_parent: true });
+    await spend('split-tax', '2027-04-25', -90000, 'taxes', {
+      is_child: true,
+      parent_id: 'split',
+    });
+    await spend('split-fun', '2027-04-25', -10000, 'fun', {
+      is_child: true,
+      parent_id: 'split',
+    });
+    await handlers['period-budget/set-charge-override']({
+      scheduleId: taxSchedule,
+      dueDate: '2027-04-28',
+      transactionId: 'split-tax',
+    });
+    const result = await calculate();
+    expect(result.charges[0]).toMatchObject({
+      status: 'paid',
+      paymentId: 'split-tax',
+    });
+    expect(
+      result.movements.map(m => [m.id, m.date, m.amount, m.scheduleId]),
+    ).toEqual([['split', '2027-04-25', -100000, taxSchedule]]);
   });
 
   it('an early payment counts in the period of its charge and stays in its own month', async () => {
@@ -475,6 +612,7 @@ describe('period-budget/calculate: charges and payments', () => {
         scheduleId: taxSchedule,
         isTransfer: false,
         isApproximate: false,
+        isPosted: false,
       },
     ]);
     expect(accountOf(result, 'checking')).toMatchObject({
@@ -512,6 +650,35 @@ describe('period-budget/calculate: charges and payments', () => {
     });
     expect(remainingOf(result, 'fun:2027-04-01').remaining).toBe(5000);
     expect(accountOf(result, 'checking').currentBalance).toBe(-30000);
+    expect(result.movements).toEqual([]);
+  });
+
+  it('a split payment with every part in another category is not listed as paid outside the budget', async () => {
+    const taxSchedule = await storeExample();
+    await spend('split', '2027-04-19', -90000, null, {
+      schedule: taxSchedule,
+      is_parent: true,
+    });
+    await spend('split-fun', '2027-04-19', -10000, 'fun', {
+      is_child: true,
+      parent_id: 'split',
+    });
+    await spend('split-food', '2027-04-19', -80000, 'groceries', {
+      is_child: true,
+      parent_id: 'split',
+    });
+    const result = await calculate();
+    expect(result.charges[0]).toMatchObject({
+      status: 'paid',
+      paymentId: 'split',
+    });
+    expect(result.paidOutsideBudget).toEqual([]);
+    expect(result.derivedOffsetIds).toEqual([]);
+    expect(remainingOf(result, 'taxes:2027-04-01')).toEqual({
+      remaining: 90000,
+      expectedRemaining: 90000,
+    });
+    expect(remainingOf(result, 'fun:2027-04-01').remaining).toBe(5000);
     expect(result.movements).toEqual([]);
   });
 
@@ -703,6 +870,93 @@ describe('period-budget/calculate: charges and payments', () => {
     expect(result.movements.map(m => m.scheduleId)).toEqual([taxSchedule]);
   });
 
+  it('a schedule whose rule cannot be read is left out and the others are worked out', async () => {
+    const taxSchedule = await storeExample();
+    const brokenLinked = await schedule(-700, '2027-05-02');
+    await handlers['period-budget/link-schedule']({
+      scheduleId: brokenLinked,
+      category: 'fun',
+    });
+    const brokenOther = await schedule(-300, '2027-05-03');
+    let result = await calculate();
+    expect(result.charges.map(c => c.scheduleId)).toEqual([
+      taxSchedule,
+      brokenLinked,
+    ]);
+    expect(result.movements.map(m => m.scheduleId)).toEqual([
+      taxSchedule,
+      brokenLinked,
+      brokenOther,
+    ]);
+
+    // The same schedules as another program could have stored them.
+    db.runQuery(
+      "UPDATE rules SET conditions = '[null]' WHERE id IN (SELECT rule FROM schedules WHERE id IN (?, ?))",
+      [brokenLinked, brokenOther],
+    );
+    result = await calculate();
+    expect(result.charges.map(c => c.scheduleId)).toEqual([taxSchedule]);
+    expect(result.movements.map(m => m.scheduleId)).toEqual([taxSchedule]);
+    expect(accountOf(result, 'checking').transferNeeded).toBe(20000);
+  });
+
+  it('a payment between two due dates far apart belongs to the same charge on every as-of day', async () => {
+    await period('fun', '2027-01-01', '2028-01-01', 20000);
+    const rare = await schedule(-5000, {
+      start: '2025-01-01',
+      frequency: 'yearly',
+      interval: 2,
+    });
+    db.runQuery(
+      'UPDATE schedules_next_date SET local_next_date = 20270101, base_next_date = 20270101 WHERE schedule_id = ?',
+      [rare],
+    );
+    await handlers['period-budget/link-schedule']({
+      scheduleId: rare,
+      category: 'fun',
+    });
+    // As far from 1 January 2025 as from 1 January 2027: the earlier one.
+    await spend('rare-paid', '2026-01-01', -5000, 'fun', { schedule: rare });
+    const early = await calculate('2025-01-01', '2027-12-31');
+    expect(early.charges.map(c => [c.dueDate, c.status, c.paymentId])).toEqual([
+      ['2025-01-01', 'paid', 'rare-paid'],
+      ['2027-01-01', 'expected', null],
+    ]);
+    const late = await calculate('2027-01-01', '2027-12-31');
+    expect(late.charges.map(c => [c.dueDate, c.status, c.paymentId])).toEqual([
+      ['2027-01-01', 'expected', null],
+    ]);
+    expect(remainingOf(late, 'fun:2027-01-01')).toEqual(
+      remainingOf(early, 'fun:2027-01-01'),
+    );
+  });
+
+  it('a payment nearer to the due date before the first period is not taken for the first charge, half a year apart', async () => {
+    await period('fun', '2027-07-01', '2028-01-01', 20000);
+    const halfYearly = await schedule(-5000, {
+      start: '2027-01-01',
+      frequency: 'monthly',
+      interval: 6,
+    });
+    db.runQuery(
+      'UPDATE schedules_next_date SET local_next_date = 20270701, base_next_date = 20270701 WHERE schedule_id = ?',
+      [halfYearly],
+    );
+    await handlers['period-budget/link-schedule']({
+      scheduleId: halfYearly,
+      category: 'fun',
+    });
+    // 90 days after 1 January, 91 days before 1 July.
+    await spend('half-paid', '2027-04-01', -5000, 'fun', {
+      schedule: halfYearly,
+    });
+    const result = await calculate('2027-07-01', '2027-12-31');
+    expect(result.charges.map(c => [c.dueDate, c.status, c.paymentId])).toEqual(
+      [['2027-07-01', 'expected', null]],
+    );
+    expect(result.derivedOffsetIds).toEqual([]);
+  });
+
   it('a payment as near to the due date before the first period is not taken for the first charge', async () => {
     await period('taxes', '2027-03-01', '2027-06-01', 90000);
     const monthly = await schedule(-1000, {
@@ -892,7 +1146,7 @@ describe('period-budget/calculate: charges and payments', () => {
     });
   });
 
-  it('works out a schedule that started long ago from the year before the first period', async () => {
+  it('works out a schedule that started long ago from the due date before the first period', async () => {
     await storeExample();
     const daily = await schedule(-100, {
       start: '2012-01-01',
@@ -907,6 +1161,10 @@ describe('period-budget/calculate: charges and payments', () => {
       category: 'fun',
     });
     await spend('daily-19', '2027-04-19', -100, 'fun', { schedule: daily });
+    // The day before the first period: the payment of that day's charge.
+    await spend('daily-before', '2026-12-31', -100, 'fun', {
+      schedule: daily,
+    });
     const started = Date.now();
     const result = await calculate('2027-04-20', '2027-04-30');
     expect(Date.now() - started).toBeLessThan(5000);
@@ -983,6 +1241,141 @@ describe('period-budget/calculate: cash movements', () => {
     expect(accountOf(result, 'checking').currentBalance).toBe(370000);
   });
 
+  it('plans an entered payment of a schedule that is not linked once, on its own day', async () => {
+    await spend('open', '2027-01-01', 10000, null, {
+      starting_balance_flag: true,
+    });
+    const bill = await schedule(-9000, {
+      start: '2027-04-28',
+      frequency: 'monthly',
+    });
+    await spend('bill-paid', '2027-04-28', -9000, null, { schedule: bill });
+    // A part of a split that is missing is in no balance and is not planned.
+    await spend('bill-part', '2027-04-28', -100, null, {
+      schedule: bill,
+      is_child: true,
+    });
+    let result = await calculate('2027-04-20', '2027-05-27');
+    expect(
+      result.movements.map(m => [m.id, m.date, m.amount, m.isPosted]),
+    ).toEqual([['bill-paid', '2027-04-28', -9000, true]]);
+    expect(accountOf(result, 'checking')).toMatchObject({
+      currentBalance: 10000,
+      projectedEndingBalance: 1000,
+    });
+
+    result = await calculate('2027-04-20', '2027-05-28');
+    expect(
+      result.movements.map(m => [m.id, m.date, m.amount, m.isPosted]),
+    ).toEqual([
+      ['bill-paid', '2027-04-28', -9000, true],
+      [`forecast-${bill}-2027-05-28`, '2027-05-28', -9000, false],
+    ]);
+
+    result = await calculate('2027-04-28', '2027-05-27');
+    expect(result.movements).toEqual([]);
+    expect(accountOf(result, 'checking').currentBalance).toBe(1000);
+  });
+
+  it('plans an entered split payment with the other leg of the part that is a transfer', async () => {
+    await storeExample();
+    const pay = await schedule(-30000, '2027-04-26');
+    await spend('pay-split', '2027-04-26', -30000, null, {
+      schedule: pay,
+      is_parent: true,
+    });
+    await spend('pay-split-save', '2027-04-26', -20000, null, {
+      is_child: true,
+      parent_id: 'pay-split',
+      transfer_id: 'save-in',
+    });
+    await spend('pay-split-fun', '2027-04-26', -10000, 'fun', {
+      is_child: true,
+      parent_id: 'pay-split',
+    });
+    await db.insertTransaction({
+      id: 'save-in',
+      account: 'savings',
+      date: '2027-04-26',
+      amount: 20000,
+      transfer_id: 'pay-split-save',
+    });
+    const result = await calculate();
+    expect(
+      result.movements
+        .filter(m => m.scheduleId === pay)
+        .map(m => [m.id, m.account, m.amount, m.isTransfer]),
+    ).toEqual([
+      ['pay-split', 'checking', -30000, false],
+      ['save-in', 'savings', 20000, true],
+    ]);
+  });
+
+  it('plans an entered transfer into a split with the whole split', async () => {
+    await storeExample();
+    const deposit = await schedule(20000, '2027-04-26');
+    await db.insertTransaction({
+      id: 'save-in',
+      account: 'savings',
+      date: '2027-04-26',
+      amount: 20000,
+      schedule: deposit,
+      transfer_id: 'pay-split-save',
+    });
+    await spend('pay-split', '2027-04-26', -30000, null, { is_parent: true });
+    await spend('pay-split-save', '2027-04-26', -20000, null, {
+      is_child: true,
+      parent_id: 'pay-split',
+      transfer_id: 'save-in',
+    });
+    await spend('pay-split-fun', '2027-04-26', -10000, 'fun', {
+      is_child: true,
+      parent_id: 'pay-split',
+    });
+    const result = await calculate();
+    expect(
+      result.movements
+        .filter(m => m.scheduleId === deposit)
+        .map(m => [m.id, m.account, m.amount, m.isTransfer]),
+    ).toEqual([
+      ['pay-split', 'checking', -30000, false],
+      ['save-in', 'savings', 20000, true],
+    ]);
+  });
+
+  it('keeps the schedule of each leg of an entered transfer that carries two', async () => {
+    await storeExample();
+    const out = await schedule(-20000, '2027-04-26');
+    const into = await schedule(20000, '2027-04-26', [
+      { op: 'is', field: 'account', value: 'savings' },
+    ]);
+    await db.insertTransaction({
+      id: 'leg-out',
+      account: 'checking',
+      date: '2027-04-26',
+      amount: -20000,
+      schedule: out,
+      transfer_id: 'leg-in',
+    });
+    await db.insertTransaction({
+      id: 'leg-in',
+      account: 'savings',
+      date: '2027-04-26',
+      amount: 20000,
+      schedule: into,
+      transfer_id: 'leg-out',
+    });
+    const result = await calculate();
+    expect(
+      result.movements
+        .filter(m => m.isPosted)
+        .map(m => [m.id, m.scheduleId, m.isTransfer]),
+    ).toEqual([
+      ['leg-in', into, true],
+      ['leg-out', out, true],
+    ]);
+  });
+
   it('plans an overdue occurrence of a schedule that is not linked on the as-of day', async () => {
     await storeExample();
     const fee = await schedule(-2500, {
@@ -1006,7 +1399,7 @@ describe('period-budget/calculate: cash movements', () => {
   });
 
   it('marks the movements of a schedule with an estimated amount', async () => {
-    await storeExample();
+    const taxSchedule = await storeExample();
     const power = await createSchedule({
       conditions: [
         { op: 'is', field: 'account', value: 'checking' },
@@ -1014,12 +1407,25 @@ describe('period-budget/calculate: cash movements', () => {
         { op: 'is', field: 'date', value: '2027-05-04' },
       ] satisfies RuleConditionEntity[],
     });
+    const water = await createSchedule({
+      conditions: [
+        { op: 'is', field: 'account', value: 'checking' },
+        {
+          op: 'isbetween',
+          field: 'amount',
+          value: { num1: -1000, num2: -2000 },
+        },
+        { op: 'is', field: 'date', value: '2027-05-05' },
+      ] satisfies RuleConditionEntity[],
+    });
     const result = await calculate();
     expect(
-      result.movements
-        .filter(m => m.scheduleId === power)
-        .map(m => [m.amount, m.isApproximate]),
-    ).toEqual([[-8000, true]]);
+      result.movements.map(m => [m.scheduleId, m.amount, m.isApproximate]),
+    ).toEqual([
+      [taxSchedule, -90000, false],
+      [power, -8000, true],
+      [water, -1500, true],
+    ]);
   });
 
   it('leaves out an excluded, a closed and an off-budget account', async () => {
@@ -1097,9 +1503,19 @@ describe('period-budget/calculate: cash movements', () => {
   });
 
   it('uses the balances of the as-of day', async () => {
-    await storeExample();
+    const taxSchedule = await storeExample();
     await spend('later', '2027-04-21', -1234, 'fun');
-    expect(accountOf(await calculate(), 'checking').currentBalance).toBe(70000);
+    // A day that does not exist is in no balance.
+    await spend('no-such-day', '2027-02-01', -55, 'fun');
+    db.runQuery('UPDATE transactions SET date = 20270231 WHERE id = ?', [
+      'no-such-day',
+    ]);
+    const result = await calculate();
+    expect(accountOf(result, 'checking').currentBalance).toBe(70000);
+    // A transaction that carries no schedule and pays no charge is not planned.
+    expect(result.movements.map(m => m.id)).toEqual([
+      `forecast-${taxSchedule}-2027-04-28`,
+    ]);
     expect(
       accountOf(await calculate('2027-04-21'), 'checking').currentBalance,
     ).toBe(68766);
