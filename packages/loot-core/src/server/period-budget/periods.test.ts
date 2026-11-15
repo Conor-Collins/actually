@@ -164,6 +164,87 @@ describe('period-budget/set-cadence and stop-cadence', () => {
     ).toEqual(['cat1:2027-01-01 2027-02-01 500']);
   });
 
+  it('changes only the length or only the start date of a cadence', async () => {
+    await handlers['period-budget/set-cadence']({
+      category: 'cat1',
+      anchorDate: '2027-01-01',
+      months: 1,
+    });
+    expect(
+      await handlers['period-budget/set-cadence']({
+        category: 'cat1',
+        months: 3,
+      }),
+    ).toEqual({ id: 'cat1' });
+    expect(await cadence('cat1')).toMatchObject({
+      anchor_date: '2027-01-01',
+      months: 3,
+      active: true,
+    });
+    expect(
+      await handlers['period-budget/set-cadence']({
+        category: 'cat1',
+        anchorDate: '2027-01-15',
+      }),
+    ).toEqual({ id: 'cat1' });
+    expect(await cadence('cat1')).toMatchObject({
+      anchor_date: '2027-01-15',
+      months: 3,
+      active: true,
+    });
+    expect(
+      await handlers['period-budget/set-cadence']({
+        category: 'cat1',
+        months: 121,
+      }),
+    ).toEqual({
+      error: 'length must be a whole number of months from 1 to 120',
+    });
+    expect(
+      await handlers['period-budget/set-cadence']({
+        category: 'cat1',
+        anchorDate: '2027-02-30',
+      }),
+    ).toEqual({ error: 'start date "2027-02-30" is not a valid date' });
+    expect(await cadence('cat1')).toMatchObject({
+      anchor_date: '2027-01-15',
+      months: 3,
+    });
+  });
+
+  it('stores the first period of a cadence that is only given a budget later', async () => {
+    await handlers['period-budget/set-cadence']({
+      category: 'cat1',
+      anchorDate: '2027-01-31',
+      months: 2,
+    });
+    await handlers['period-budget/set-cadence']({
+      category: 'cat1',
+      budget: 700,
+    });
+    expect(
+      (await livePeriods()).map(
+        row => `${row.id} ${row.end_date} ${row.budget}`,
+      ),
+    ).toEqual(['cat1:2027-01-31 2027-03-31 700']);
+  });
+
+  it('refuses a new cadence without a start date or a length', async () => {
+    expect(
+      await handlers['period-budget/set-cadence']({
+        category: 'cat1',
+        months: 1,
+      }),
+    ).toEqual({ error: 'a new cadence needs a start date and a length' });
+    expect(
+      await handlers['period-budget/set-cadence']({
+        category: 'cat1',
+        anchorDate: '2027-01-01',
+      }),
+    ).toEqual({ error: 'a new cadence needs a start date and a length' });
+    expect(await cadence('cat1')).toBe(undefined);
+  });
+
   it('stores no first period when the category only has a deleted period', async () => {
     await handlers['period-budget/create-period']({
       category: 'cat1',
@@ -232,12 +313,14 @@ describe('period-budget/set-cadence and stop-cadence', () => {
       await handlers['period-budget/stop-cadence']({ category: 'cat1' }),
     ).toEqual({ id: 'cat1' });
     expect((await cadence('cat1'))?.active).toBe(false);
-    await handlers['period-budget/set-cadence']({
-      category: 'cat1',
-      anchorDate: '2027-01-01',
+    await handlers['period-budget/set-cadence']({ category: 'cat1' });
+    expect(await cadence('cat1')).toEqual({
+      id: 'cat1',
+      anchor_date: '2027-01-01',
       months: 1,
+      active: true,
+      tombstone: false,
     });
-    expect((await cadence('cat1'))?.active).toBe(true);
   });
 
   it('refuses to switch off a cadence that does not exist', async () => {
@@ -600,6 +683,48 @@ describe('period-budget/carry', () => {
     expect(await period('cat1:2027-02-01')).toMatchObject({
       carryover: 0,
       carried_from: null,
+    });
+  });
+
+  it('refuses a budget and a carryover that are too large together', async () => {
+    expect(
+      await handlers['period-budget/update-period']({
+        id: 'cat1:2027-02-01',
+        budget: Number.MAX_SAFE_INTEGER,
+      }),
+    ).toEqual({ id: 'cat1:2027-02-01' });
+    expect(
+      await handlers['period-budget/carry']({
+        id: 'cat1:2027-02-01',
+        fromPeriodId: 'cat1:2027-01-01',
+        amount: 1,
+      }),
+    ).toEqual({ error: 'budget plus carryover is too large' });
+    expect(
+      await handlers['period-budget/carry']({
+        id: 'cat1:2027-02-01',
+        fromPeriodId: 'cat1:2027-01-01',
+        amount: -1,
+      }),
+    ).toEqual({ id: 'cat1:2027-02-01' });
+    await handlers['period-budget/update-period']({
+      id: 'cat1:2027-02-01',
+      budget: 500,
+    });
+    await handlers['period-budget/carry']({
+      id: 'cat1:2027-02-01',
+      fromPeriodId: 'cat1:2027-01-01',
+      amount: 1,
+    });
+    expect(
+      await handlers['period-budget/update-period']({
+        id: 'cat1:2027-02-01',
+        budget: Number.MAX_SAFE_INTEGER,
+      }),
+    ).toEqual({ error: 'budget plus carryover is too large' });
+    expect(await period('cat1:2027-02-01')).toMatchObject({
+      budget: 500,
+      carryover: 1,
     });
   });
 

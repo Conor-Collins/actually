@@ -173,6 +173,10 @@ function isAmount(value: unknown): value is number {
   return isWholeNumber(value) && value >= 0;
 }
 
+// A new cadence needs a start date and a length. For a cadence that exists,
+// only the fields that are given and differ from the stored ones are sent, so
+// a device that changes the length does not undo another device's change of
+// the start date.
 async function setCadence({
   category,
   anchorDate,
@@ -180,17 +184,27 @@ async function setCadence({
   budget,
 }: {
   category: string;
-  anchorDate: string;
-  months: number;
+  anchorDate?: string;
+  months?: number;
   budget?: number;
 }): Promise<PeriodWriteResult> {
   if (!(await exists('categories', category))) {
     return { error: `category "${category}" does not exist` };
   }
-  if (!isValidDay(anchorDate)) {
-    return { error: `start date "${String(anchorDate)}" is not a valid date` };
+  const cadences = await readTable<PeriodCadenceRow>('period_cadences');
+  const stored = cadences.find(row => row.id === category && !row.tombstone);
+  if (
+    stored === undefined &&
+    (anchorDate === undefined || months === undefined)
+  ) {
+    return { error: 'a new cadence needs a start date and a length' };
   }
-  if (!isWholeNumber(months) || months < 1 || months > 120) {
+  const anchor = anchorDate ?? stored?.anchor_date;
+  const length = months ?? stored?.months;
+  if (!isValidDay(anchor)) {
+    return { error: `start date "${String(anchor)}" is not a valid date` };
+  }
+  if (!isWholeNumber(length) || length < 1 || length > 120) {
     return { error: 'length must be a whole number of months from 1 to 120' };
   }
   if (budget !== undefined && !isAmount(budget)) {
@@ -199,26 +213,36 @@ async function setCadence({
   const periods = await readTable<PeriodBudgetRow>('period_budgets');
   const hasPeriods = periods.some(row => row.category === category);
   await batchMessages(async () => {
-    await writeRow('period_cadences', category, {
-      anchor_date: anchorDate,
-      months,
-      active: true,
-    });
+    if (stored === undefined) {
+      await writeRow('period_cadences', category, {
+        anchor_date: anchor,
+        months: length,
+        active: true,
+      });
+    } else {
+      const fields: Record<string, FieldValue> = {};
+      if (anchor !== stored.anchor_date) {
+        fields.anchor_date = anchor;
+      }
+      if (length !== stored.months) {
+        fields.months = length;
+      }
+      if (stored.active !== true) {
+        fields.active = true;
+      }
+      if (Object.keys(fields).length > 0) {
+        await db.updateWithSchema('period_cadences', {
+          id: category,
+          ...fields,
+        });
+      }
+    }
     if (budget !== undefined && !hasPeriods) {
-      const id = newPeriodId(
+      const id = newPeriodId(category, anchor, new Set(periods.map(p => p.id)));
+      const end_date = cadenceEnd(anchor, length, Number(anchor.slice(8, 10)));
+      await insertRow('period_budgets', id, {
         category,
-        anchorDate,
-        new Set(periods.map(p => p.id)),
-      );
-      const end_date = cadenceEnd(
-        anchorDate,
-        months,
-        Number(anchorDate.slice(8, 10)),
-      );
-      await db.insertWithSchema('period_budgets', {
-        id,
-        category,
-        start_date: anchorDate,
+        start_date: anchor,
         end_date,
         budget,
         carryover: 0,

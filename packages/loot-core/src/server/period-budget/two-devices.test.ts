@@ -7,15 +7,20 @@ import { Timestamp } from '@actual-app/crdt';
 import * as db from '#server/db';
 import { loadMappings } from '#server/db/mappings';
 import * as prefs from '#server/prefs';
+import { getRuleForSchedule, app as schedulesApp } from '#server/schedules/app';
+import { getScheduleDates } from '#server/schedules/occurrences';
 import { applyMessages, setSyncingMode } from '#server/sync';
 import type { Message } from '#server/sync';
 import { deserializeValue } from '#server/sync/serialization';
+import { loadRules } from '#server/transactions/transaction-rules';
 import { summarizePeriodBudgets } from '#shared/period-budget';
 import type { ExpensePosting } from '#shared/period-budget';
 import {
   listOverridesWithoutCharge,
   loadPeriodBudgetInput,
 } from '#shared/period-loader';
+import { extractScheduleConds } from '#shared/schedules';
+import type { RecurConfig } from '#types/models';
 
 import { app, storeDuePeriods, storeDuePeriodsAfterSync } from './app';
 
@@ -40,6 +45,7 @@ let counter = 0;
 async function startDevice() {
   await global.emptyDatabase()();
   await loadMappings();
+  await loadRules();
   await db.insertCategoryGroup({ id: 'group1', name: 'Bills' });
   await db.insertCategory({
     id: 'cat1',
@@ -186,13 +192,22 @@ describe('two devices changing the same thing', () => {
       }),
     );
 
-    // The second device syncs before storing, sees the row and leaves it.
-    await receive([earlier, edit]);
-    expect(await storeNextPeriod()).toEqual([]);
-    expect(await describePeriods()).toEqual([
-      'cat1:2027-01-01 2027-01-01 2027-02-01 500',
-      'cat1:2027-02-01 2027-02-01 2027-03-01 650',
-    ]);
+    // The second device syncs before storing, sees the row and leaves it:
+    // it sends nothing.
+    const afterSync = await changeOn(
+      'B',
+      20,
+      [...earlier, ...edit],
+      storeNextPeriod,
+    );
+    expect(afterSync).toEqual([]);
+    await inBothOrders(earlier, edit, afterSync, async () => {
+      expect(await storeNextPeriod()).toEqual([]);
+      expect(await describePeriods()).toEqual([
+        'cat1:2027-01-01 2027-01-01 2027-02-01 500',
+        'cat1:2027-02-01 2027-02-01 2027-03-01 650',
+      ]);
+    });
 
     // With no connection it shows the planned row and stores nothing.
     await receive([earlier]);
@@ -216,20 +231,34 @@ describe('two devices changing the same thing', () => {
 
   it('an offline edit that syncs after the other device stored the period is lost', async () => {
     const earlier = await january();
-    const offlineEdit = await changeOn('A', 10, earlier, () =>
-      handlers['period-budget/create-period']({
+    const offlineEdit = await changeOn('A', 10, earlier, async () => {
+      await handlers['period-budget/create-period']({
         category: 'cat1',
         start: '2027-02-01',
         end: '2027-03-01',
         budget: 650,
-      }),
-    );
+      });
+      await handlers['period-budget/carry']({
+        id: 'cat1:2027-02-01',
+        fromPeriodId: 'cat1:2027-01-01',
+        amount: 120,
+      });
+    });
     const stored = await changeOn('B', 20, earlier, storeNextPeriod);
     await inBothOrders(earlier, offlineEdit, stored, async () => {
-      expect(await describePeriods()).toEqual([
-        'cat1:2027-01-01 2027-01-01 2027-02-01 500',
-        'cat1:2027-02-01 2027-02-01 2027-03-01 500',
-      ]);
+      const { periods } = await handlers['period-budget/get-rows']();
+      // Every field of the edit is replaced, the carry and its source too.
+      expect(periods[1]).toEqual({
+        id: 'cat1:2027-02-01',
+        category: 'cat1',
+        start_date: '2027-02-01',
+        end_date: '2027-03-01',
+        budget: 500,
+        carryover: 0,
+        carried_from: null,
+        tombstone: false,
+      });
+      expect(periods.length).toBe(2);
     });
   });
 
@@ -412,6 +441,57 @@ describe('two devices changing the same thing', () => {
     });
   });
 
+  it("one changes a cadence's start date, the other its length: both changes apply", async () => {
+    const earlier = await january();
+    const a = await changeOn('A', 10, earlier, () =>
+      handlers['period-budget/set-cadence']({
+        category: 'cat1',
+        anchorDate: '2027-01-15',
+      }),
+    );
+    const b = await changeOn('B', 20, earlier, () =>
+      handlers['period-budget/set-cadence']({ category: 'cat1', months: 3 }),
+    );
+    await inBothOrders(earlier, a, b, async () => {
+      const rows = await handlers['period-budget/get-rows']();
+      expect(rows.cadences).toEqual([
+        {
+          id: 'cat1',
+          anchor_date: '2027-01-15',
+          months: 3,
+          active: true,
+          tombstone: false,
+        },
+      ]);
+    });
+  });
+
+  it("both change a cadence's length: the later length stays", async () => {
+    const earlier = await january();
+    const a = await changeOn('A', 20, earlier, () =>
+      handlers['period-budget/set-cadence']({ category: 'cat1', months: 3 }),
+    );
+    const b = await changeOn('B', 10, earlier, () =>
+      handlers['period-budget/set-cadence']({
+        category: 'cat1',
+        anchorDate: '2027-01-01',
+        months: 6,
+      }),
+    );
+    await inBothOrders(earlier, a, b, async () => {
+      const rows = await handlers['period-budget/get-rows']();
+      expect(rows.cadences).toEqual([
+        {
+          id: 'cat1',
+          anchor_date: '2027-01-01',
+          months: 3,
+          active: true,
+          tombstone: false,
+        },
+      ]);
+    });
+  });
+
   it('both offset one transaction to different periods: one row, the later choice stays', async () => {
     const earlier = await januaryAndFebruary();
     const a = await changeOn('A', 20, earlier, () =>
@@ -430,6 +510,30 @@ describe('two devices changing the same thing', () => {
       const rows = await handlers['period-budget/get-rows']();
       expect(rows.offsets).toEqual([
         { id: 'txn1', period_id: 'cat1:2027-01-01', tombstone: false },
+      ]);
+    });
+  });
+
+  it('one sets and clears an offset, the other sets it later: the offset is there', async () => {
+    const earlier = await januaryAndFebruary();
+    const a = await changeOn('A', 10, earlier, async () => {
+      await handlers['period-budget/set-offset']({
+        transactionId: 'txn1',
+        periodId: 'cat1:2027-01-01',
+      });
+      await handlers['period-budget/clear-offset']({ transactionId: 'txn1' });
+    });
+    // This device never had the row, so for it the offset is new.
+    const b = await changeOn('B', 20, earlier, () =>
+      handlers['period-budget/set-offset']({
+        transactionId: 'txn1',
+        periodId: 'cat1:2027-02-01',
+      }),
+    );
+    await inBothOrders(earlier, a, b, async () => {
+      const rows = await handlers['period-budget/get-rows']();
+      expect(rows.offsets).toEqual([
+        { id: 'txn1', period_id: 'cat1:2027-02-01', tombstone: false },
       ]);
     });
   });
@@ -467,35 +571,98 @@ describe('two devices changing the same thing', () => {
     });
   });
 
-  it("a schedule's dates are edited: an override for a vanished date needs attention", async () => {
+  it('one sets an amount for a charge, the other later sets it back to none: no amount', async () => {
     const earlier = await january();
     const a = await changeOn('A', 10, earlier, () =>
       handlers['period-budget/set-charge-override']({
         scheduleId: 'sched1',
         dueDate: '2027-01-05',
         amount: 1200,
+        transactionId: 'txn1',
+        openAmount: 300,
       }),
     );
+    // This device never had the row, so for it the override is new.
     const b = await changeOn('B', 20, earlier, () =>
       handlers['period-budget/set-charge-override']({
         scheduleId: 'sched1',
-        dueDate: '2027-01-12',
+        dueDate: '2027-01-05',
+        amount: null,
         skipped: true,
+        transactionId: null,
+        openAmount: null,
       }),
     );
     await inBothOrders(earlier, a, b, async () => {
-      // After the edit the schedule is due on the 12th, not on the 5th.
+      const rows = await handlers['period-budget/get-rows']();
+      expect(rows.chargeOverrides).toEqual([
+        {
+          id: 'sched1:2027-01-05',
+          amount: null,
+          skipped: true,
+          transaction_id: null,
+          open_amount: null,
+          tombstone: false,
+        },
+      ]);
+    });
+  });
+
+  it("a schedule's dates are edited: charges follow and an override for a vanished date needs attention", async () => {
+    // A real schedule, due on the 5th of every month.
+    const monthlyOn = (start: string): RecurConfig => ({
+      frequency: 'monthly',
+      start,
+      patterns: [],
+    });
+    const earlier = await changeOn('A', 0, [], async () => {
+      await schedulesApp.handlers['schedule/create']({
+        schedule: { id: 'sched2' },
+        conditions: [
+          { op: 'is', field: 'date', value: monthlyOn('2027-01-05') },
+        ],
+      });
+    });
+    // One device moves it to the 12th.
+    const a = await changeOn('A', 10, earlier, () =>
+      schedulesApp.handlers['schedule/update']({
+        schedule: { id: 'sched2' },
+        conditions: [
+          { op: 'is', field: 'date', value: monthlyOn('2027-01-12') },
+        ],
+      }),
+    );
+    // The other, which still sees the 5th, changes that charge.
+    const b = await changeOn('B', 20, earlier, () =>
+      handlers['period-budget/set-charge-override']({
+        scheduleId: 'sched2',
+        dueDate: '2027-01-05',
+        amount: 1200,
+      }),
+    );
+    await inBothOrders(earlier, a, b, async () => {
+      // The charges of January, from the schedule as it is after the sync.
+      const rule = await getRuleForSchedule('sched2');
+      const dateCond: { value: RecurConfig | string } = extractScheduleConds(
+        rule.serialize().conditions,
+      ).date;
+      const dueDates = getScheduleDates(dateCond.value, {
+        start: '2027-01-01',
+        end: '2027-01-31',
+      });
+      expect(dueDates).toEqual(['2027-01-12']);
+
       const rows = await handlers['period-budget/get-rows']();
       const needsAttention = listOverridesWithoutCharge({
         overrides: rows.chargeOverrides,
-        occurrenceIds: new Set(['sched1:2027-01-12']),
+        occurrenceIds: new Set(dueDates.map(date => `sched2:${date}`)),
         start: '2027-01-01',
-        end: '2027-02-01',
+        end: '2027-01-31',
       });
       expect(
         needsAttention.map(row => `${row.table} ${row.id} ${row.reason}`),
       ).toEqual([
-        'period_charge_overrides sched1:2027-01-05 override-without-charge',
+        'period_charge_overrides sched2:2027-01-05 override-without-charge',
       ]);
     });
   });
