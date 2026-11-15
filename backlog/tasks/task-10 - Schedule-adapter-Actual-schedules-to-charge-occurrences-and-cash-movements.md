@@ -4,7 +4,7 @@ title: 'Schedule adapter: Actual schedules to charge occurrences and cash moveme
 status: Review
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-15T23:08:00Z'
+updated_date: '2026-11-15T23:20:00Z'
 labels:
   - integration
 dependencies:
@@ -52,4 +52,6 @@ Review round 3 (2026-11-15 21:28Z) on 16abde4ab05b590852218ccc018c831747bcddda: 
 Round 4 (rung 2, opencode studio/flash-next): candidate d579ca7b864c8b44bbef6bd7b1d649980c6e1cfe, 730 focused tests, gate exit 0 at 22:56Z (/tmp/actually-orch/t10/gate-r4.log); mutation run pure 77 of 77 killed, server 82 of 87 killed (5 judged equivalent, unchanged from round 3). Sent to review round 4 at 22:57Z.
 
 Review round 4 (rung 2, round 1 of 3), 23:05Z: REQUEST CHANGES on d579ca7b8. Findings 9, 10, 11 closed. New finding 12 (blocking): account balances in calculate.ts are added without checking intermediate sums, so amounts that cancel can give a rounded cash balance (-MAX_SAFE_INTEGER, 2, MAX_SAFE_INTEGER gives 1, not 2). Round 5 follows at rung 2.
+
+Round 5 (rung 2, round 2 of 3): candidate 05006583a sent to review at 23:21Z. Finding 12 answered: account balances are added exactly (bigint); no cash plan when a selected account has an amount that is no whole number or a balance too large. 734 focused tests, gate exit 0 (23:20Z), 13 of 14 balance mutants killed (1 equivalent: planCash refuses the same balance).
 <!-- SECTION:NOTES:END -->
