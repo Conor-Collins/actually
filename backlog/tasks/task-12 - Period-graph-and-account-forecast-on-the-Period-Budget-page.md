@@ -4,6 +4,7 @@ title: Period graph and account forecast on the Period Budget page
 status: To Do
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
+updated_date: '2026-11-15T14:31:00Z'
 labels:
   - ui
   - needs-decision
@@ -26,3 +27,9 @@ Outline only. Waits on the owner's decisions (SPEC section 10): how offset payme
 <!-- AC:BEGIN -->
 - [ ] #1 Acceptance criteria are set from the owner's decisions before this task is started.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-11-15: two candidate plans (A stored records, B cadence and derivation) are in /data/t3-work/actually-approvals/plans-2026-11-15/ and wait for the owner's choice. Scope and acceptance criteria are unchanged until then.
+<!-- SECTION:NOTES:END -->
