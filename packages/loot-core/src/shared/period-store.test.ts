@@ -367,11 +367,64 @@ describe('planPeriods', () => {
     ]);
   });
 
-  it('stops after 1000 periods', () => {
+  it('adds :3 when moved live periods have the id and :2', () => {
     expect(
-      planPeriods({ cadence: cadence(), periods: [JAN], until: '9999-12-31' })
-        .length,
-    ).toBe(1000);
+      planPeriods({
+        cadence: cadence(),
+        periods: [
+          row('cat1:2027-01-01', '2027-01-01', '2027-01-10'),
+          row('cat1:2027-02-01', '2027-01-10', '2027-01-20', 61000),
+          row('cat1:2027-02-01:2', '2027-01-20', '2027-02-01', 62000),
+        ],
+        until: '2027-02-01',
+      }),
+    ).toEqual([row('cat1:2027-02-01:3', '2027-02-01', '2027-03-01', 62000)]);
+  });
+
+  it('keeps a deleted :2 period deleted when a moved live period has the id', () => {
+    expect(
+      planPeriods({
+        cadence: cadence(),
+        periods: [
+          row('cat1:2027-01-01', '2027-01-01', '2027-01-15'),
+          row('cat1:2027-02-01', '2027-01-15', '2027-02-01', 61000),
+          row('cat1:2027-02-01:2', '2027-02-01', '2027-03-01', 70000, {
+            tombstone: true,
+          }),
+        ],
+        until: '2027-03-01',
+      }),
+    ).toEqual([row('cat1:2027-03-01', '2027-03-01', '2027-04-01', 61000)]);
+  });
+
+  it('plans every period of a long range', () => {
+    const planned = planPeriods({
+      cadence: cadence(),
+      periods: [JAN],
+      until: '2227-01-01',
+    });
+    expect(planned.length).toBe(2400);
+    expect(planned[2399]).toEqual(
+      row('cat1:2227-01-01', '2227-01-01', '2227-02-01'),
+    );
+  });
+
+  it('ends at the last valid day', () => {
+    const planned = planPeriods({
+      cadence: cadence({ months: 12 }),
+      periods: [row('cat1:9997-01-01', '9997-01-01', '9998-01-01')],
+      until: '9999-12-31',
+    });
+    expect(planned.map(period => period.id)).toEqual([
+      'cat1:9998-01-01',
+      'cat1:9999-01-01',
+    ]);
+  });
+
+  it('plans nothing when the last day is not a valid date', () => {
+    expect(
+      planPeriods({ cadence: cadence(), periods: [JAN], until: '2027-02-30' }),
+    ).toEqual([]);
   });
 
   it('does not change its input', () => {
@@ -447,6 +500,27 @@ describe('checkPeriodWrite', () => {
     expect(
       checkPeriodWrite({
         candidate: candidate({ carryover: -80 }),
+        periods: [],
+      }),
+    ).toBe(null);
+  });
+
+  it('refuses a budget and a carryover that are too large together', () => {
+    expect(
+      checkPeriodWrite({
+        candidate: candidate({
+          budget: Number.MAX_SAFE_INTEGER,
+          carryover: 1,
+        }),
+        periods: [],
+      }),
+    ).toBe('budget plus carryover is too large');
+    expect(
+      checkPeriodWrite({
+        candidate: candidate({
+          budget: Number.MAX_SAFE_INTEGER - 1,
+          carryover: 1,
+        }),
         periods: [],
       }),
     ).toBe(null);

@@ -279,6 +279,45 @@ describe('loadPeriodBudgetInput: periods', () => {
     }
   });
 
+  it('sets aside a period whose budget plus carryover is too large', () => {
+    // Two devices can each write a valid number: one the allowance, the other
+    // the carried amount.
+    const tooLarge = period('B', '2027-02-01', '2027-03-01', {
+      budget: Number.MAX_SAFE_INTEGER,
+      carryover: 1,
+    });
+    const result = load({ periods: [A, tooLarge] });
+    expect(result.setAside).toEqual([
+      aside(
+        'period_budgets',
+        'B',
+        'invalid-period',
+        'budget plus carryover is too large',
+      ),
+    ]);
+    expect(result.periods).toEqual([KEPT_A]);
+    const summary = summarizePeriodBudgets({
+      periods: result.periods,
+      postings: [],
+      offsets: result.offsets,
+      asOf: '2027-06-15',
+    });
+    expect(summary.periods.map(p => p.period.id)).toEqual(['A']);
+  });
+
+  it('keeps a period whose budget plus carryover is the largest safe number', () => {
+    const result = load({
+      periods: [
+        period('A', '2027-01-01', '2027-02-01', {
+          budget: Number.MAX_SAFE_INTEGER - 1,
+          carryover: 1,
+        }),
+      ],
+    });
+    expect(result.setAside).toEqual([]);
+    expect(result.periods.map(p => p.id)).toEqual(['A']);
+  });
+
   it('keeps the earlier of two overlapping periods', () => {
     const result = load({ periods: [A, B] });
     expect(result.periods).toEqual([KEPT_A]);

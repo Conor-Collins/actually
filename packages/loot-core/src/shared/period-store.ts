@@ -90,7 +90,8 @@ export function planPeriods({
     cadence.active !== true ||
     !isValidDay(cadence.anchor_date) ||
     !isWholeNumber(cadence.months) ||
-    cadence.months < 1
+    cadence.months < 1 ||
+    !isValidDay(until)
   ) {
     return [];
   }
@@ -98,10 +99,8 @@ export function planPeriods({
   const anchorDay = Number(cadence.anchor_date.slice(8, 10));
 
   const rowById = new Map<string, PeriodBudgetRow>();
-  const ids = new Set<string>();
   for (const row of periods) {
     rowById.set(row.id, row);
-    ids.add(row.id);
   }
 
   let latestEnd: string | null = null;
@@ -136,10 +135,19 @@ export function planPeriods({
 
   let start = latestEnd;
   const planned: PeriodBudgetRow[] = [];
-  for (let i = 0; i < 1000 && start <= until; i++) {
+  // Every step moves `start` to a later day, so this ends. A start past the
+  // year 9999 is not a valid day.
+  while (isValidDay(start) && start <= until) {
+    // The id of this start date: the first one that no live period has.
     const baseId = `${category}:${start}`;
-    const existing = rowById.get(baseId);
-    if (existing !== undefined && existing.tombstone) {
+    let id = baseId;
+    let existing = rowById.get(id);
+    for (let n = 2; existing !== undefined && !existing.tombstone; n++) {
+      id = `${baseId}:${n}`;
+      existing = rowById.get(id);
+    }
+    if (existing !== undefined) {
+      // A deleted period stays deleted and its dates count as taken.
       start =
         isValidDay(existing.end_date) && existing.end_date > start
           ? existing.end_date
@@ -147,7 +155,6 @@ export function planPeriods({
       continue;
     }
     const end = cadenceEnd(start, cadence.months, anchorDay);
-    const id = newPeriodId(category, start, ids);
     planned.push({
       id,
       category,
@@ -158,7 +165,6 @@ export function planPeriods({
       carried_from: null,
       tombstone: false,
     });
-    ids.add(id);
     start = end;
   }
   return planned;
@@ -196,6 +202,9 @@ export function checkPeriodWrite({
   }
   if (!isWholeNumber(candidate.carryover)) {
     return 'carryover must be a whole number';
+  }
+  if (!isWholeNumber(candidate.budget + candidate.carryover)) {
+    return 'budget plus carryover is too large';
   }
   for (const row of periods) {
     if (

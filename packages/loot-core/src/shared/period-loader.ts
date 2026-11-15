@@ -137,6 +137,15 @@ export function loadPeriodBudgetInput({
       });
       continue;
     }
+    if (!isWholeNumber(row.budget + row.carryover)) {
+      setAside.push({
+        table: 'period_budgets',
+        id: row.id,
+        reason: 'invalid-period',
+        detail: 'budget plus carryover is too large',
+      });
+      continue;
+    }
     candidates.push({
       id: row.id,
       category: row.category,
