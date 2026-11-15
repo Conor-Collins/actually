@@ -1,10 +1,10 @@
 ---
 id: TASK-10
 title: 'Schedule adapter: Actual schedules to charge occurrences and cash movements'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-15T16:13:00Z'
+updated_date: '2026-11-15T19:29:00Z'
 labels:
   - integration
 dependencies:
@@ -38,4 +38,6 @@ Outline only. Waits on the owner's decisions (SPEC section 10): whether offsets 
 2026-11-15: two candidate plans (A stored records, B cadence and derivation) are in /data/t3-work/actually-approvals/plans-2026-11-15/ and wait for the owner's choice. Scope and acceptance criteria are unchanged until then.
 
 2026-11-15: the owner approved plan B ("Plan B, all approved"). The plan is docs/plans/period-budget.md (commit 6f90e400f); section references in the acceptance criteria (B1 to B9, S1 to S8) are to that file. Acceptance criteria set from its section B9.
+
+2026-11-15: in progress. The orchestrator wrote the code and the tests (shared/period-charges.ts, server/period-budget/calculate.ts, handler period-budget/calculate) and delivers them as two patches; the rung-1 coder applies them, runs the checks and commits on branch task-10-schedule-adapter; an independent reviewer (codex gpt-6.1-sol xhigh) reviews the candidate. Briefs: /tmp/actually-orch/task-10-brief.md and task-10-review-brief.md.
 <!-- SECTION:NOTES:END -->
