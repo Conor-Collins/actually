@@ -4,10 +4,9 @@ title: 'Schedule adapter: Actual schedules to charge occurrences and cash moveme
 status: To Do
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-15T14:31:00Z'
+updated_date: '2026-11-15T16:13:00Z'
 labels:
   - integration
-  - needs-decision
 dependencies:
   - TASK-5
   - TASK-6
@@ -26,11 +25,17 @@ Outline only. Waits on the owner's decisions (SPEC section 10): whether offsets 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Acceptance criteria are set from the owner's decisions before this task is started.
+- [ ] #1 For the linked schedules and a date range, it returns the charges of B4 with their ids, periods and amounts, with overrides applied.
+- [ ] #2 The matching rule of B4 has tests for: paid early, paid late, a different amount, two payments for one charge, a part payment with "still expected", a skipped charge, a named match that differs from the calculated one, and a payment after the as-of date.
+- [ ] #3 Derived offsets follow B3; a manual offset wins; monthly actual spending is the same with and without them.
+- [ ] #4 Future cash movements for the selected accounts come from Actual's schedules inside the horizon: transfers have two legs, nothing already posted is repeated, an overdue charge is placed on the as-of date.
+- [ ] #5 With the rows of the spec's worked example stored (section 8), the results are 2,230 spent in April, 970 remaining, 80 overspent, 0 expected remaining for taxes, 4,200 cash and a 200 transfer needed.
 <!-- AC:END -->
 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
 2026-11-15: two candidate plans (A stored records, B cadence and derivation) are in /data/t3-work/actually-approvals/plans-2026-11-15/ and wait for the owner's choice. Scope and acceptance criteria are unchanged until then.
+
+2026-11-15: the owner approved plan B ("Plan B, all approved"). The plan is docs/plans/period-budget.md (commit 6f90e400f); section references in the acceptance criteria (B1 to B9, S1 to S8) are to that file. Acceptance criteria set from its section B9.
 <!-- SECTION:NOTES:END -->
