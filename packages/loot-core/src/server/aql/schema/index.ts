@@ -224,6 +224,46 @@ export const schema = {
     created_at: f('integer', { required: true }),
     tombstone: f('boolean'),
   },
+  period_cadences: {
+    id: f('id'),
+    anchor_date: f('date'),
+    months: f('integer'),
+    active: f('boolean', { default: true }),
+    tombstone: f('boolean'),
+  },
+  period_budgets: {
+    id: f('id'),
+    category: f('id'),
+    start_date: f('date'),
+    end_date: f('date'),
+    budget: f('integer', { default: 0 }),
+    carryover: f('integer', { default: 0 }),
+    carried_from: f('id'),
+    tombstone: f('boolean'),
+  },
+  period_offsets: {
+    id: f('id'),
+    period_id: f('id'),
+    tombstone: f('boolean'),
+  },
+  period_schedule_links: {
+    id: f('id'),
+    category: f('id'),
+    tombstone: f('boolean'),
+  },
+  period_charge_overrides: {
+    id: f('id'),
+    amount: f('integer'),
+    skipped: f('boolean'),
+    transaction_id: f('id'),
+    open_amount: f('integer'),
+    tombstone: f('boolean'),
+  },
+  period_accounts: {
+    id: f('id'),
+    excluded: f('boolean'),
+    tombstone: f('boolean'),
+  },
 };
 
 export const schemaConfig: SchemaConfig = {
