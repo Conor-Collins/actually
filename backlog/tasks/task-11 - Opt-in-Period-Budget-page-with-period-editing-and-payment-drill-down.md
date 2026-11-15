@@ -1,10 +1,10 @@
 ---
 id: TASK-11
 title: Opt-in Period Budget page with period editing and payment drill-down
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-15T16:13:00Z'
+updated_date: '2026-11-15T23:38:00Z'
 labels:
   - ui
 dependencies:
@@ -38,4 +38,6 @@ Outline only. Waits on the owner's decisions (SPEC section 10): how a user creat
 2026-11-15: two candidate plans (A stored records, B cadence and derivation) are in /data/t3-work/actually-approvals/plans-2026-11-15/ and wait for the owner's choice. Scope and acceptance criteria are unchanged until then.
 
 2026-11-15: the owner approved plan B ("Plan B, all approved"). The plan is docs/plans/period-budget.md (commit 6f90e400f); section references in the acceptance criteria (B1 to B9, S1 to S8) are to that file. Acceptance criteria set from its section B9.
+
+2026-11-15 23:38Z orchestrator: started. Plan: one branch task-11-period-budget-page; steps A (payments list in the calculation), B (sidebar id, routes, queries), C (wide page), D (actions), E (Needs attention), F (phone tabs). Sidebar follows plan S7 literally: hidden by default means listed under Settings until switched on.
 <!-- SECTION:NOTES:END -->
