@@ -43,6 +43,14 @@ export type PeriodBudgetHandlers = {
   'period-budget/delete-period': typeof deletePeriod;
   'period-budget/restore-period': typeof restorePeriod;
   'period-budget/carry': typeof carry;
+  'period-budget/set-offset': typeof setOffset;
+  'period-budget/clear-offset': typeof clearOffset;
+  'period-budget/link-schedule': typeof linkSchedule;
+  'period-budget/unlink-schedule': typeof unlinkSchedule;
+  'period-budget/set-charge-override': typeof setChargeOverride;
+  'period-budget/clear-charge-override': typeof clearChargeOverride;
+  'period-budget/exclude-account': typeof excludeAccount;
+  'period-budget/include-account': typeof includeAccount;
 };
 
 export const app = createApp<PeriodBudgetHandlers>();
@@ -54,6 +62,20 @@ app.method('period-budget/update-period', mutator(undoable(updatePeriod)));
 app.method('period-budget/delete-period', mutator(undoable(deletePeriod)));
 app.method('period-budget/restore-period', mutator(undoable(restorePeriod)));
 app.method('period-budget/carry', mutator(undoable(carry)));
+app.method('period-budget/set-offset', mutator(undoable(setOffset)));
+app.method('period-budget/clear-offset', mutator(undoable(clearOffset)));
+app.method('period-budget/link-schedule', mutator(undoable(linkSchedule)));
+app.method('period-budget/unlink-schedule', mutator(undoable(unlinkSchedule)));
+app.method(
+  'period-budget/set-charge-override',
+  mutator(undoable(setChargeOverride)),
+);
+app.method(
+  'period-budget/clear-charge-override',
+  mutator(undoable(clearChargeOverride)),
+);
+app.method('period-budget/exclude-account', mutator(undoable(excludeAccount)));
+app.method('period-budget/include-account', mutator(undoable(includeAccount)));
 
 // Reads every row of a table, deleted rows too, sorted by id.
 async function readTable<T extends { id: string }>(
@@ -155,7 +177,11 @@ async function setCadence({
         anchorDate,
         new Set(periods.map(p => p.id)),
       );
-      const end_date = cadenceEnd(anchorDate, months, Number(anchorDate.slice(8, 10)));
+      const end_date = cadenceEnd(
+        anchorDate,
+        months,
+        Number(anchorDate.slice(8, 10)),
+      );
       await db.insertWithSchema('period_budgets', {
         id,
         category,
@@ -201,7 +227,14 @@ async function createPeriod({
   const periods = await readTable<PeriodBudgetRow>('period_budgets');
   const id = newPeriodId(category, start, new Set(periods.map(p => p.id)));
   const error = checkPeriodWrite({
-    candidate: { id, category, start_date: start, end_date: end, budget, carryover: 0 },
+    candidate: {
+      id,
+      category,
+      start_date: start,
+      end_date: end,
+      budget,
+      carryover: 0,
+    },
     periods,
   });
   if (error !== null) {
@@ -269,7 +302,11 @@ async function updatePeriod({
   return { id };
 }
 
-async function deletePeriod({ id }: { id: string }): Promise<PeriodWriteResult> {
+async function deletePeriod({
+  id,
+}: {
+  id: string;
+}): Promise<PeriodWriteResult> {
   const periods = await readTable<PeriodBudgetRow>('period_budgets');
   const row = periods.find(p => p.id === id && !p.tombstone);
   if (row === undefined) {
@@ -279,7 +316,11 @@ async function deletePeriod({ id }: { id: string }): Promise<PeriodWriteResult> 
   return { id };
 }
 
-async function restorePeriod({ id }: { id: string }): Promise<PeriodWriteResult> {
+async function restorePeriod({
+  id,
+}: {
+  id: string;
+}): Promise<PeriodWriteResult> {
   const periods = await readTable<PeriodBudgetRow>('period_budgets');
   const row = periods.find(p => p.id === id && p.tombstone);
   if (row === undefined) {
@@ -322,7 +363,11 @@ async function carry({
     if (from.category !== row.category) {
       return { error: 'carry must come from a period of the same category' };
     }
-    if (from.end_date === null || row.start_date === null || from.end_date > row.start_date) {
+    if (
+      from.end_date === null ||
+      row.start_date === null ||
+      from.end_date > row.start_date
+    ) {
       return { error: 'carry must come from an earlier period' };
     }
   }
@@ -332,4 +377,172 @@ async function carry({
     carried_from: fromPeriodId,
   });
   return { id };
+}
+
+async function setOffset({
+  transactionId,
+  periodId,
+}: {
+  transactionId: string;
+  periodId: string;
+}): Promise<PeriodWriteResult> {
+  const transaction = await db.getTransaction(transactionId);
+  if (transaction === undefined) {
+    return { error: `transaction "${transactionId}" does not exist` };
+  }
+  const periods = await readTable<PeriodBudgetRow>('period_budgets');
+  const period = periods.find(p => p.id === periodId && !p.tombstone);
+  if (period === undefined) {
+    return { error: `period "${periodId}" does not exist` };
+  }
+  if (transaction.category !== period.category) {
+    return { error: "the transaction is not in the period's category" };
+  }
+  await writeRow('period_offsets', transactionId, { period_id: periodId });
+  return { id: transactionId };
+}
+
+async function clearOffset({
+  transactionId,
+}: {
+  transactionId: string;
+}): Promise<PeriodWriteResult> {
+  const offsets = await readTable<PeriodOffsetRow>('period_offsets');
+  const row = offsets.find(o => o.id === transactionId && !o.tombstone);
+  if (row === undefined) {
+    return { error: `transaction "${transactionId}" has no offset` };
+  }
+  await db.delete_('period_offsets', transactionId);
+  return { id: transactionId };
+}
+
+async function linkSchedule({
+  scheduleId,
+  category,
+}: {
+  scheduleId: string;
+  category: string;
+}): Promise<PeriodWriteResult> {
+  if (!(await exists('schedules', scheduleId))) {
+    return { error: `schedule "${scheduleId}" does not exist` };
+  }
+  if (!(await exists('categories', category))) {
+    return { error: `category "${category}" does not exist` };
+  }
+  await writeRow('period_schedule_links', scheduleId, { category });
+  return { id: scheduleId };
+}
+
+async function unlinkSchedule({
+  scheduleId,
+}: {
+  scheduleId: string;
+}): Promise<PeriodWriteResult> {
+  const links = await readTable<PeriodScheduleLinkRow>('period_schedule_links');
+  const row = links.find(l => l.id === scheduleId && !l.tombstone);
+  if (row === undefined) {
+    return { error: `schedule "${scheduleId}" is not linked` };
+  }
+  await db.delete_('period_schedule_links', scheduleId);
+  return { id: scheduleId };
+}
+
+async function setChargeOverride({
+  scheduleId,
+  dueDate,
+  amount,
+  skipped,
+  transactionId,
+  openAmount,
+}: {
+  scheduleId: string;
+  dueDate: string;
+  amount?: number | null;
+  skipped?: boolean;
+  transactionId?: string | null;
+  openAmount?: number | null;
+}): Promise<PeriodWriteResult> {
+  if (!(await exists('schedules', scheduleId))) {
+    return { error: `schedule "${scheduleId}" does not exist` };
+  }
+  if (!isValidDay(dueDate)) {
+    return { error: `due date "${String(dueDate)}" is not a valid date` };
+  }
+  if (amount !== undefined && amount !== null && !isAmount(amount)) {
+    return { error: 'amount must be a whole number that is not negative' };
+  }
+  if (
+    openAmount !== undefined &&
+    openAmount !== null &&
+    !isAmount(openAmount)
+  ) {
+    return {
+      error: 'still expected must be a whole number that is not negative',
+    };
+  }
+  const id = `${scheduleId}:${dueDate}`;
+  const overrides = await readTable<PeriodChargeOverrideRow>(
+    'period_charge_overrides',
+  );
+  const isLive = overrides.some(o => o.id === id && !o.tombstone);
+  const fields: Record<string, FieldValue> = isLive
+    ? {}
+    : { amount: null, skipped: false, transaction_id: null, open_amount: null };
+  if (amount !== undefined) {
+    fields.amount = amount;
+  }
+  if (skipped !== undefined) {
+    fields.skipped = skipped;
+  }
+  if (transactionId !== undefined) {
+    fields.transaction_id = transactionId;
+  }
+  if (openAmount !== undefined) {
+    fields.open_amount = openAmount;
+  }
+  await writeRow('period_charge_overrides', id, fields);
+  return { id };
+}
+
+async function clearChargeOverride({
+  id,
+}: {
+  id: string;
+}): Promise<PeriodWriteResult> {
+  const overrides = await readTable<PeriodChargeOverrideRow>(
+    'period_charge_overrides',
+  );
+  const row = overrides.find(o => o.id === id && !o.tombstone);
+  if (row === undefined) {
+    return { error: `charge override "${id}" does not exist` };
+  }
+  await db.delete_('period_charge_overrides', id);
+  return { id };
+}
+
+async function setAccountExcluded(
+  accountId: string,
+  excluded: boolean,
+): Promise<PeriodWriteResult> {
+  if (!(await exists('accounts', accountId))) {
+    return { error: `account "${accountId}" does not exist` };
+  }
+  await writeRow('period_accounts', accountId, { excluded });
+  return { id: accountId };
+}
+
+async function excludeAccount({
+  accountId,
+}: {
+  accountId: string;
+}): Promise<PeriodWriteResult> {
+  return setAccountExcluded(accountId, true);
+}
+
+async function includeAccount({
+  accountId,
+}: {
+  accountId: string;
+}): Promise<PeriodWriteResult> {
+  return setAccountExcluded(accountId, false);
 }
