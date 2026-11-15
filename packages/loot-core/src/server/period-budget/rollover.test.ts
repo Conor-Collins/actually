@@ -250,6 +250,21 @@ describe('storeDuePeriods', () => {
     expect(await storeDuePeriods('2127-01-01')).toEqual([]);
   });
 
+  it('stores no period that would end after the year 9999', async () => {
+    await handlers['period-budget/set-cadence']({
+      category: 'cat1',
+      anchorDate: '9997-01-01',
+      months: 12,
+      budget: 500,
+    });
+    expect(await storeDuePeriods('9999-12-31')).toEqual(['cat1:9998-01-01']);
+    expect(await describePeriods()).toEqual([
+      'cat1:9997-01-01 9997-01-01 9998-01-01 500',
+      'cat1:9998-01-01 9998-01-01 9999-01-01 500',
+    ]);
+    expect(await storeDuePeriods('9999-12-31')).toEqual([]);
+  });
+
   it('stores nothing for a cadence that is off or has no period yet', async () => {
     await handlers['period-budget/set-cadence']({
       category: 'cat2',
@@ -400,7 +415,7 @@ describe('stored rows after a category is deleted', () => {
     expect(loaded.setAside).toEqual([]);
     const summary = summarizePeriodBudgets({
       periods: loaded.periods,
-      postings,
+      postings: loaded.postings,
       offsets: loaded.offsets,
       asOf: '2027-01-20',
     });

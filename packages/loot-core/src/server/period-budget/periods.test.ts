@@ -245,6 +245,46 @@ describe('period-budget/set-cadence and stop-cadence', () => {
     expect(await cadence('cat1')).toBe(undefined);
   });
 
+  it('refuses a cadence whose period would end after the year 9999', async () => {
+    expect(
+      await handlers['period-budget/set-cadence']({
+        category: 'cat1',
+        anchorDate: '9999-06-01',
+        months: 12,
+        budget: 500,
+      }),
+    ).toEqual({
+      error: 'a period that starts on 9999-06-01 would end after the year 9999',
+    });
+    expect(await cadence('cat1')).toBe(undefined);
+    expect((await handlers['period-budget/get-rows']()).periods).toEqual([]);
+
+    // The last start date a yearly cadence can have.
+    expect(
+      await handlers['period-budget/set-cadence']({
+        category: 'cat1',
+        anchorDate: '9998-12-31',
+        months: 12,
+        budget: 500,
+      }),
+    ).toEqual({ id: 'cat1' });
+    expect(
+      (await handlers['period-budget/get-rows']()).periods.map(
+        row => `${row.start_date} ${row.end_date}`,
+      ),
+    ).toEqual(['9998-12-31 9999-12-31']);
+
+    expect(
+      await handlers['period-budget/set-cadence']({
+        category: 'cat1',
+        months: 24,
+      }),
+    ).toEqual({
+      error: 'a period that starts on 9998-12-31 would end after the year 9999',
+    });
+    expect(await cadence('cat1')).toMatchObject({ months: 12 });
+  });
+
   it('stores no first period when the category only has a deleted period', async () => {
     await handlers['period-budget/create-period']({
       category: 'cat1',

@@ -409,16 +409,26 @@ describe('planPeriods', () => {
     );
   });
 
-  it('ends at the last valid day', () => {
+  it('plans no period that would end after the year 9999', () => {
     const planned = planPeriods({
       cadence: cadence({ months: 12 }),
       periods: [row('cat1:9997-01-01', '9997-01-01', '9998-01-01')],
       until: '9999-12-31',
     });
-    expect(planned.map(period => period.id)).toEqual([
-      'cat1:9998-01-01',
-      'cat1:9999-01-01',
-    ]);
+    expect(
+      planned.map(period => `${period.start_date} ${period.end_date}`),
+    ).toEqual(['9998-01-01 9999-01-01']);
+  });
+
+  it('plans up to the last period that ends in the year 9999', () => {
+    const planned = planPeriods({
+      cadence: cadence(),
+      periods: [row('cat1:9999-09-01', '9999-09-01', '9999-10-01')],
+      until: '9999-12-31',
+    });
+    expect(
+      planned.map(period => `${period.start_date} ${period.end_date}`),
+    ).toEqual(['9999-10-01 9999-11-01', '9999-11-01 9999-12-01']);
   });
 
   it('plans nothing when the last day is not a valid date', () => {

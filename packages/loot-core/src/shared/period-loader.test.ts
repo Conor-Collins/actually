@@ -115,6 +115,7 @@ const KEPT_A = kept('A', '2027-01-01', '2027-02-01');
 describe('loadPeriodBudgetInput: periods', () => {
   it('returns empty lists for no rows', () => {
     expect(load()).toEqual({
+      postings: [],
       periods: [],
       offsets: [],
       occurrences: [],
@@ -298,7 +299,7 @@ describe('loadPeriodBudgetInput: periods', () => {
     expect(result.periods).toEqual([KEPT_A]);
     const summary = summarizePeriodBudgets({
       periods: result.periods,
-      postings: [],
+      postings: result.postings,
       offsets: result.offsets,
       asOf: '2027-06-15',
     });
@@ -390,7 +391,7 @@ describe('loadPeriodBudgetInput: periods', () => {
     expect(
       summarizePeriodBudgets({
         periods: result.periods,
-        postings,
+        postings: result.postings,
         offsets: result.offsets,
         asOf: '2027-02-12',
       }).unassignedPostingIds,
@@ -463,7 +464,7 @@ describe('loadPeriodBudgetInput: offsets', () => {
     ]);
     const summary = summarizePeriodBudgets({
       periods: result.periods,
-      postings,
+      postings: result.postings,
       offsets: result.offsets,
       asOf: '2027-01-25',
     });
@@ -679,7 +680,7 @@ describe('loadPeriodBudgetInput: charges', () => {
     ]);
     const projection = projectPeriodCharges({
       periods: result.periods,
-      postings,
+      postings: result.postings,
       offsets: result.offsets,
       occurrences: result.occurrences,
       asOf: '2027-06-15',
@@ -897,7 +898,7 @@ describe('loadPeriodBudgetInput: charges', () => {
     ]);
     const projection = projectPeriodCharges({
       periods: result.periods,
-      postings,
+      postings: result.postings,
       offsets: result.offsets,
       occurrences: result.occurrences,
       asOf: '2027-02-12',
@@ -918,6 +919,342 @@ describe('loadPeriodBudgetInput: charges', () => {
     const before = JSON.stringify({ periods, offsets, occurrences });
     load({ periods, offsets, occurrences });
     expect(JSON.stringify({ periods, offsets, occurrences })).toEqual(before);
+  });
+});
+
+describe('loadPeriodBudgetInput: transactions', () => {
+  it('returns the transactions it was given', () => {
+    const postings = [posting('t1', '2027-01-06'), posting('t2', '2027-01-07')];
+    const result = load({ postings });
+    expect(result.postings).toEqual(postings);
+    expect(result.setAside).toEqual([]);
+  });
+
+  it('sets aside a second transaction with the same id', () => {
+    const first = posting('t1', '2027-01-06');
+    const result = load({ postings: [first, posting('t1', '2027-01-07', -5)] });
+    expect(result.postings).toEqual([first]);
+    expect(result.setAside).toEqual([
+      aside(
+        'transactions',
+        't1',
+        'duplicate-id',
+        'another row has the same id',
+      ),
+    ]);
+  });
+
+  it('sets aside a transaction with an invalid date', () => {
+    const good = posting('t2', '2027-01-07');
+    const result = load({ postings: [posting('t1', '2027-02-30'), good] });
+    expect(result.postings).toEqual([good]);
+    expect(result.setAside).toEqual([
+      aside(
+        'transactions',
+        't1',
+        'invalid-transaction',
+        'date is not a valid date',
+      ),
+    ]);
+  });
+
+  it('sets aside a transaction whose amount is not a whole number', () => {
+    const good = posting('t5', '2027-01-07');
+    const result = load({
+      postings: [
+        posting('t1', '2027-01-06', 1.5),
+        posting('t2', '2027-01-06', Number.NaN),
+        posting('t3', '2027-01-06', -Infinity),
+        posting('t4', '2027-01-06', Number.MAX_SAFE_INTEGER + 1),
+        good,
+      ],
+    });
+    expect(result.postings).toEqual([good]);
+    expect(result.setAside).toEqual(
+      ['t1', 't2', 't3', 't4'].map(id =>
+        aside(
+          'transactions',
+          id,
+          'invalid-transaction',
+          'amount is not a whole number',
+        ),
+      ),
+    );
+  });
+
+  it('counts a charge as paid outside the budget when its transaction is set aside', () => {
+    const result = load({
+      periods: [A],
+      occurrences: [
+        charge('c1', 'A', '2027-01-05', {
+          state: 'posted',
+          transactionId: 't1',
+        }),
+      ],
+      postings: [posting('t1', 'bad')],
+    });
+    expect(result.postings).toEqual([]);
+    expect(result.occurrences).toEqual([]);
+    expect(result.paidOutsideBudget).toEqual(['c1']);
+  });
+});
+
+describe('loadPeriodBudgetInput: amounts that are too large together', () => {
+  const MAX = Number.MAX_SAFE_INTEGER;
+  const TOO_LARGE = 'the amounts together are too large to calculate';
+
+  function calculate(
+    result: ReturnType<typeof loadPeriodBudgetInput>,
+    asOf = '2027-01-10',
+  ) {
+    return projectPeriodCharges({
+      periods: result.periods,
+      postings: result.postings,
+      offsets: result.offsets,
+      occurrences: result.occurrences,
+      asOf,
+    });
+  }
+
+  it('sets aside the larger of two allowances that are too large together', () => {
+    const big = period('p1', '2027-01-01', '2027-02-01', { budget: MAX });
+    const small = period('p2', '2027-01-01', '2027-02-01', {
+      category: 'cat2',
+      budget: 1,
+    });
+    for (const periods of [
+      [big, small],
+      [small, big],
+    ]) {
+      const result = load({ periods, asOf: '2027-01-10' });
+      expect(result.periods.map(p => p.id)).toEqual(['p2']);
+      expect(result.setAside).toEqual([
+        aside('period_budgets', 'p1', 'amounts-too-large', TOO_LARGE),
+      ]);
+      expect(calculate(result).summary.combinedActiveRemaining).toBe(1);
+    }
+  });
+
+  it('keeps allowances that together are the largest safe number', () => {
+    const result = load({
+      periods: [
+        period('p1', '2027-01-01', '2027-02-01', { budget: MAX - 1 }),
+        period('p2', '2027-01-01', '2027-02-01', {
+          category: 'cat2',
+          budget: 1,
+        }),
+      ],
+      asOf: '2027-01-10',
+    });
+    expect(result.setAside).toEqual([]);
+    expect(calculate(result).summary.combinedActiveRemaining).toBe(MAX);
+  });
+
+  it('counts the size of a negative carryover', () => {
+    const big = period('p1', '2027-01-01', '2027-02-01', {
+      budget: 0,
+      carryover: -MAX,
+    });
+    const small = period('p2', '2027-01-01', '2027-02-01', {
+      category: 'cat2',
+      budget: 0,
+      carryover: -1,
+    });
+    const result = load({ periods: [big, small], asOf: '2027-01-10' });
+    expect(result.periods.map(p => p.id)).toEqual(['p2']);
+    expect(result.setAside).toEqual([
+      aside('period_budgets', 'p1', 'amounts-too-large', TOO_LARGE),
+    ]);
+    expect(calculate(result).summary.totalActiveOverspending).toBe(1);
+  });
+
+  it('takes equal amounts in the order of their ids', () => {
+    const half = (MAX + 1) / 2;
+    const first = period('p1', '2027-01-01', '2027-02-01', { budget: half });
+    const second = period('p2', '2027-01-01', '2027-02-01', {
+      category: 'cat2',
+      budget: half,
+    });
+    for (const periods of [
+      [first, second],
+      [second, first],
+    ]) {
+      const result = load({ periods, asOf: '2027-01-10' });
+      expect(result.periods.map(p => p.id)).toEqual(['p1']);
+      expect(result.setAside).toEqual([
+        aside('period_budgets', 'p2', 'amounts-too-large', TOO_LARGE),
+      ]);
+      expect(calculate(result).summary.combinedActiveRemaining).toBe(half);
+    }
+  });
+
+  it('sets aside the larger of two charges that are too large together', () => {
+    const big = charge('c1', 'A', '2027-01-15', { amount: MAX });
+    const small = charge('c2', 'A', '2027-01-20', { amount: 1 });
+    for (const occurrences of [
+      [big, small],
+      [small, big],
+    ]) {
+      const result = load({ periods: [A], occurrences, asOf: '2027-01-10' });
+      expect(result.occurrences.map(o => o.id)).toEqual(['c2']);
+      expect(result.setAside).toEqual([
+        aside('charges', 'c1', 'amounts-too-large', TOO_LARGE),
+      ]);
+      expect(calculate(result).periods[0]).toMatchObject({
+        outstandingCharges: 1,
+        expectedRemaining: 999,
+      });
+    }
+  });
+
+  it('sets aside a period whose allowance and spending are too large together', () => {
+    const result = load({
+      periods: [period('p1', '2027-01-01', '2027-02-01', { budget: MAX - 1 })],
+      postings: [posting('t1', '2027-01-05', -2)],
+      asOf: '2027-01-10',
+    });
+    expect(result.periods).toEqual([]);
+    expect(result.postings.map(p => p.id)).toEqual(['t1']);
+    expect(result.setAside).toEqual([
+      aside('period_budgets', 'p1', 'amounts-too-large', TOO_LARGE),
+    ]);
+    expect(calculate(result).summary.unassignedPostingIds).toEqual(['t1']);
+  });
+
+  it('sets aside the larger of two transactions that are too large together', () => {
+    const big = posting('t1', '2027-01-05', -MAX);
+    const small = posting('t2', '2027-01-06', -1);
+    for (const postings of [
+      [big, small],
+      [small, big],
+    ]) {
+      const result = load({ postings, asOf: '2027-01-10' });
+      expect(result.postings).toEqual([small]);
+      expect(result.setAside).toEqual([
+        aside('transactions', 't1', 'amounts-too-large', TOO_LARGE),
+      ]);
+      expect(calculate(result).summary.monthlyActualSpending).toBe(1);
+    }
+  });
+
+  it('sets aside what belongs to a period that is too large', () => {
+    const result = load({
+      periods: [
+        period('p1', '2027-01-01', '2027-02-01', { budget: MAX }),
+        period('p2', '2027-01-01', '2027-02-01', {
+          category: 'cat2',
+          budget: 1,
+        }),
+      ],
+      offsets: [offset('t1', 'p1')],
+      occurrences: [charge('c1', 'p1', '2027-01-15')],
+      postings: [posting('t1', '2027-03-05')],
+      asOf: '2027-01-10',
+    });
+    expect(result.periods.map(p => p.id)).toEqual(['p2']);
+    expect(result.offsets).toEqual([]);
+    expect(result.occurrences).toEqual([]);
+    expect(result.setAside).toEqual([
+      aside(
+        'period_offsets',
+        't1',
+        'offset-period-missing',
+        'period "p1" is deleted, set aside or missing',
+      ),
+      aside(
+        'charges',
+        'c1',
+        'charge-period-missing',
+        'period "p1" is deleted, set aside or missing',
+      ),
+      aside('period_budgets', 'p1', 'amounts-too-large', TOO_LARGE),
+    ]);
+    expect(calculate(result).summary.combinedActiveRemaining).toBe(1);
+  });
+
+  it('returns input the calculation accepts whatever the rows are', () => {
+    // The same rows every run: a fixed sequence of numbers picks them.
+    let seed = 1;
+    function below(n: number): number {
+      seed = (seed * 48271) % 2147483647;
+      return seed % n;
+    }
+    function pick<T>(values: readonly T[]): T {
+      return values[below(values.length)];
+    }
+    function some<T>(make: () => T): T[] {
+      return Array.from({ length: below(6) }, make);
+    }
+    const days = [
+      '2027-01-01',
+      '2027-01-10',
+      '2027-01-20',
+      '2027-02-01',
+      '2027-02-15',
+      '2027-03-01',
+      '2027-02-30',
+      'bad',
+    ];
+    const amounts = [
+      0,
+      1,
+      -1,
+      500,
+      -500,
+      MAX,
+      -MAX,
+      MAX - 1,
+      1 - MAX,
+      (MAX + 1) / 2,
+      1.5,
+      Number.NaN,
+      Infinity,
+    ];
+    const periodIds = ['p1', 'p2', 'p3', 'p4'];
+    const transactionIds = ['t1', 't2', 't3', 't4'];
+    let setAsideForSize = 0;
+    for (let round = 0; round < 2000; round++) {
+      const result = load({
+        periods: some(() =>
+          period(pick(periodIds), pick(days), pick(days), {
+            category: pick(['cat1', 'cat2', 'gone', '', null]),
+            budget: pick([...amounts, null]),
+            carryover: pick([...amounts, null]),
+            tombstone: below(8) === 0,
+          }),
+        ),
+        offsets: some(() =>
+          offset(
+            pick(transactionIds),
+            pick([...periodIds, null]),
+            below(8) === 0,
+          ),
+        ),
+        occurrences: some(() =>
+          charge(pick(['c1', 'c2', 'c3', 'c4']), pick(periodIds), pick(days), {
+            amount: pick(amounts),
+            state: pick(['scheduled', 'posted']),
+            transactionId: pick([...transactionIds, 't9', '', undefined]),
+            transactionDate: pick([...days, undefined]),
+          }),
+        ),
+        postings: some(() =>
+          posting(
+            pick(transactionIds),
+            pick(days),
+            pick(amounts),
+            pick(['cat1', 'cat2']),
+          ),
+        ),
+        asOf: '2027-02-10',
+      });
+      expect(() => calculate(result, '2027-02-10')).not.toThrow();
+      if (result.setAside.some(row => row.reason === 'amounts-too-large')) {
+        setAsideForSize += 1;
+      }
+    }
+    // The rows are of the kind this is about.
+    expect(setAsideForSize).toBeGreaterThan(100);
   });
 });
 

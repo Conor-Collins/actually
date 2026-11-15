@@ -207,6 +207,12 @@ async function setCadence({
   if (!isWholeNumber(length) || length < 1 || length > 120) {
     return { error: 'length must be a whole number of months from 1 to 120' };
   }
+  const anchorDay = Number(anchor.slice(8, 10));
+  if (!isValidDay(cadenceEnd(anchor, length, anchorDay))) {
+    return {
+      error: `a period that starts on ${anchor} would end after the year 9999`,
+    };
+  }
   if (budget !== undefined && !isAmount(budget)) {
     return { error: 'budget must be a whole number that is not negative' };
   }
@@ -239,7 +245,7 @@ async function setCadence({
     }
     if (budget !== undefined && !hasPeriods) {
       const id = newPeriodId(category, anchor, new Set(periods.map(p => p.id)));
-      const end_date = cadenceEnd(anchor, length, Number(anchor.slice(8, 10)));
+      const end_date = cadenceEnd(anchor, length, anchorDay);
       await insertRow('period_budgets', id, {
         category,
         start_date: anchor,

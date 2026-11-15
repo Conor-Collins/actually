@@ -135,8 +135,8 @@ export function planPeriods({
 
   let start = latestEnd;
   const planned: PeriodBudgetRow[] = [];
-  // Every step moves `start` to a later day, so this ends. A start past the
-  // year 9999 is not a valid day.
+  // Every step moves `start` to a later day, so this ends. A day past the
+  // year 9999 is not a valid day, and a period cannot start or end on one.
   while (isValidDay(start) && start <= until) {
     // The id of this start date: the first one that no live period has.
     const baseId = `${category}:${start}`;
@@ -155,6 +155,9 @@ export function planPeriods({
       continue;
     }
     const end = cadenceEnd(start, cadence.months, anchorDay);
+    if (!isValidDay(end)) {
+      break;
+    }
     planned.push({
       id,
       category,

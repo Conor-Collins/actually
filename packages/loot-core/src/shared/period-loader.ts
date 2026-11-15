@@ -21,14 +21,17 @@ export type SetAsideReason =
   | 'charge-period-missing'
   | 'invalid-charge'
   | 'override-without-charge'
-  | 'invalid-override';
+  | 'invalid-override'
+  | 'invalid-transaction'
+  | 'amounts-too-large';
 
 export type SetAsideRow = {
   table:
     | 'period_budgets'
     | 'period_offsets'
     | 'period_charge_overrides'
-    | 'charges';
+    | 'charges'
+    | 'transactions';
   id: string;
   reason: SetAsideReason;
   detail: string;
@@ -46,12 +49,36 @@ type LoadPeriodBudgetInput = {
 };
 
 export type LoadedPeriodBudgetInput = {
+  postings: ExpensePosting[]; // give the calculation these, not the input list
   periods: BudgetPeriod[];
   offsets: PeriodOffset[];
   occurrences: ChargeOccurrence[];
   paidOutsideBudget: string[]; // ids of charges paid by transactions that are not postings
   setAside: SetAsideRow[];
 };
+
+const LARGEST = Number.MAX_SAFE_INTEGER;
+
+const TOO_LARGE = 'the amounts together are too large to calculate';
+
+type SizedRow = {
+  table: 'transactions' | 'period_budgets' | 'charges';
+  id: string;
+  size: number;
+};
+
+function bySizeThenId(a: SizedRow, b: SizedRow): number {
+  if (a.size !== b.size) {
+    return a.size < b.size ? -1 : 1;
+  }
+  if (a.table !== b.table) {
+    return a.table < b.table ? -1 : 1;
+  }
+  if (a.id !== b.id) {
+    return a.id < b.id ? -1 : 1;
+  }
+  return 0;
+}
 
 export function loadPeriodBudgetInput({
   periods,
@@ -61,7 +88,47 @@ export function loadPeriodBudgetInput({
   categoryIds,
   asOf,
 }: LoadPeriodBudgetInput): LoadedPeriodBudgetInput {
-  const setAside: SetAsideRow[] = [];
+  const asideTransactions: SetAsideRow[] = [];
+  const asidePeriods: SetAsideRow[] = [];
+  const asideOffsets: SetAsideRow[] = [];
+  const asideCharges: SetAsideRow[] = [];
+  const asideAmounts: SetAsideRow[] = [];
+
+  // Transactions: the calculation refuses a repeated id, an invalid date and
+  // an amount that is not a whole number.
+  const validPostings: ExpensePosting[] = [];
+  const seenPostingIds = new Set<string>();
+  for (const posting of postings) {
+    if (seenPostingIds.has(posting.id)) {
+      asideTransactions.push({
+        table: 'transactions',
+        id: posting.id,
+        reason: 'duplicate-id',
+        detail: 'another row has the same id',
+      });
+      continue;
+    }
+    seenPostingIds.add(posting.id);
+    if (!isValidDay(posting.date)) {
+      asideTransactions.push({
+        table: 'transactions',
+        id: posting.id,
+        reason: 'invalid-transaction',
+        detail: 'date is not a valid date',
+      });
+      continue;
+    }
+    if (!isWholeNumber(posting.amount)) {
+      asideTransactions.push({
+        table: 'transactions',
+        id: posting.id,
+        reason: 'invalid-transaction',
+        detail: 'amount is not a whole number',
+      });
+      continue;
+    }
+    validPostings.push(posting);
+  }
 
   // Part A: check each period row in input order; the first matching check decides.
   const candidates: BudgetPeriod[] = [];
@@ -71,7 +138,7 @@ export function loadPeriodBudgetInput({
       continue;
     }
     if (seenPeriodIds.has(row.id)) {
-      setAside.push({
+      asidePeriods.push({
         table: 'period_budgets',
         id: row.id,
         reason: 'duplicate-id',
@@ -81,7 +148,7 @@ export function loadPeriodBudgetInput({
     }
     seenPeriodIds.add(row.id);
     if (row.category === null || row.category === '') {
-      setAside.push({
+      asidePeriods.push({
         table: 'period_budgets',
         id: row.id,
         reason: 'invalid-period',
@@ -93,7 +160,7 @@ export function loadPeriodBudgetInput({
       continue;
     }
     if (!isValidDay(row.start_date)) {
-      setAside.push({
+      asidePeriods.push({
         table: 'period_budgets',
         id: row.id,
         reason: 'invalid-period',
@@ -102,7 +169,7 @@ export function loadPeriodBudgetInput({
       continue;
     }
     if (!isValidDay(row.end_date)) {
-      setAside.push({
+      asidePeriods.push({
         table: 'period_budgets',
         id: row.id,
         reason: 'invalid-period',
@@ -111,7 +178,7 @@ export function loadPeriodBudgetInput({
       continue;
     }
     if (row.end_date <= row.start_date) {
-      setAside.push({
+      asidePeriods.push({
         table: 'period_budgets',
         id: row.id,
         reason: 'invalid-period',
@@ -120,7 +187,7 @@ export function loadPeriodBudgetInput({
       continue;
     }
     if (!isWholeNumber(row.budget) || row.budget < 0) {
-      setAside.push({
+      asidePeriods.push({
         table: 'period_budgets',
         id: row.id,
         reason: 'invalid-period',
@@ -129,7 +196,7 @@ export function loadPeriodBudgetInput({
       continue;
     }
     if (!isWholeNumber(row.carryover)) {
-      setAside.push({
+      asidePeriods.push({
         table: 'period_budgets',
         id: row.id,
         reason: 'invalid-period',
@@ -138,7 +205,7 @@ export function loadPeriodBudgetInput({
       continue;
     }
     if (!isWholeNumber(row.budget + row.carryover)) {
-      setAside.push({
+      asidePeriods.push({
         table: 'period_budgets',
         id: row.id,
         reason: 'invalid-period',
@@ -176,7 +243,7 @@ export function loadPeriodBudgetInput({
         candidate.start < other.end,
     );
     if (overlapping !== undefined) {
-      setAside.push({
+      asidePeriods.push({
         table: 'period_budgets',
         id: candidate.id,
         reason: 'overlap',
@@ -187,72 +254,13 @@ export function loadPeriodBudgetInput({
     keptIds.add(candidate.id);
     kept.push(candidate);
   }
-  const resultPeriods = candidates.filter(period => keptIds.has(period.id));
-  const periodById = new Map<string, BudgetPeriod>();
-  for (const period of resultPeriods) {
-    periodById.set(period.id, period);
-  }
 
-  // Part C: offsets.
-  const postingById = new Map<string, ExpensePosting>();
-  for (const posting of postings) {
-    postingById.set(posting.id, posting);
-  }
-  const resultOffsets: PeriodOffset[] = [];
-  const seenOffsetIds = new Set<string>();
-  for (const row of offsets) {
-    if (row.tombstone) {
-      continue;
-    }
-    if (seenOffsetIds.has(row.id)) {
-      setAside.push({
-        table: 'period_offsets',
-        id: row.id,
-        reason: 'duplicate-id',
-        detail: 'another row has the same id',
-      });
-      continue;
-    }
-    seenOffsetIds.add(row.id);
-    const periodId = row.period_id;
-    if (periodId === null) {
-      setAside.push({
-        table: 'period_offsets',
-        id: row.id,
-        reason: 'offset-period-missing',
-        detail: 'period "" is deleted, set aside or missing',
-      });
-      continue;
-    }
-    const period = periodById.get(periodId);
-    if (period === undefined) {
-      setAside.push({
-        table: 'period_offsets',
-        id: row.id,
-        reason: 'offset-period-missing',
-        detail: `period "${periodId}" is deleted, set aside or missing`,
-      });
-      continue;
-    }
-    const posting = postingById.get(row.id);
-    if (posting !== undefined && posting.category !== period.category) {
-      setAside.push({
-        table: 'period_offsets',
-        id: row.id,
-        reason: 'offset-category-mismatch',
-        detail: `transaction category "${posting.category}" is not the period category "${period.category}"`,
-      });
-      continue;
-    }
-    resultOffsets.push({ transactionId: row.id, periodId });
-  }
-
-  // Part D: charges.
+  // Part C: charges, each on its own.
   const pass1: LoaderOccurrence[] = [];
   const seenChargeIds = new Set<string>();
   for (const occurrence of occurrences) {
     if (seenChargeIds.has(occurrence.id)) {
-      setAside.push({
+      asideCharges.push({
         table: 'charges',
         id: occurrence.id,
         reason: 'invalid-charge',
@@ -261,8 +269,8 @@ export function loadPeriodBudgetInput({
       continue;
     }
     seenChargeIds.add(occurrence.id);
-    if (!periodById.has(occurrence.periodId)) {
-      setAside.push({
+    if (!keptIds.has(occurrence.periodId)) {
+      asideCharges.push({
         table: 'charges',
         id: occurrence.id,
         reason: 'charge-period-missing',
@@ -271,7 +279,7 @@ export function loadPeriodBudgetInput({
       continue;
     }
     if (!isValidDay(occurrence.date)) {
-      setAside.push({
+      asideCharges.push({
         table: 'charges',
         id: occurrence.id,
         reason: 'invalid-charge',
@@ -280,7 +288,7 @@ export function loadPeriodBudgetInput({
       continue;
     }
     if (!isWholeNumber(occurrence.amount) || occurrence.amount < 0) {
-      setAside.push({
+      asideCharges.push({
         table: 'charges',
         id: occurrence.id,
         reason: 'invalid-charge',
@@ -293,7 +301,7 @@ export function loadPeriodBudgetInput({
       (occurrence.transactionId === undefined ||
         occurrence.transactionId === '')
     ) {
-      setAside.push({
+      asideCharges.push({
         table: 'charges',
         id: occurrence.id,
         reason: 'invalid-charge',
@@ -304,9 +312,139 @@ export function loadPeriodBudgetInput({
     pass1.push(occurrence);
   }
 
-  // Pass 2: one payment settles at most one charge.
-  const keeperByTransactionId = new Map<string, LoaderOccurrence>();
+  // Part D: amounts. The calculation adds amounts up and refuses a sum that is
+  // not a whole number it can hold. No sum it makes is larger than the sizes of
+  // all amounts together, so the amounts are taken smallest first and one that
+  // no longer fits is set aside.
+  const sized: SizedRow[] = [];
+  for (const posting of validPostings) {
+    sized.push({
+      table: 'transactions',
+      id: posting.id,
+      size: Math.abs(posting.amount),
+    });
+  }
+  for (const period of kept) {
+    const carried = Math.abs(period.carryover);
+    sized.push({
+      table: 'period_budgets',
+      id: period.id,
+      size:
+        carried > LARGEST - period.budget ? Infinity : period.budget + carried,
+    });
+  }
   for (const occurrence of pass1) {
+    sized.push({
+      table: 'charges',
+      id: occurrence.id,
+      size: occurrence.amount,
+    });
+  }
+  sized.sort(bySizeThenId);
+  const tooLarge = {
+    transactions: new Set<string>(),
+    period_budgets: new Set<string>(),
+    charges: new Set<string>(),
+  };
+  let total = 0;
+  for (const row of sized) {
+    if (row.size > LARGEST - total) {
+      tooLarge[row.table].add(row.id);
+      asideAmounts.push({
+        table: row.table,
+        id: row.id,
+        reason: 'amounts-too-large',
+        detail: TOO_LARGE,
+      });
+      continue;
+    }
+    total += row.size;
+  }
+
+  const resultPostings = validPostings.filter(
+    posting => !tooLarge.transactions.has(posting.id),
+  );
+  const postingById = new Map<string, ExpensePosting>();
+  for (const posting of resultPostings) {
+    postingById.set(posting.id, posting);
+  }
+  const resultPeriods = candidates.filter(
+    period => keptIds.has(period.id) && !tooLarge.period_budgets.has(period.id),
+  );
+  const periodById = new Map<string, BudgetPeriod>();
+  for (const period of resultPeriods) {
+    periodById.set(period.id, period);
+  }
+  const charges: LoaderOccurrence[] = [];
+  for (const occurrence of pass1) {
+    if (tooLarge.charges.has(occurrence.id)) {
+      continue;
+    }
+    if (!periodById.has(occurrence.periodId)) {
+      asideCharges.push({
+        table: 'charges',
+        id: occurrence.id,
+        reason: 'charge-period-missing',
+        detail: `period "${occurrence.periodId}" is deleted, set aside or missing`,
+      });
+      continue;
+    }
+    charges.push(occurrence);
+  }
+
+  // Part E: offsets.
+  const resultOffsets: PeriodOffset[] = [];
+  const seenOffsetIds = new Set<string>();
+  for (const row of offsets) {
+    if (row.tombstone) {
+      continue;
+    }
+    if (seenOffsetIds.has(row.id)) {
+      asideOffsets.push({
+        table: 'period_offsets',
+        id: row.id,
+        reason: 'duplicate-id',
+        detail: 'another row has the same id',
+      });
+      continue;
+    }
+    seenOffsetIds.add(row.id);
+    const periodId = row.period_id;
+    if (periodId === null) {
+      asideOffsets.push({
+        table: 'period_offsets',
+        id: row.id,
+        reason: 'offset-period-missing',
+        detail: 'period "" is deleted, set aside or missing',
+      });
+      continue;
+    }
+    const period = periodById.get(periodId);
+    if (period === undefined) {
+      asideOffsets.push({
+        table: 'period_offsets',
+        id: row.id,
+        reason: 'offset-period-missing',
+        detail: `period "${periodId}" is deleted, set aside or missing`,
+      });
+      continue;
+    }
+    const posting = postingById.get(row.id);
+    if (posting !== undefined && posting.category !== period.category) {
+      asideOffsets.push({
+        table: 'period_offsets',
+        id: row.id,
+        reason: 'offset-category-mismatch',
+        detail: `transaction category "${posting.category}" is not the period category "${period.category}"`,
+      });
+      continue;
+    }
+    resultOffsets.push({ transactionId: row.id, periodId });
+  }
+
+  // Part F: one payment settles at most one charge.
+  const keeperByTransactionId = new Map<string, LoaderOccurrence>();
+  for (const occurrence of charges) {
     if (occurrence.state !== 'posted') {
       continue;
     }
@@ -324,10 +462,10 @@ export function loadPeriodBudgetInput({
     }
   }
 
-  // Pass 3.
+  // Part G: the charges the calculation gets.
   const resultOccurrences: ChargeOccurrence[] = [];
   const paidOutsideBudget: string[] = [];
-  for (const occurrence of pass1) {
+  for (const occurrence of charges) {
     if (occurrence.state === 'scheduled') {
       resultOccurrences.push({
         id: occurrence.id,
@@ -382,11 +520,18 @@ export function loadPeriodBudgetInput({
   }
 
   return {
+    postings: resultPostings,
     periods: resultPeriods,
     offsets: resultOffsets,
     occurrences: resultOccurrences,
     paidOutsideBudget,
-    setAside,
+    setAside: [
+      ...asideTransactions,
+      ...asidePeriods,
+      ...asideOffsets,
+      ...asideCharges,
+      ...asideAmounts,
+    ],
   };
 }
 

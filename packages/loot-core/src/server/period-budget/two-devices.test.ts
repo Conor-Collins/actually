@@ -301,6 +301,69 @@ describe('two devices changing the same thing', () => {
     );
   });
 
+  it('one creates and deletes a period, the other later creates it without seeing the deletion: it stays deleted', async () => {
+    const earlier = await january();
+    const create = () =>
+      handlers['period-budget/create-period']({
+        category: 'cat1',
+        start: '2027-02-01',
+        end: '2027-03-01',
+        budget: 650,
+      });
+    const a = await changeOn('A', 10, earlier, async () => {
+      await create();
+      await handlers['period-budget/delete-period']({ id: 'cat1:2027-02-01' });
+    });
+    const b = await changeOn('B', 20, earlier, create);
+    await inBothOrders(earlier, a, b, async () => {
+      expect(await describePeriods()).toEqual([
+        'cat1:2027-01-01 2027-01-01 2027-02-01 500',
+        'cat1:2027-02-01 2027-02-01 2027-03-01 650 deleted',
+      ]);
+    });
+  });
+
+  it('one sets a cadence and deletes its first period, the other later sets the same cadence without seeing that: it stays deleted', async () => {
+    const setCadence = () =>
+      handlers['period-budget/set-cadence']({
+        category: 'cat1',
+        anchorDate: '2027-01-01',
+        months: 1,
+        budget: 500,
+      });
+    const a = await changeOn('A', 10, [], async () => {
+      await setCadence();
+      await handlers['period-budget/delete-period']({ id: 'cat1:2027-01-01' });
+    });
+    const b = await changeOn('B', 20, [], setCadence);
+    await inBothOrders([], a, b, async () => {
+      expect(await describePeriods()).toEqual([
+        'cat1:2027-01-01 2027-01-01 2027-02-01 500 deleted',
+      ]);
+    });
+  });
+
+  it('one creates and deletes the next period, the other later stores it without seeing the deletion: it stays deleted', async () => {
+    const earlier = await january();
+    const a = await changeOn('A', 10, earlier, async () => {
+      await handlers['period-budget/create-period']({
+        category: 'cat1',
+        start: '2027-02-01',
+        end: '2027-03-01',
+        budget: 650,
+      });
+      await handlers['period-budget/delete-period']({ id: 'cat1:2027-02-01' });
+    });
+    const b = await changeOn('B', 20, earlier, storeNextPeriod);
+    await inBothOrders(earlier, a, b, async () => {
+      expect(await describePeriods()).toEqual([
+        'cat1:2027-01-01 2027-01-01 2027-02-01 500',
+        'cat1:2027-02-01 2027-02-01 2027-03-01 500 deleted',
+      ]);
+      expect(await storeNextPeriod()).toEqual([]);
+    });
+  });
+
   it('one changes an allowance, the other the end date: both changes apply', async () => {
     const earlier = await january();
     const a = await changeOn('A', 10, earlier, () =>
@@ -404,7 +467,7 @@ describe('two devices changing the same thing', () => {
       ).toEqual(['2027-01-01 2027-01-20', '2027-02-01 2027-03-01']);
       const summary = summarizePeriodBudgets({
         periods: loaded.periods,
-        postings,
+        postings: loaded.postings,
         offsets: loaded.offsets,
         asOf: '2027-02-05',
       });
@@ -488,6 +551,22 @@ describe('two devices changing the same thing', () => {
           active: true,
           tombstone: false,
         },
+      ]);
+    });
+  });
+
+  it('one stops a cadence, the other later changes its length without seeing the stop: it stays stopped', async () => {
+    const earlier = await january();
+    const a = await changeOn('A', 10, earlier, () =>
+      handlers['period-budget/stop-cadence']({ category: 'cat1' }),
+    );
+    const b = await changeOn('B', 20, earlier, () =>
+      handlers['period-budget/set-cadence']({ category: 'cat1', months: 3 }),
+    );
+    await inBothOrders(earlier, a, b, async () => {
+      const { cadences } = await handlers['period-budget/get-rows']();
+      expect(cadences).toMatchObject([
+        { id: 'cat1', anchor_date: '2027-01-01', months: 3, active: false },
       ]);
     });
   });
