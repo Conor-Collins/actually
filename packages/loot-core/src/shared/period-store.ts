@@ -1,3 +1,5 @@
+import type { PeriodBudgetRow, PeriodCadenceRow } from '#types/models';
+
 function daysInMonth(year: number, month: number): number {
   const isLeapYear = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
   const days = [31, isLeapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
@@ -52,4 +54,133 @@ export function cadenceEnd(start: string, months: number, anchorDay: number): st
   const wantedDay = day === Math.min(anchorDay, daysInMonth(year, month)) ? anchorDay : day;
   const endDay = Math.min(wantedDay, daysInMonth(endYear, endMonth));
   return `${String(endYear).padStart(4, '0')}-${String(endMonth).padStart(2, '0')}-${String(endDay).padStart(2, '0')}`;
+}
+
+type PlanPeriodsInput = {
+  cadence: PeriodCadenceRow;
+  periods: readonly PeriodBudgetRow[]; // stored rows of all categories, live and deleted
+  until: string; // YYYY-MM-DD; plan every period that starts on or before this day
+};
+
+export function planPeriods({ cadence, periods, until }: PlanPeriodsInput): PeriodBudgetRow[] {
+  if (
+    cadence.tombstone ||
+    cadence.active !== true ||
+    !isValidDay(cadence.anchor_date) ||
+    !isWholeNumber(cadence.months) ||
+    cadence.months < 1
+  ) {
+    return [];
+  }
+  const category = cadence.id;
+  const anchorDay = Number(cadence.anchor_date.slice(8, 10));
+
+  const rowById = new Map<string, PeriodBudgetRow>();
+  const ids = new Set<string>();
+  for (const row of periods) {
+    rowById.set(row.id, row);
+    ids.add(row.id);
+  }
+
+  let latest: PeriodBudgetRow | undefined;
+  for (const row of periods) {
+    if (
+      row.category !== category ||
+      row.tombstone ||
+      !isValidDay(row.start_date) ||
+      !isValidDay(row.end_date) ||
+      !(row.end_date > row.start_date)
+    ) {
+      continue;
+    }
+    if (
+      latest === undefined ||
+      row.end_date > latest.end_date ||
+      (row.end_date === latest.end_date && row.id > latest.id)
+    ) {
+      latest = row;
+    }
+  }
+  if (latest === undefined) {
+    return [];
+  }
+
+  const budget = isWholeNumber(latest.budget) && latest.budget >= 0 ? latest.budget : 0;
+
+  let start = latest.end_date;
+  const planned: PeriodBudgetRow[] = [];
+  for (let i = 0; i < 1000 && start <= until; i++) {
+    const baseId = `${category}:${start}`;
+    const existing = rowById.get(baseId);
+    if (existing !== undefined && existing.tombstone) {
+      start =
+        isValidDay(existing.end_date) && existing.end_date > start
+          ? existing.end_date
+          : cadenceEnd(start, cadence.months, anchorDay);
+      continue;
+    }
+    const end = cadenceEnd(start, cadence.months, anchorDay);
+    const id = newPeriodId(category, start, ids);
+    planned.push({
+      id,
+      category,
+      start_date: start,
+      end_date: end,
+      budget,
+      carryover: 0,
+      carried_from: null,
+      tombstone: false,
+    });
+    ids.add(id);
+    start = end;
+  }
+  return planned;
+}
+
+export type PeriodCandidate = {
+  id: string;
+  category: string;
+  start_date: string;
+  end_date: string;
+  budget: number;
+  carryover: number;
+};
+
+type CheckPeriodWriteInput = {
+  candidate: PeriodCandidate;
+  periods: readonly PeriodBudgetRow[];
+};
+
+export function checkPeriodWrite({ candidate, periods }: CheckPeriodWriteInput): string | null {
+  if (!isValidDay(candidate.start_date)) {
+    return `start date "${candidate.start_date}" is not a valid date`;
+  }
+  if (!isValidDay(candidate.end_date)) {
+    return `end date "${candidate.end_date}" is not a valid date`;
+  }
+  if (candidate.end_date <= candidate.start_date) {
+    return `end date ${candidate.end_date} must be after start date ${candidate.start_date}`;
+  }
+  if (!isWholeNumber(candidate.budget) || candidate.budget < 0) {
+    return 'budget must be a whole number that is not negative';
+  }
+  if (!isWholeNumber(candidate.carryover)) {
+    return 'carryover must be a whole number';
+  }
+  for (const row of periods) {
+    if (
+      row.id === candidate.id ||
+      row.tombstone ||
+      row.category !== candidate.category ||
+      !isValidDay(row.start_date) ||
+      !isValidDay(row.end_date) ||
+      !(row.end_date > row.start_date)
+    ) {
+      continue;
+    }
+    if (row.start_date < candidate.end_date && candidate.start_date < row.end_date) {
+      return `overlaps period ${row.id} (${row.start_date} to ${row.end_date})`;
+    }
+  }
+  return null;
 }
