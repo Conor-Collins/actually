@@ -4,10 +4,9 @@ title: Period graph and account forecast on the Period Budget page
 status: To Do
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-15T14:31:00Z'
+updated_date: '2026-11-15T16:13:00Z'
 labels:
   - ui
-  - needs-decision
 dependencies:
   - TASK-10
   - TASK-11
@@ -25,11 +24,16 @@ Outline only. Waits on the owner's decisions (SPEC section 10): how offset payme
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Acceptance criteria are set from the owner's decisions before this task is started.
+- [ ] #1 The full graph in the opened row follows the conventions of spec section 7; a payment outside its period is drawn at its real date with the connector, and the payment list says so in words.
+- [ ] #2 Account rows on the shared axis show what S5 lists, with the "in accounts" and "owed" split of B5.
+- [ ] #3 The horizon control of S5 changes the forecast and is remembered.
+- [ ] #4 The phone "Accounts" tab shows the same figures.
 <!-- AC:END -->
 
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
 2026-11-15: two candidate plans (A stored records, B cadence and derivation) are in /data/t3-work/actually-approvals/plans-2026-11-15/ and wait for the owner's choice. Scope and acceptance criteria are unchanged until then.
+
+2026-11-15: the owner approved plan B ("Plan B, all approved"). The plan is docs/plans/period-budget.md (commit 6f90e400f); section references in the acceptance criteria (B1 to B9, S1 to S8) are to that file. Acceptance criteria set from its section B9.
 <!-- SECTION:NOTES:END -->
