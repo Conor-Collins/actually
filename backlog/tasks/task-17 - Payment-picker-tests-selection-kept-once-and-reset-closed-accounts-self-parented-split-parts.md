@@ -3,9 +3,10 @@ id: TASK-17
 title: >-
   Payment picker tests: selection kept once and reset, closed accounts,
   self-parented split parts
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-11-16T03:09:00Z'
+updated_date: '2026-11-16T05:43:00Z'
 labels:
   - testing
 dependencies: []
@@ -26,3 +27,9 @@ Follow-up from the TASK-11 round-3 review (approved at c2a5c2591, landed as 7afe
 - [ ] #3 A test in payment-queries.test.ts asserts that a payment of a closed account is given by nameablePaymentsQuery; it fails when closed accounts are left out.
 - [ ] #4 A part of a split whose parent is itself is not offered by nameablePaymentsQuery, by the same rule the calculation uses for a valid parent, with a real-database test.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-11-16 05:45Z orchestrator: started. Pyramid-loop rung 1; test and patch prepared by the orchestrator, applied by the coder, reviewed independently.
+<!-- SECTION:NOTES:END -->
