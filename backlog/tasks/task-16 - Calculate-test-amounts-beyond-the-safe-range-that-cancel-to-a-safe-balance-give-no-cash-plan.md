@@ -3,13 +3,15 @@ id: TASK-16
 title: >-
   Calculate test: amounts beyond the safe range that cancel to a safe balance
   give no cash plan
-status: Review
+status: Done
 assignee: []
 created_date: '2026-11-15T23:29:00Z'
-updated_date: '2026-11-16T05:58:00Z'
+updated_date: '2026-11-16T06:03:00Z'
 labels:
   - testing
 dependencies: []
+modified_files:
+  - packages/loot-core/src/server/period-budget/calculate.test.ts
 priority: low
 ordinal: 16000
 ---
@@ -22,8 +24,8 @@ Follow-up from the TASK-10 round-5 review (finding 13, non-blocking). In package
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A test in calculate.test.ts stores -Number.MAX_SAFE_INTEGER and Number.MAX_SAFE_INTEGER + 1 in a selected account and asserts that cash is null.
-- [ ] #2 The test fails when the amount check in the balance loop uses Number.isInteger, and passes on the landed code.
+- [x] #1 A test in calculate.test.ts stores -Number.MAX_SAFE_INTEGER and Number.MAX_SAFE_INTEGER + 1 in a selected account and asserts that cash is null.
+- [x] #2 The test fails when the amount check in the balance loop uses Number.isInteger, and passes on the landed code.
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -33,3 +35,9 @@ Follow-up from the TASK-10 round-5 review (finding 13, non-blocking). In package
 
 Round 1 (rung 1, local coder applied the orchestrator's patch): candidate 366cc17e1, one test added to calculate.test.ts, no production change. Orchestrator's gate exit 0 at 05:56Z. Independent review (gpt-6.1-sol xhigh) APPROVE at 05:58Z: both criteria met; the reviewer's own mutation (Number.isInteger in the balance loop) fails exactly the new test. No findings.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Landed task-16-cash-safe-range-test as 6adfad8b3 on 2026-11-15.
+<!-- SECTION:FINAL_SUMMARY:END -->
