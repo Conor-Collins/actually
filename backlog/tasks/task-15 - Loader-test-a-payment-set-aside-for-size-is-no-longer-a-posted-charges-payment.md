@@ -3,10 +3,10 @@ id: TASK-15
 title: >-
   Loader test: a payment set aside for size is no longer a posted charge's
   payment
-status: In Progress
+status: Review
 assignee: []
 created_date: '2026-11-15T18:40:00Z'
-updated_date: '2026-11-16T05:43:00Z'
+updated_date: '2026-11-16T05:56:00Z'
 labels:
   - testing
 dependencies: []
@@ -30,4 +30,6 @@ Follow-up from the TASK-8 round-3 review (finding 10, non-blocking). In packages
 
 <!-- SECTION:NOTES:BEGIN -->
 2026-11-16 05:45Z orchestrator: started. Pyramid-loop rung 1; test and patch prepared by the orchestrator, applied by the coder, reviewed independently.
+
+Round 1 (rung 1, local coder applied the orchestrator's patch): candidate 63ae37d25, one test added to period-loader.test.ts, no production change. Orchestrator's gate exit 0 at 05:53Z. Independent review (gpt-6.1-sol xhigh) APPROVE at 05:55Z: both criteria met; the reviewer's own mutation (postingById built from validPostings) fails exactly the new test. No findings.
 <!-- SECTION:NOTES:END -->
