@@ -1274,6 +1274,7 @@ describe('period-budget/calculate: charges and payments', () => {
           id: `${monthly}:2027-03-01`,
           reason: 'invalid-override',
           detail: `transaction "shared-payment" already pays charge ${monthly}:2027-01-01`,
+          problem: 'payment-taken',
         },
       ]);
     }
@@ -1384,6 +1385,7 @@ describe('period-budget/calculate: charges and payments', () => {
           id: `${moved}:2027-06-03`,
           reason: 'invalid-override',
           detail: `transaction "shared-payment" already pays charge ${moved}:2027-04-02`,
+          problem: 'payment-taken',
         },
       ]);
     }
@@ -1680,6 +1682,7 @@ describe('period-budget/calculate: charges and payments', () => {
         id: `${taxSchedule}:2027-04-28`,
         reason: 'invalid-override',
         detail: 'named transaction "lone-part" is missing',
+        problem: 'payment-missing',
       },
     ]);
     expect(result.movements.map(m => m.id)).toEqual([
@@ -2737,6 +2740,48 @@ describe('period-budget/calculate: payments', () => {
       'food-march',
       'rent-april',
       'rent-march',
+    ]);
+  });
+
+  it('lists the earlier payments of a category whose only period is set aside', async () => {
+    await period('rent', '2027-03-01', '2027-04-01', 150000);
+    await period('groceries', '2027-04-01', '2027-05-01', 60000);
+    db.runQuery('UPDATE period_budgets SET budget = 0.5 WHERE id = ?', [
+      'rent:2027-03-01',
+    ]);
+    await spend('rent-march', '2027-03-01', -150000, 'rent');
+    await spend('rent-april', '2027-04-01', -150000, 'rent');
+    await spend('fun-march', '2027-03-02', -500, 'fun');
+
+    const result = await calculate();
+    expect(result.needsAttention).toEqual([
+      {
+        table: 'period_budgets',
+        id: 'rent:2027-03-01',
+        reason: 'invalid-period',
+        detail: 'budget is not a whole number that is not negative',
+      },
+    ]);
+    // Rent has a period, though it is not counted; Fun has none
+    expect(
+      paymentsOf(result).map(payment => [payment.id, payment.periodId]),
+    ).toEqual([
+      ['rent-april', null],
+      ['rent-march', null],
+    ]);
+  });
+
+  it('a deleted period does not make the earlier payments of its category listed', async () => {
+    await period('rent', '2027-03-01', '2027-04-01', 150000);
+    expect(
+      await handlers['period-budget/delete-period']({ id: 'rent:2027-03-01' }),
+    ).toEqual({ id: 'rent:2027-03-01' });
+    await spend('rent-march', '2027-03-01', -150000, 'rent');
+    await spend('rent-april', '2027-04-01', -150000, 'rent');
+
+    const result = await calculate();
+    expect(paymentsOf(result).map(payment => payment.id)).toEqual([
+      'rent-april',
     ]);
   });
 

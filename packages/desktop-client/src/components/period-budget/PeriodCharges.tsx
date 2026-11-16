@@ -5,15 +5,9 @@ import { Button } from '@actual-app/components/button';
 import { Text } from '@actual-app/components/text';
 import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
-import * as monthUtils from '@actual-app/core/shared/months';
 
 import { usePeriodBudgetMutation } from '#period-budget';
-import type {
-  CategoryRowView,
-  ChargeView,
-  PaymentView,
-  PeriodView,
-} from '#period-budget';
+import type { ChargeView, PeriodView } from '#period-budget';
 
 import { ChargeForm } from './ChargeForm';
 import type { ChargeChanges } from './ChargeForm';
@@ -23,19 +17,14 @@ import type { PeriodBudgetData } from './usePeriodBudgetData';
 import type { PeriodBudgetLabels } from './usePeriodBudgetLabels';
 
 type PeriodChargesProps = {
-  row: CategoryRowView;
   view: PeriodView;
   data: PeriodBudgetData;
   labels: PeriodBudgetLabels;
 };
 
-// A payment this many days before or after a charge can be named as its
-// payment.
-const NAMEABLE_DAYS = 62;
-
 // The scheduled charges that are due in a period, with what the user can
 // change about each: skip it, its amount, and which payment pays it.
-export function PeriodCharges({ row, view, data, labels }: PeriodChargesProps) {
+export function PeriodCharges({ view, data, labels }: PeriodChargesProps) {
   const { t } = useTranslation();
   const mutation = usePeriodBudgetMutation();
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -72,20 +61,6 @@ export function PeriodCharges({ row, view, data, labels }: PeriodChargesProps) {
       return t('no longer expected');
     }
     return charge.isOverdue ? t('overdue') : t('expected');
-  }
-
-  function nameablePayments(charge: ChargeView): PaymentView[] {
-    const payments = [
-      ...row.periods.flatMap(period => period.payments),
-      ...row.unassigned,
-    ];
-    return payments.filter(
-      payment =>
-        payment.id === charge.override?.transaction_id ||
-        Math.abs(
-          monthUtils.differenceInCalendarDays(payment.date, charge.dueDate),
-        ) <= NAMEABLE_DAYS,
-    );
   }
 
   if (view.charges.length === 0) {
@@ -184,7 +159,6 @@ export function PeriodCharges({ row, view, data, labels }: PeriodChargesProps) {
             {editingId === charge.id && (
               <ChargeForm
                 charge={charge}
-                payments={nameablePayments(charge)}
                 data={data}
                 labels={labels}
                 isPending={mutation.isPending}

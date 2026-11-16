@@ -30,7 +30,18 @@ export function PanelFrame({ title, onClose, children }: PanelFrameProps) {
       }}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Text style={{ flex: 1, fontSize: 15, fontWeight: 600 }}>{title}</Text>
+        <Text
+          style={{
+            flex: 1,
+            // A long name wraps beside the button, also in one long word
+            minWidth: 0,
+            overflowWrap: 'anywhere',
+            fontSize: 15,
+            fontWeight: 600,
+          }}
+        >
+          {title}
+        </Text>
         <Button variant="bare" aria-label={t('Close')} onPress={onClose}>
           <SvgClose width={10} height={10} />
         </Button>

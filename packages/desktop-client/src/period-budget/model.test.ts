@@ -565,6 +565,32 @@ describe('buildPeriodBudgetView', () => {
     ).toEqual(['april-0', 'april-1', 'april-2']);
   });
 
+  it('lists the spending of a category whose stored periods are all set aside', () => {
+    const view = buildPeriodBudgetView({
+      calculation: calculate({
+        ...book,
+        periods: [TAX_2026, KEPT_MAY],
+        setAside: [FOOD_APRIL, FOOD_MAY],
+        offsets: [],
+      }),
+      rows,
+      categoryGroups: GROUPS,
+    });
+
+    // From the first day of the first of them on, also before this month
+    expect(findRow(view, 'food')?.periods).toEqual([]);
+    expect(
+      findRow(view, 'food')?.unassigned.map(payment => payment.id),
+    ).toEqual(['april-1', 'april-2', 'may-1', 'may-refund', 'late']);
+    expect(view.attention).toContainEqual(
+      expect.objectContaining({
+        kind: 'unassigned',
+        category: 'food',
+        total: 46500,
+      }),
+    );
+  });
+
   it('lists the payments of the month, latest first, also without a period', () => {
     expect(build().monthPayments.map(payment => payment.id)).toEqual([
       'attic',

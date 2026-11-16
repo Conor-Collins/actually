@@ -5,6 +5,7 @@ import { getScheduledAmount } from '@actual-app/core/shared/schedules';
 import type {
   PeriodBudgetRows,
   ScheduleEntity,
+  TransactionEntity,
 } from '@actual-app/core/types/models';
 import { queryOptions } from '@tanstack/react-query';
 
@@ -36,6 +37,12 @@ export function isPeriodBudgetChange(tables: readonly string[]): boolean {
 type CalculationRange = {
   asOf: string;
   horizonEnd: string;
+};
+
+type PaymentRange = {
+  start: string;
+  end: string; // the last day
+  keepId: string | null;
 };
 
 // The category Actual's rules give a schedule's transactions, by schedule id.
@@ -75,6 +82,43 @@ export const periodBudgetQueries = {
           q('schedules').filter({ tombstone: false }).select('*'),
         );
         return data;
+      },
+      staleTime: Infinity,
+    }),
+  // What can be named as the payment of a charge: the money that left any
+  // account on these days, in any category or in none, with the parts of a
+  // split in place of the split. The transaction `keepId` is listed whatever
+  // it is, so that a payment that is named already stays in the list.
+  nameablePayments: ({ start, end, keepId }: PaymentRange) =>
+    queryOptions<TransactionEntity[]>({
+      queryKey: [
+        ...periodBudgetQueries.all(),
+        'nameable-payments',
+        start,
+        end,
+        keepId,
+      ],
+      queryFn: async () => {
+        const { data }: { data: TransactionEntity[] } = await aqlQuery(
+          q('transactions')
+            .filter({
+              $and: [{ date: { $gte: start } }, { date: { $lte: end } }],
+              amount: { $lt: 0 },
+            })
+            .options({ splits: 'inline' })
+            .select('*')
+            .orderBy([{ date: 'desc' }, 'id']),
+        );
+        if (keepId === null || data.some(entry => entry.id === keepId)) {
+          return data;
+        }
+        const { data: kept }: { data: TransactionEntity[] } = await aqlQuery(
+          q('transactions')
+            .filter({ id: keepId })
+            .options({ splits: 'all' })
+            .select('*'),
+        );
+        return [...kept, ...data];
       },
       staleTime: Infinity,
     }),

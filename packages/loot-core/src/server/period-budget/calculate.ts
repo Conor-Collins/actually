@@ -450,9 +450,14 @@ export async function calculatePeriodBudget({
   for (const transaction of transactions) {
     transactionById.set(transaction.id, transaction);
   }
-  const categoriesWithPeriod = new Set(
-    loaded.periods.map(period => period.category),
-  );
+  // A category has periods also when every one of them is set aside: its
+  // spending is then in no period, and the user has to see all of it.
+  const categoriesWithPeriod = new Set<string>();
+  for (const row of periodRows) {
+    if (!row.tombstone && row.category !== null) {
+      categoriesWithPeriod.add(row.category);
+    }
+  }
   const monthStart = `${asOf.slice(0, 8)}01`;
   const payments: PeriodBudgetPayment[] = [];
   for (const payment of listPeriodPayments({

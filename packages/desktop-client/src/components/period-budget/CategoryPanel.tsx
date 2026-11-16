@@ -8,7 +8,12 @@ import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
 import * as monthUtils from '@actual-app/core/shared/months';
 
-import { isDay, monthOf, usePeriodBudgetMutation } from '#period-budget';
+import {
+  findOverlappingPeriod,
+  isDay,
+  monthOf,
+  usePeriodBudgetMutation,
+} from '#period-budget';
 import type { CategoryRowView } from '#period-budget';
 
 import { CadenceForm } from './CadenceForm';
@@ -180,6 +185,13 @@ export function CategoryPanel({
           }}
           submitLabel={t('Add the period')}
           isPending={mutation.isPending}
+          overlapOf={days => {
+            const overlapping = findOverlappingPeriod(
+              data.rows?.periods ?? [],
+              { id: null, category: category.id, ...days },
+            );
+            return overlapping && labels.period(overlapping);
+          }}
           onSubmit={values =>
             mutation.mutate([
               {
@@ -252,6 +264,7 @@ export function CategoryPanel({
               ])}
               disabled={mutation.isPending}
               onChange={link}
+              style={{ maxWidth: '100%' }}
             />
           </View>
         )}

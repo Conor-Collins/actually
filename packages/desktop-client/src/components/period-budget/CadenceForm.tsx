@@ -45,6 +45,10 @@ export function CadenceForm({
   const [error, setError] = useState<string | null>(null);
 
   function submit() {
+    // A press of Enter does not pass the disabled button
+    if (isPending) {
+      return;
+    }
     if (!isDay(anchorDate)) {
       setError(t('Enter the first day of the first period.'));
       return;

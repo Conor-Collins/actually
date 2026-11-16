@@ -333,6 +333,7 @@ describe('deriveCharges: charges', () => {
           id: 's1:2027-03-01',
           reason: 'invalid-override',
           detail: 'amount is not a whole number that is not negative',
+          problem: 'amount',
         },
       ]);
     },
@@ -669,6 +670,7 @@ describe('deriveCharges: matching', () => {
         reason: 'invalid-override',
         detail:
           'still expected amount is not a whole number that is not negative',
+        problem: 'open-amount',
       },
     ]);
   });
@@ -768,6 +770,7 @@ describe('deriveCharges: matching', () => {
         id: 's1:2027-03-01',
         reason: 'invalid-override',
         detail: 'named transaction "gone" is missing',
+        problem: 'payment-missing',
       },
     ]);
   });
@@ -791,6 +794,7 @@ describe('deriveCharges: matching', () => {
         id: 's1:2027-04-01',
         reason: 'invalid-override',
         detail: 'transaction "t1" already pays charge s1:2027-03-01',
+        problem: 'payment-taken',
       },
     ]);
   });

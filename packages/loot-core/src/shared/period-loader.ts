@@ -25,6 +25,13 @@ export type SetAsideReason =
   | 'invalid-transaction'
   | 'amounts-too-large';
 
+// Which field of a charge override cannot be used
+export type OverrideProblem =
+  | 'amount'
+  | 'open-amount'
+  | 'payment-missing' // the transaction it names does not exist
+  | 'payment-taken'; // the transaction it names pays an earlier charge
+
 export type SetAsideRow = {
   table:
     | 'period_budgets'
@@ -35,6 +42,8 @@ export type SetAsideRow = {
   id: string;
   reason: SetAsideReason;
   detail: string;
+  // With `invalid-override`, when one field of the override is ignored
+  problem?: OverrideProblem;
 };
 
 export type LoaderOccurrence = ChargeOccurrence & { transactionDate?: string };

@@ -135,6 +135,7 @@ export function PeriodPayments({
                   ])}
                   disabled={mutation.isPending}
                   onChange={targetId => countIn(payment, targetId)}
+                  style={{ maxWidth: '100%' }}
                 />
                 <Button onPress={() => setMovingId(null)}>
                   <Trans>Cancel</Trans>

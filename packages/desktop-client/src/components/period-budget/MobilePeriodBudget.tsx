@@ -171,6 +171,7 @@ export function MobilePeriodBudget({
                       flexDirection: 'column',
                       alignItems: 'stretch',
                       gap: 4,
+                      minWidth: 0,
                       padding: 10,
                       textAlign: 'left',
                       backgroundColor: theme.tableBackground,
@@ -179,7 +180,13 @@ export function MobilePeriodBudget({
                     <View
                       style={{ ...lineStyle, justifyContent: 'space-between' }}
                     >
-                      <Text style={{ fontWeight: 600 }}>
+                      <Text
+                        style={{
+                          minWidth: 0,
+                          overflowWrap: 'anywhere',
+                          fontWeight: 600,
+                        }}
+                      >
                         {row.category.name}
                       </Text>
                       <Text style={{ color: theme.pageTextSubdued }}>

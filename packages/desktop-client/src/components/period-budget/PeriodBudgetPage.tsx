@@ -49,78 +49,90 @@ export function PeriodBudgetPage() {
     }
   }
 
-  return (
-    <Page
-      header={
-        isNarrowWidth ? (
-          <MobilePageHeader
-            title={t('Period Budget')}
-            leftContent={<SettingsBackButton />}
-          />
-        ) : (
-          t('Period Budget')
-        )
-      }
+  const content = (
+    <View
+      style={{
+        flex: isNarrowWidth ? undefined : 1,
+        overflowY: isNarrowWidth ? undefined : 'auto',
+        gap: 16,
+        paddingBottom: 20,
+      }}
     >
-      <View
-        style={{
-          flex: isNarrowWidth ? undefined : 1,
-          overflowY: isNarrowWidth ? undefined : 'auto',
-          gap: 16,
-          paddingBottom: 20,
-        }}
-      >
-        {error && (
-          <Text role="alert" style={{ color: theme.errorText }}>
-            {t('The period budget could not be calculated: {{error}}', {
-              error: error.message,
-            })}
+      {error && (
+        <View role="alert" style={{ gap: 4 }}>
+          <Text style={{ color: theme.errorText }}>
+            <Trans>The period budget could not be calculated.</Trans>
           </Text>
-        )}
-        {view === null && !error && (
-          <Text role="status" style={{ color: theme.pageTextSubdued }}>
-            <Trans>Calculating the period budget</Trans>
+          {/* What the server said, for a report of the problem */}
+          <Text
+            style={{
+              fontFamily: 'monospace',
+              fontSize: 12,
+              color: theme.pageTextSubdued,
+            }}
+          >
+            {error.message}
           </Text>
-        )}
-        {view !== null && isNarrowWidth && (
-          <MobilePeriodBudget
+        </View>
+      )}
+      {view === null && !error && (
+        <Text role="status" style={{ color: theme.pageTextSubdued }}>
+          <Trans>Calculating the period budget</Trans>
+        </Text>
+      )}
+      {view !== null && isNarrowWidth && (
+        <MobilePeriodBudget
+          view={view}
+          asOf={asOf}
+          onAsOfChange={changeAsOf}
+          data={data}
+          labels={labels}
+          selection={selection}
+          onSelect={setSelection}
+        />
+      )}
+      {view !== null && !isNarrowWidth && (
+        <>
+          <AsOfControls asOf={asOf} onAsOfChange={changeAsOf} labels={labels} />
+          <PeriodBudgetFigures view={view} labels={labels} />
+          <NeedsAttention
             view={view}
-            asOf={asOf}
-            onAsOfChange={changeAsOf}
+            data={data}
+            labels={labels}
+            onOpenCategory={categoryId =>
+              setSelection({ categoryId, period: null })
+            }
+          />
+          <Timeline
+            view={view}
+            axis={axis}
+            onAxisChange={setAxis}
             data={data}
             labels={labels}
             selection={selection}
             onSelect={setSelection}
           />
-        )}
-        {view !== null && !isNarrowWidth && (
-          <>
-            <AsOfControls
-              asOf={asOf}
-              onAsOfChange={changeAsOf}
-              labels={labels}
-            />
-            <PeriodBudgetFigures view={view} labels={labels} />
-            <NeedsAttention
-              view={view}
-              data={data}
-              labels={labels}
-              onOpenCategory={categoryId =>
-                setSelection({ categoryId, period: null })
-              }
-            />
-            <Timeline
-              view={view}
-              axis={axis}
-              onAxisChange={setAxis}
-              data={data}
-              labels={labels}
-              selection={selection}
-              onSelect={setSelection}
-            />
-          </>
-        )}
-      </View>
+        </>
+      )}
+    </View>
+  );
+
+  // On a wide screen the frame of the page comes from where it is opened:
+  // the settings, or the route of a sidebar entry.
+  if (!isNarrowWidth) {
+    return content;
+  }
+
+  return (
+    <Page
+      header={
+        <MobilePageHeader
+          title={t('Period Budget')}
+          leftContent={<SettingsBackButton />}
+        />
+      }
+    >
+      {content}
     </Page>
   );
 }

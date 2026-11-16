@@ -82,6 +82,8 @@ export function charge(
 export type BookInput = {
   asOf: string;
   periods: BudgetPeriod[];
+  // Stored periods that the calculation leaves out
+  setAside?: BudgetPeriod[];
   postings?: ExpensePosting[];
   offsets?: PeriodOffset[];
   occurrences?: ChargeOccurrence[];
@@ -93,12 +95,15 @@ export type BookInput = {
 export function calculate({
   asOf,
   periods,
+  setAside = [],
   postings = [],
   offsets = [],
   occurrences = [],
   fields = {},
 }: BookInput): PeriodBudgetCalculation {
-  const categoriesWithPeriod = new Set(periods.map(entry => entry.category));
+  const categoriesWithPeriod = new Set(
+    [...periods, ...setAside].map(entry => entry.category),
+  );
   const monthStart = `${asOf.slice(0, 8)}01`;
   return {
     asOf,

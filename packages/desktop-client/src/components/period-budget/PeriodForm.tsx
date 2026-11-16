@@ -22,6 +22,9 @@ type PeriodFormProps = {
   initial: { start: string; lastDay: string; budget: number };
   submitLabel: string;
   isPending: boolean;
+  // The name of a period of the category that has a day in common with these
+  // days, which the server would refuse
+  overlapOf: (days: { start: string; end: string }) => string | null;
   onSubmit: (values: PeriodFormValues) => void;
   onCancel?: () => void;
 };
@@ -32,6 +35,7 @@ export function PeriodForm({
   initial,
   submitLabel,
   isPending,
+  overlapOf,
   onSubmit,
   onCancel,
 }: PeriodFormProps) {
@@ -42,6 +46,10 @@ export function PeriodForm({
   const [error, setError] = useState<string | null>(null);
 
   function submit() {
+    // A press of Enter does not pass the disabled button
+    if (isPending) {
+      return;
+    }
     if (!isDay(start) || !isDay(lastDay)) {
       setError(t('Enter the first and the last day of the period.'));
       return;
@@ -55,8 +63,18 @@ export function PeriodForm({
       setError(t('Enter an allowance that is not below zero.'));
       return;
     }
+    const end = endAfter(lastDay);
+    const overlapping = overlapOf({ start, end });
+    if (overlapping !== null) {
+      setError(
+        t('These days overlap the period {{period}}.', {
+          period: overlapping,
+        }),
+      );
+      return;
+    }
     setError(null);
-    onSubmit({ start, end: endAfter(lastDay), budget: amount });
+    onSubmit({ start, end, budget: amount });
   }
 
   return (

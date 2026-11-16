@@ -8,6 +8,7 @@ import { View } from '@actual-app/components/view';
 
 import { PrivacyFilter } from '#components/PrivacyFilter';
 import {
+  findOverlappingPeriod,
   lastDayOf,
   onStoredPeriod,
   usePeriodBudgetMutation,
@@ -220,6 +221,17 @@ export function PeriodPanel({
           }}
           submitLabel={t('Save')}
           isPending={isPending}
+          overlapOf={days => {
+            const overlapping = findOverlappingPeriod(
+              data.rows?.periods ?? [],
+              {
+                id: view.isPlanned ? null : period.id,
+                category: period.category,
+                ...days,
+              },
+            );
+            return overlapping && labels.period(overlapping);
+          }}
           onSubmit={save}
           onCancel={() => setIsEditing(false)}
         />
@@ -263,7 +275,7 @@ export function PeriodPanel({
         <PeriodPayments row={row} view={view} data={data} labels={labels} />
       </PanelSection>
       <PanelSection title={t('Scheduled charges')}>
-        <PeriodCharges row={row} view={view} data={data} labels={labels} />
+        <PeriodCharges view={view} data={data} labels={labels} />
       </PanelSection>
     </PanelFrame>
   );

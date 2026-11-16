@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 
+import { useResponsive } from '@actual-app/components/hooks/useResponsive';
 import * as monthUtils from '@actual-app/core/shared/months';
 
 import { useDateFormat } from '#hooks/useDateFormat';
@@ -15,8 +16,11 @@ export type PeriodBudgetLabels = {
   // "April 2026", "2026", or the first and last day of an irregular period
   period: (period: { start: string; end: string }) => string;
   money: (amount: number) => string;
-  // An amount inside a label that is read out: not given in privacy mode,
-  // where nothing on the screen can cover it
+  // Privacy mode covers the amounts. As everywhere in Actual, it does so on
+  // wide screens only: a phone has no pointer to uncover an amount with.
+  isMoneyHidden: boolean;
+  // An amount inside a label that is read out, or in another text that
+  // nothing on the screen can cover: not given while amounts are hidden
   spokenMoney: (amount: number) => string;
 };
 
@@ -27,6 +31,8 @@ export function usePeriodBudgetLabels(): PeriodBudgetLabels {
   const dateFormat = useDateFormat() || 'MM/dd/yyyy';
   const locale = useLocale();
   const isPrivate = usePrivacyMode();
+  const { isNarrowWidth } = useResponsive();
+  const isMoneyHidden = isPrivate && !isNarrowWidth;
 
   function day(value: string) {
     return monthUtils.format(value, dateFormat, locale);
@@ -59,8 +65,16 @@ export function usePeriodBudgetLabels(): PeriodBudgetLabels {
   }
 
   function spokenMoney(amount: number) {
-    return isPrivate ? t('hidden amount') : money(amount);
+    return isMoneyHidden ? t('hidden amount') : money(amount);
   }
 
-  return { day, month, shortMonth, period, money, spokenMoney };
+  return {
+    day,
+    month,
+    shortMonth,
+    period,
+    money,
+    isMoneyHidden,
+    spokenMoney,
+  };
 }

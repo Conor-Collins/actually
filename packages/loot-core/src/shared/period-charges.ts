@@ -7,7 +7,11 @@ import type {
   BudgetPeriod,
   CashMovement,
 } from './period-budget';
-import type { LoaderOccurrence, SetAsideRow } from './period-loader';
+import type {
+  LoaderOccurrence,
+  OverrideProblem,
+  SetAsideRow,
+} from './period-loader';
 import { isValidDay, isWholeNumber } from './period-store';
 
 // A schedule the user linked to a category, with a negative amount.
@@ -361,13 +365,18 @@ export function deriveCharges({
     return working.charge.dueDate >= start && working.charge.dueDate <= end;
   }
 
-  function report(working: Working, detail: string): void {
+  function report(
+    working: Working,
+    problem: OverrideProblem,
+    detail: string,
+  ): void {
     if (isInRange(working)) {
       setAside.push({
         table: 'period_charge_overrides',
         id: working.charge.id,
         reason: 'invalid-override',
         detail,
+        problem,
       });
     }
   }
@@ -387,7 +396,11 @@ export function deriveCharges({
       if (isWholeNumber(row.amount) && row.amount >= 0) {
         working.charge.amount = row.amount;
       } else {
-        report(working, 'amount is not a whole number that is not negative');
+        report(
+          working,
+          'amount',
+          'amount is not a whole number that is not negative',
+        );
       }
     }
     if (row.open_amount !== null) {
@@ -396,6 +409,7 @@ export function deriveCharges({
       } else {
         report(
           working,
+          'open-amount',
           'still expected amount is not a whole number that is not negative',
         );
       }
@@ -422,12 +436,20 @@ export function deriveCharges({
     }
     const transaction = transactionById.get(namedId);
     if (transaction === undefined) {
-      report(working, `named transaction "${namedId}" is missing`);
+      report(
+        working,
+        'payment-missing',
+        `named transaction "${namedId}" is missing`,
+      );
       continue;
     }
     const other = takenBy.get(namedId);
     if (other !== undefined) {
-      report(working, `transaction "${namedId}" already pays charge ${other}`);
+      report(
+        working,
+        'payment-taken',
+        `transaction "${namedId}" already pays charge ${other}`,
+      );
       continue;
     }
     takenBy.set(namedId, working.charge.id);

@@ -6,9 +6,10 @@ import { useResponsive } from '@actual-app/components/hooks/useResponsive';
 import { Text } from '@actual-app/components/text';
 import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
+import type { SetAsideRow } from '@actual-app/core/shared/period-loader';
 
 import { useNavigate } from '#hooks/useNavigate';
-import { usePeriodBudgetMutation } from '#period-budget';
+import { isDay, usePeriodBudgetMutation } from '#period-budget';
 import type {
   AttentionItem,
   PeriodBudgetView,
@@ -52,6 +53,113 @@ export function NeedsAttention({
 
   function write(step: PeriodBudgetWrite) {
     mutation.mutate([step]);
+  }
+
+  // Why a stored row is not counted, in the user's language. The server's
+  // own sentence is English and is not shown.
+  function reasonText(row: SetAsideRow): string {
+    switch (row.reason) {
+      case 'duplicate-id':
+        return t('it is stored more than once');
+      case 'invalid-period':
+        return t('its days or its allowance cannot be used');
+      case 'overlap':
+        return t('it overlaps another period of its category');
+      case 'offset-period-missing':
+        return t('the period is deleted or is not counted');
+      case 'offset-category-mismatch':
+        return t('the payment has another category than the period');
+      case 'charge-period-missing':
+        return t('no period that is counted has its day');
+      case 'invalid-charge':
+      case 'invalid-transaction':
+        return t('its day or its amount cannot be used');
+      case 'amounts-too-large':
+        return t('the amounts are too large to be added up');
+      default:
+        return t('it cannot be used');
+    }
+  }
+
+  function describeOverride(row: SetAsideRow): Described {
+    const removeChange: Fix = {
+      label: t('Remove the change'),
+      onPress: () =>
+        write({
+          name: 'period-budget/clear-charge-override',
+          args: { id: row.id },
+        }),
+    };
+    // The id is "<schedule id>:<due date>"
+    const index = row.id.lastIndexOf(':');
+    const scheduleId = row.id.slice(0, Math.max(index, 0));
+    const dueDate = row.id.slice(index + 1);
+    if (index <= 0 || !isDay(dueDate)) {
+      return {
+        text: t('A change to a scheduled charge cannot be read'),
+        fixes: [removeChange],
+      };
+    }
+    const words = {
+      schedule: data.scheduleName(scheduleId),
+      date: labels.day(dueDate),
+    };
+    if (row.reason === 'override-without-charge') {
+      return {
+        text: t(
+          'A change to {{schedule}} is stored for {{date}}, and no charge is due on that day',
+          words,
+        ),
+        fixes: [removeChange],
+      };
+    }
+    if (row.problem === 'amount') {
+      return {
+        text: t(
+          'The expected amount that is stored for {{schedule}} of {{date}} cannot be used',
+          words,
+        ),
+        fixes: [removeChange],
+      };
+    }
+    if (row.problem === 'open-amount') {
+      return {
+        text: t(
+          'The still expected amount that is stored for {{schedule}} of {{date}} cannot be used',
+          words,
+        ),
+        fixes: [removeChange],
+      };
+    }
+    if (row.problem === 'payment-missing' || row.problem === 'payment-taken') {
+      return {
+        text:
+          row.problem === 'payment-missing'
+            ? t(
+                'The payment that is named for {{schedule}} of {{date}} does not exist any more',
+                words,
+              )
+            : t(
+                'The payment that is named for {{schedule}} of {{date}} pays an earlier charge already',
+                words,
+              ),
+        fixes: [
+          {
+            label: t('Use the payment that matches the schedule'),
+            onPress: () =>
+              write({
+                name: 'period-budget/set-charge-override',
+                args: { scheduleId, dueDate, transactionId: null },
+              }),
+          },
+          removeChange,
+        ],
+      };
+    }
+    return {
+      text: t('A change to {{schedule}} of {{date}} cannot be used', words),
+      fixes: [removeChange],
+    };
   }
 
   function describe(item: AttentionItem): Described {
@@ -158,14 +266,14 @@ export function NeedsAttention({
             : t('A period of {{category}} is not counted', {
                 category: data.categoryName(category),
               }),
-        detail: row.detail,
+        detail: reasonText(row),
         fixes,
       };
     }
     if (row.table === 'period_offsets') {
       return {
         text: t('The period chosen for a payment is not used'),
-        detail: row.detail,
+        detail: reasonText(row),
         fixes: [
           {
             label: t('Remove the choice'),
@@ -179,25 +287,12 @@ export function NeedsAttention({
       };
     }
     if (row.table === 'period_charge_overrides') {
-      return {
-        text: t('A change to a scheduled charge has no charge on its date'),
-        detail: row.detail,
-        fixes: [
-          {
-            label: t('Remove the change'),
-            onPress: () =>
-              write({
-                name: 'period-budget/clear-charge-override',
-                args: { id: row.id },
-              }),
-          },
-        ],
-      };
+      return describeOverride(row);
     }
     if (row.table === 'charges') {
       return {
         text: t('A scheduled charge is not counted'),
-        detail: row.detail,
+        detail: reasonText(row),
         fixes: [
           {
             label: t('Open the schedules'),
@@ -208,7 +303,7 @@ export function NeedsAttention({
     }
     return {
       text: t('A transaction is not counted'),
-      detail: row.detail,
+      detail: reasonText(row),
       fixes: [
         {
           label: t('Open the transactions'),

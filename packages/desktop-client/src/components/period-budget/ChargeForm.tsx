@@ -7,8 +7,12 @@ import { Select } from '@actual-app/components/select';
 import { Text } from '@actual-app/components/text';
 import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
+import * as monthUtils from '@actual-app/core/shared/months';
+import type { TransactionEntity } from '@actual-app/core/types/models';
+import { useQuery } from '@tanstack/react-query';
 
-import type { ChargeView, PaymentView } from '#period-budget';
+import { isDay, periodBudgetQueries } from '#period-budget';
+import type { ChargeView } from '#period-budget';
 
 import { Field } from './Field';
 import { lineStyle } from './layout';
@@ -23,10 +27,12 @@ export type ChargeChanges = {
   transactionId?: string | null;
 };
 
+// The payments of this many days before and after the due date are listed
+// until the user asks for other days.
+const DAYS_AROUND = 31;
+
 type ChargeFormProps = {
   charge: ChargeView;
-  // The payments the user can name as the payment of the charge
-  payments: PaymentView[];
   data: PeriodBudgetData;
   labels: PeriodBudgetLabels;
   isPending: boolean;
@@ -35,10 +41,10 @@ type ChargeFormProps = {
 };
 
 // The amount of one charge, what is still expected after a part payment, and
-// which payment pays it.
+// which payment pays it: any money that left an account, in any category and
+// on any day, since the user asks for the days that are listed.
 export function ChargeForm({
   charge,
-  payments,
   data,
   labels,
   isPending,
@@ -51,9 +57,45 @@ export function ChargeForm({
   const amount = useAmountText(charge.amount);
   const openAmount = useAmountText(storedOpenAmount);
   const [paymentId, setPaymentId] = useState(storedPaymentId ?? '');
+  const [from, setFrom] = useState(() =>
+    monthUtils.subDays(charge.dueDate, DAYS_AROUND),
+  );
+  const [until, setUntil] = useState(() =>
+    monthUtils.addDays(charge.dueDate, DAYS_AROUND),
+  );
   const [error, setError] = useState<string | null>(null);
+  const paymentsQuery = useQuery({
+    ...periodBudgetQueries.nameablePayments({
+      start: from,
+      end: until,
+      keepId: storedPaymentId,
+    }),
+    enabled: isDay(from) && isDay(until),
+    // Keep the list while other days are fetched
+    placeholderData: previous => previous,
+  });
+  const payments = paymentsQuery.data ?? [];
+
+  function paymentLabel(payment: TransactionEntity) {
+    const words = {
+      date: labels.day(payment.date),
+      payee: data.payeeName(payment.payee ?? null),
+      account: data.accountName(payment.account),
+    };
+    // The text of a menu cannot be covered, so it has no amount then
+    return labels.isMoneyHidden
+      ? t('{{date}}, {{payee}}, {{account}}', words)
+      : t('{{date}}, {{payee}}, {{account}}, {{amount}}', {
+          ...words,
+          amount: labels.money(payment.amount),
+        });
+  }
 
   function submit() {
+    // A press of Enter does not pass the disabled button
+    if (isPending) {
+      return;
+    }
     const newAmount = amount.amount();
     if (newAmount === null) {
       setError(t('Enter an expected amount that is not below zero.'));
@@ -104,7 +146,23 @@ export function ChargeForm({
             style={{ width: 120 }}
           />
         </Field>
-        <View style={{ gap: 3 }}>
+        <Field label={t('Payments from')}>
+          <Input
+            type="date"
+            value={from}
+            onChangeValue={setFrom}
+            style={{ width: 150 }}
+          />
+        </Field>
+        <Field label={t('Payments until')}>
+          <Input
+            type="date"
+            value={until}
+            onChangeValue={setUntil}
+            style={{ width: 150 }}
+          />
+        </Field>
+        <View style={{ gap: 3, minWidth: 0, maxWidth: '100%' }}>
           <Text style={{ fontSize: 12, color: theme.pageTextSubdued }}>
             <Trans>Paid by</Trans>
           </Text>
@@ -114,14 +172,11 @@ export function ChargeForm({
               ['', t('The payment that matches the schedule')],
               ...payments.map((payment): [string, string] => [
                 payment.id,
-                t('{{date}}, {{payee}}, {{amount}}', {
-                  date: labels.day(payment.date),
-                  payee: data.payeeName(payment.payee),
-                  amount: labels.money(payment.amount),
-                }),
+                paymentLabel(payment),
               ]),
             ]}
             onChange={setPaymentId}
+            style={{ maxWidth: '100%' }}
           />
         </View>
         <Button variant="primary" isDisabled={isPending} onPress={submit}>

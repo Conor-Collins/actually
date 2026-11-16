@@ -1,4 +1,4 @@
-import { MemoryRouter, useLocation } from 'react-router';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 
 import { generateAccount } from '@actual-app/core/mocks';
 import { initServer } from '@actual-app/core/platform/client/connection';
@@ -11,6 +11,7 @@ import type {
   PayeeEntity,
   PeriodBudgetRows,
   ScheduleEntity,
+  TransactionEntity,
 } from '@actual-app/core/types/models';
 import {
   fireEvent,
@@ -22,6 +23,7 @@ import {
 import userEvent from '@testing-library/user-event';
 
 import { accountQueries } from '#accounts';
+import { SidebarMenuRoute } from '#components/sidebar/SidebarMenuRoute';
 import {
   configureTestAppStore,
   createTestQueryClient,
@@ -100,6 +102,8 @@ const PAYEES: PayeeEntity[] = [
 ];
 
 const CHECKING = { ...generateAccount('Checking'), id: 'checking' };
+// Not one of the accounts of the budget
+const SAVINGS = { ...generateAccount('Savings', false, true), id: 'savings' };
 
 const FOOD_FEBRUARY = period(
   'food-feb',
@@ -224,6 +228,82 @@ const CHARGES = [
   charge('sched-tax', 'tax', '2018-03-15', null, 30000),
 ];
 
+function transaction(
+  id: string,
+  date: string,
+  amount: number,
+  payee: string,
+  account = 'checking',
+  category = 'tax',
+): TransactionEntity {
+  return { id, date, amount, payee, account, category };
+}
+
+// What the accounts hold around the tax charge of the 15th of March, as the
+// transactions the page can ask for
+const LEDGER: TransactionEntity[] = [
+  transaction('p-tax', '2017-03-20', -30000, 'tax-office'),
+  // In another category
+  transaction('t-food', '2017-03-10', -30500, 'grocer', 'checking', 'food'),
+  // From an account that is not in the budget
+  transaction('t-savings', '2017-03-18', -30000, 'tax-office', 'savings'),
+  // Money that came in
+  transaction('t-refund', '2017-03-12', 4000, 'tax-office'),
+  // 31 days before and after the due day, and one day more
+  transaction('t-day-32-before', '2017-02-11', -100, 'bakery'),
+  transaction('t-day-31-before', '2017-02-12', -200, 'bakery'),
+  transaction('t-day-31-after', '2017-04-15', -300, 'bakery'),
+  transaction('t-day-32-after', '2017-04-16', -400, 'bakery'),
+  // Long before the charge
+  transaction('t-early', '2016-12-20', -30000, 'tax-office'),
+];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isBefore(value: unknown, bound: unknown): boolean {
+  if (typeof value === 'string' && typeof bound === 'string') {
+    return value < bound;
+  }
+  if (typeof value === 'number' && typeof bound === 'number') {
+    return value < bound;
+  }
+  throw new Error('The ledger of the test cannot compare these values');
+}
+
+// Whether a transaction meets the conditions of a query, for the few kinds
+// of condition the page uses
+function meets(entry: TransactionEntity, conditions: unknown): boolean {
+  if (!isRecord(conditions)) {
+    throw new Error('The ledger of the test cannot read this filter');
+  }
+  const fields = new Map<string, unknown>(Object.entries(entry));
+  return Object.entries(conditions).every(([name, condition]) => {
+    if (name === '$and') {
+      return (
+        Array.isArray(condition) && condition.every(part => meets(entry, part))
+      );
+    }
+    const value = fields.get(name);
+    if (!isRecord(condition)) {
+      return value === condition;
+    }
+    return Object.entries(condition).every(([operator, bound]) => {
+      if (operator === '$lt') {
+        return isBefore(value, bound);
+      }
+      if (operator === '$gte') {
+        return !isBefore(value, bound);
+      }
+      if (operator === '$lte') {
+        return !isBefore(bound, value);
+      }
+      throw new Error(`The ledger of the test does not know ${operator}`);
+    });
+  });
+}
+
 const SET_ASIDE: SetAsideRow[] = [
   {
     table: 'period_budgets',
@@ -306,6 +386,10 @@ let isTidy = false;
 let hasPlannedAugust = false;
 // Rent had one period, and it was deleted
 let hasDeletedRentPeriod = false;
+// The transaction the user named as the payment of the tax charge of June
+let namedJunePaymentId: string | null = null;
+// More rows that the calculation set aside
+let extraSetAside: SetAsideRow[] = [];
 
 function rows(): PeriodBudgetRows {
   return {
@@ -324,7 +408,7 @@ function rows(): PeriodBudgetRows {
       stored(FOOD_MARCH),
       stored(FOOD_MAY),
       stored(FOOD_JUNE, { carried_from: 'food-may' }),
-      stored(FOOD_OVERLAPPING),
+      ...(isTidy ? [] : [stored(FOOD_OVERLAPPING)]),
       stored(TAX_2017),
       ...(storedJuly ? [stored(storedJuly)] : []),
       ...(hasDeletedRentPeriod
@@ -354,6 +438,18 @@ function rows(): PeriodBudgetRows {
         open_amount: null,
         tombstone: false,
       },
+      ...(namedJunePaymentId === null
+        ? []
+        : [
+            {
+              id: 'sched-tax:2017-06-10',
+              amount: null,
+              skipped: false,
+              transaction_id: namedJunePaymentId,
+              open_amount: null,
+              tombstone: false,
+            },
+          ]),
     ],
   };
 }
@@ -399,7 +495,7 @@ function calculation(asOf: string): PeriodBudgetCalculation {
       charges: isTidy
         ? CHARGES.filter(entry => entry.periodId !== null)
         : CHARGES,
-      needsAttention: isTidy ? [] : SET_ASIDE,
+      needsAttention: isTidy ? [] : [...SET_ASIDE, ...extraSetAside],
       unresolved: isTidy
         ? []
         : [
@@ -435,7 +531,17 @@ function startServer() {
       grouped: GROUPS,
       list: GROUPS.flatMap(group => group.categories ?? []),
     }),
-    query: async () => ({ data: SCHEDULES, dependencies: [] }),
+    query: async query => {
+      if (query.table !== 'transactions') {
+        return { data: SCHEDULES, dependencies: [] };
+      }
+      const found = LEDGER.filter(entry =>
+        query.filterExpressions.every(conditions => meets(entry, conditions)),
+      );
+      // Latest first, as the page asks
+      found.sort((a, b) => (a.date < b.date ? 1 : -1));
+      return { data: found, dependencies: [] };
+    },
     'rules-run': async ({ transaction }) =>
       transaction.schedule === 'sched-rent'
         ? { ...transaction, category: 'rent' }
@@ -470,16 +576,21 @@ function Location() {
   return <div data-testid="location">{location.pathname}</div>;
 }
 
+function createBook() {
+  const queryClient = createTestQueryClient();
+  // The app's own queries for these were loaded before the connection mock
+  queryClient.setQueryData(accountQueries.list().queryKey, [CHECKING, SAVINGS]);
+  queryClient.setQueryData(payeeQueries.list().queryKey, PAYEES);
+  const store = configureTestAppStore({ queryClient });
+  return { queryClient, store };
+}
+
 // The page on the 15th of June 2017, or on another day of that month
 async function renderPage({
   asOf = '2017-06-15',
   isPrivate = false,
 }: { asOf?: string; isPrivate?: boolean } = {}) {
-  const queryClient = createTestQueryClient();
-  // The app's own queries for these were loaded before the connection mock
-  queryClient.setQueryData(accountQueries.list().queryKey, [CHECKING]);
-  queryClient.setQueryData(payeeQueries.list().queryKey, PAYEES);
-  const store = configureTestAppStore({ queryClient });
+  const { queryClient, store } = createBook();
   if (isPrivate) {
     store.dispatch(mergeSyncedPrefs({ isPrivacyEnabled: 'true' }));
   }
@@ -553,6 +664,12 @@ function type(field: HTMLElement, value: string) {
   fireEvent.change(field, { target: { value } });
 }
 
+// A field of Actual takes Enter when the key comes up
+function pressEnter(field: HTMLElement) {
+  fireEvent.keyDown(field, { key: 'Enter' });
+  fireEvent.keyUp(field, { key: 'Enter' });
+}
+
 function attentionItem(text: string) {
   const region = screen.getByRole('region', { name: 'Needs attention' });
   const item = within(region)
@@ -562,6 +679,88 @@ function attentionItem(text: string) {
     throw new Error(`Nothing needs attention with "${text}"`);
   }
   return item;
+}
+
+// The page where the app has it: under the settings, or at its own address
+// when it is one of the entries of the sidebar
+async function renderRoutedPage({ isInSidebar }: { isInSidebar: boolean }) {
+  const { queryClient, store } = createBook();
+  if (isInSidebar) {
+    store.dispatch(
+      mergeSyncedPrefs({
+        'sidebar-menu-items': JSON.stringify([
+          { id: 'period-budget', hidden: false },
+        ]),
+      }),
+    );
+  }
+  render(
+    <TestProviders store={store} queryClient={queryClient}>
+      <MemoryRouter initialEntries={['/period-budget']}>
+        <Routes>
+          <Route
+            path="/period-budget"
+            element={
+              <SidebarMenuRoute id="period-budget">
+                <PeriodBudgetPage />
+              </SidebarMenuRoute>
+            }
+          />
+          <Route
+            path="/settings/period-budget"
+            element={
+              <SidebarMenuRoute id="period-budget" isInSettings>
+                <PeriodBudgetPage />
+              </SidebarMenuRoute>
+            }
+          />
+        </Routes>
+        <Location />
+      </MemoryRouter>
+    </TestProviders>,
+  );
+  await screen.findByRole('region', { name: 'Needs attention' });
+}
+
+// The options of the menu that a button opens
+async function optionsOf(trigger: HTMLElement) {
+  await userEvent.click(trigger);
+  const menu = await screen.findByRole('menu');
+  const options = within(menu)
+    .getAllByRole('button')
+    .map(option => option.textContent);
+  await userEvent.keyboard('{Escape}');
+  await waitFor(() =>
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument(),
+  );
+  return options;
+}
+
+// Makes the server answer the next write only when the test says so
+function holdNextWrite() {
+  const waiting: Array<(result: WriteResult) => void> = [];
+  write.mockImplementationOnce(
+    () =>
+      new Promise<WriteResult>(resolve => {
+        waiting.push(resolve);
+      }),
+  );
+  return () => {
+    for (const answer of waiting) {
+      answer({ id: 'stored-id' });
+    }
+  };
+}
+
+// A row that the calculation set aside, with a sentence the page must not
+// show
+function setAside(
+  table: SetAsideRow['table'],
+  id: string,
+  reason: SetAsideRow['reason'],
+  problem?: SetAsideRow['problem'],
+): SetAsideRow {
+  return { table, id, reason, detail: 'the sentence of the server', problem };
 }
 
 // Every write the page sent, in order
@@ -578,6 +777,8 @@ describe('PeriodBudgetPage', () => {
     isTidy = false;
     hasPlannedAugust = false;
     hasDeletedRentPeriod = false;
+    namedJunePaymentId = null;
+    extraSetAside = [];
     responsive.isNarrowWidth = false;
     startServer();
   });
@@ -673,9 +874,12 @@ describe('PeriodBudgetPage', () => {
         </TestProviders>,
       );
 
-      expect(await screen.findByRole('alert')).toHaveTextContent(
-        'The period budget could not be calculated: the book is locked',
-      );
+      // In the user's language, with what the server said after it
+      const alert = await screen.findByRole('alert');
+      expect(Array.from(alert.children).map(line => line.textContent)).toEqual([
+        'The period budget could not be calculated.',
+        'the book is locked',
+      ]);
     });
   });
 
@@ -791,6 +995,14 @@ describe('PeriodBudgetPage', () => {
       expect(
         within(rowOf('Tax')).queryByTestId('payment-link'),
       ).not.toBeInTheDocument();
+    });
+
+    it('lets a press on a dot through to the bar under it', async () => {
+      await renderPage();
+
+      for (const mark of screen.getAllByRole('img')) {
+        expect(mark).toHaveStyle({ pointerEvents: 'none' });
+      }
     });
 
     it('moves and zooms the months it shows', async () => {
@@ -936,6 +1148,7 @@ describe('PeriodBudgetPage', () => {
     });
 
     it('changes the days and the allowance of a stored period', async () => {
+      isTidy = true;
       await renderPage();
       const panel = await openPeriod('Food', 'June 2017');
 
@@ -970,6 +1183,7 @@ describe('PeriodBudgetPage', () => {
     });
 
     it('does not save a period with days or an allowance that cannot be', async () => {
+      isTidy = true;
       await renderPage();
       const panel = await openPeriod('Food', 'June 2017');
       await userEvent.click(
@@ -1001,6 +1215,54 @@ describe('PeriodBudgetPage', () => {
       await userEvent.click(save);
       expect(within(panel).getByRole('button', { name: 'Edit' })).toBeVisible();
       expect(write).not.toHaveBeenCalled();
+    });
+
+    it('does not save days that another period of the category has', async () => {
+      await renderPage();
+      // A stored period from the 15th of May to the 14th of June is set aside
+      const panel = await openPeriod('Food', 'June 2017');
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Edit' }),
+      );
+
+      type(within(panel).getByRole('textbox', { name: 'Allowance' }), '450');
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Save' }),
+      );
+
+      expect(within(panel).getByRole('alert')).toHaveTextContent(
+        'These days overlap the period 05/15/2017 to 06/14/2017.',
+      );
+      expect(write).not.toHaveBeenCalled();
+    });
+
+    it('sends a change of a period once, whatever is pressed while it is saved', async () => {
+      isTidy = true;
+      const answer = holdNextWrite();
+      await renderPage();
+      const panel = await openPeriod('Food', 'June 2017');
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Edit' }),
+      );
+      const allowance = within(panel).getByRole('textbox', {
+        name: 'Allowance',
+      });
+      type(allowance, '450');
+      const save = within(panel).getByRole('button', { name: 'Save' });
+      await userEvent.click(save);
+      await waitFor(() => expect(save).toBeDisabled());
+
+      await userEvent.click(save);
+      pressEnter(allowance);
+
+      answer();
+      expect(
+        await within(panel).findByRole('button', { name: 'Edit' }),
+      ).toBeInTheDocument();
+      await expectWrites([
+        'period-budget/update-period',
+        { id: 'food-june', budget: 45000 },
+      ]);
     });
 
     it('stores a planned period when it is changed, and keeps it open', async () => {
@@ -1324,7 +1586,7 @@ describe('PeriodBudgetPage', () => {
         within(panel).getByRole('button', {
           name: 'The payment that matches the schedule',
         }),
-        '03/20/2017, Tax office, -300.00',
+        '03/20/2017, Tax office, Checking, -300.00',
       );
       await userEvent.click(
         within(panel).getByRole('button', { name: 'Save' }),
@@ -1338,6 +1600,148 @@ describe('PeriodBudgetPage', () => {
           openAmount: 5000,
           transactionId: 'p-tax',
         },
+      ]);
+    });
+
+    it('offers the money that left any account around the due day, and of other days when asked', async () => {
+      await renderPage();
+      const panel = await openPeriod('Tax', '2017');
+      await userEvent.click(
+        within(panel).getByRole('button', {
+          name: 'Change Tax office of 03/15/2017',
+        }),
+      );
+      const paidBy = within(panel).getByRole('button', {
+        name: 'The payment that matches the schedule',
+      });
+
+      expect(within(panel).getByLabelText('Payments from')).toHaveValue(
+        '2017-02-12',
+      );
+      expect(within(panel).getByLabelText('Payments until')).toHaveValue(
+        '2017-04-15',
+      );
+      // Latest first; of any category and account, and not what came in
+      await waitFor(async () =>
+        expect(await optionsOf(paidBy)).toEqual([
+          'The payment that matches the schedule',
+          '04/15/2017, Bakery, Checking, -3.00',
+          '03/20/2017, Tax office, Checking, -300.00',
+          '03/18/2017, Tax office, Savings, -300.00',
+          '03/10/2017, Grocer, Checking, -305.00',
+          '02/12/2017, Bakery, Checking, -2.00',
+        ]),
+      );
+
+      type(within(panel).getByLabelText('Payments from'), '2016-12-20');
+      type(within(panel).getByLabelText('Payments until'), '2017-03-10');
+      await waitFor(async () =>
+        expect(await optionsOf(paidBy)).toEqual([
+          'The payment that matches the schedule',
+          '03/10/2017, Grocer, Checking, -305.00',
+          '02/12/2017, Bakery, Checking, -2.00',
+          '02/11/2017, Bakery, Checking, -1.00',
+          '12/20/2016, Tax office, Checking, -300.00',
+        ]),
+      );
+      await choose(paidBy, '12/20/2016, Tax office, Checking, -300.00');
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Save' }),
+      );
+
+      await expectWrites([
+        'period-budget/set-charge-override',
+        {
+          scheduleId: 'sched-tax',
+          dueDate: '2017-03-15',
+          transactionId: 't-early',
+        },
+      ]);
+    });
+
+    it('keeps the payment that is named in the list, whatever its day', async () => {
+      namedJunePaymentId = 't-early';
+      await renderPage();
+      const panel = await openPeriod('Tax', '2017');
+      await userEvent.click(
+        within(panel).getByRole('button', {
+          name: 'Change Tax office of 06/10/2017',
+        }),
+      );
+
+      // No other payment is in the 31 days around the 10th of June
+      const paidBy = await within(panel).findByRole('button', {
+        name: '12/20/2016, Tax office, Checking, -300.00',
+      });
+      expect(await optionsOf(paidBy)).toEqual([
+        'The payment that matches the schedule',
+        '12/20/2016, Tax office, Checking, -300.00',
+      ]);
+      await choose(paidBy, 'The payment that matches the schedule');
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Save' }),
+      );
+
+      await expectWrites([
+        'period-budget/set-charge-override',
+        { scheduleId: 'sched-tax', dueDate: '2017-06-10', transactionId: null },
+      ]);
+    });
+
+    it('does not give amounts in the list of payments in privacy mode', async () => {
+      await renderPage({ isPrivate: true });
+      const panel = await openPeriod('Tax', '2017');
+      await userEvent.click(
+        within(panel).getByRole('button', {
+          name: 'Change Tax office of 03/15/2017',
+        }),
+      );
+      const paidBy = within(panel).getByRole('button', {
+        name: 'The payment that matches the schedule',
+      });
+
+      await waitFor(async () =>
+        expect(await optionsOf(paidBy)).toEqual([
+          'The payment that matches the schedule',
+          '04/15/2017, Bakery, Checking',
+          '03/20/2017, Tax office, Checking',
+          '03/18/2017, Tax office, Savings',
+          '03/10/2017, Grocer, Checking',
+          '02/12/2017, Bakery, Checking',
+        ]),
+      );
+    });
+
+    it('sends a change of a charge once, whatever is pressed while it is saved', async () => {
+      const answer = holdNextWrite();
+      await renderPage();
+      const panel = await openPeriod('Tax', '2017');
+      await userEvent.click(
+        within(panel).getByRole('button', {
+          name: 'Change Tax office of 09/15/2017',
+        }),
+      );
+      const amount = within(panel).getByLabelText('Expected amount');
+      type(amount, '250');
+      const save = within(panel).getByRole('button', { name: 'Save' });
+      await userEvent.click(save);
+      await waitFor(() => expect(save).toBeDisabled());
+
+      await userEvent.click(save);
+      pressEnter(amount);
+      pressEnter(
+        within(panel).getByLabelText('Still expected after a part payment'),
+      );
+
+      answer();
+      await waitFor(() =>
+        expect(
+          within(panel).queryByLabelText('Expected amount'),
+        ).not.toBeInTheDocument(),
+      );
+      await expectWrites([
+        'period-budget/set-charge-override',
+        { scheduleId: 'sched-tax', dueDate: '2017-09-15', amount: 25000 },
       ]);
     });
 
@@ -1466,6 +1870,38 @@ describe('PeriodBudgetPage', () => {
       ]);
     });
 
+    it('starts repeating periods once, whatever is pressed while it is saved', async () => {
+      const answer = holdNextWrite();
+      await renderPage();
+      const panel = await openCategory('Rent');
+      const repeating = section(panel, 'Repeating periods');
+      const allowance = within(repeating).getByLabelText(
+        'Allowance of each period',
+      );
+      type(allowance, '900');
+      const start = within(repeating).getByRole('button', {
+        name: 'Start repeating',
+      });
+      await userEvent.click(start);
+      await waitFor(() => expect(start).toBeDisabled());
+
+      await userEvent.click(start);
+      pressEnter(allowance);
+      pressEnter(within(repeating).getByLabelText('Length in months'));
+
+      answer();
+      await waitFor(() => expect(start).toBeEnabled());
+      await expectWrites([
+        'period-budget/set-cadence',
+        {
+          category: 'rent',
+          anchorDate: '2017-06-01',
+          months: 1,
+          budget: 90000,
+        },
+      ]);
+    });
+
     it('changes how the periods repeat', async () => {
       await renderPage();
       const panel = await openCategory('Food');
@@ -1572,6 +2008,39 @@ describe('PeriodBudgetPage', () => {
           start: '2017-06-01',
           end: '2017-09-01',
           budget: 90000,
+        },
+      ]);
+    });
+
+    it('does not add a period on days that another period of the category has', async () => {
+      await renderPage();
+      const panel = await openCategory('Food');
+      const adding = section(panel, 'Add one period');
+
+      type(within(adding).getByLabelText('First day'), '2017-03-31');
+      type(within(adding).getByLabelText('Last day'), '2017-04-30');
+      await userEvent.click(
+        within(adding).getByRole('button', { name: 'Add the period' }),
+      );
+
+      expect(within(adding).getByRole('alert')).toHaveTextContent(
+        'These days overlap the period March 2017.',
+      );
+      expect(write).not.toHaveBeenCalled();
+
+      // The day after the last day of March is free
+      type(within(adding).getByLabelText('First day'), '2017-04-01');
+      await userEvent.click(
+        within(adding).getByRole('button', { name: 'Add the period' }),
+      );
+
+      await expectWrites([
+        'period-budget/create-period',
+        {
+          category: 'food',
+          start: '2017-04-01',
+          end: '2017-05-01',
+          budget: 40000,
         },
       ]);
     });
@@ -1690,14 +2159,95 @@ describe('PeriodBudgetPage', () => {
           .getAllByRole('listitem')
           .map(item => item.textContent),
       ).toEqual([
-        'A period of Food is not counted (it overlaps another period)Delete the periodOpen Food',
-        'The period chosen for a payment is not used (its period is gone)Remove the choice',
-        'A change to a scheduled charge has no charge on its date (no charge is due on 2016-01-15)Remove the change',
-        'A scheduled charge is not counted (its amount is not a number)Open the schedules',
-        'A transaction is not counted (its date is not a day)Open the transactions',
+        'A period of Food is not counted (it overlaps another period of its category)Delete the periodOpen Food',
+        'The period chosen for a payment is not used (the period is deleted or is not counted)Remove the choice',
+        'A change to Deleted schedule is stored for 01/15/2016, and no charge is due on that dayRemove the change',
+        'A scheduled charge is not counted (its day or its amount cannot be used)Open the schedules',
+        'A transaction is not counted (its day or its amount cannot be used)Open the transactions',
         'Charges of Tax office are due on days with no period of Tax (1, the first on 03/15/2018)Add a period to TaxUnlink Tax office',
         'Spending of Food that is in no period (1) 50.00Add a period to Food',
         'Spending without a category (1) 7.00Categorize the transactions',
+      ]);
+    });
+
+    it('says in the language of the user why a row is not counted', async () => {
+      extraSetAside = [
+        setAside('period_budgets', 'p1', 'duplicate-id'),
+        setAside('period_budgets', 'p2', 'invalid-period'),
+        setAside('period_budgets', 'p3', 'amounts-too-large'),
+        setAside('period_offsets', 'o1', 'offset-category-mismatch'),
+        setAside('charges', 'c1', 'charge-period-missing'),
+        // A reason that is not one of a transaction
+        setAside('transactions', 't1', 'invalid-override'),
+      ];
+      await renderPage();
+
+      const region = screen.getByRole('region', { name: 'Needs attention' });
+      expect(region).not.toHaveTextContent('the sentence of the server');
+      expect(
+        within(region)
+          .getAllByRole('listitem')
+          .slice(5, 11)
+          .map(item => item.textContent),
+      ).toEqual([
+        'A period is not counted (it is stored more than once)Delete the period',
+        'A period is not counted (its days or its allowance cannot be used)Delete the period',
+        'A period is not counted (the amounts are too large to be added up)Delete the period',
+        'The period chosen for a payment is not used (the payment has another category than the period)Remove the choice',
+        // A charge that the calculation does not list
+        'A scheduled charge is not counted (no period that is counted has its day)Open the schedules',
+        'A transaction is not counted (it cannot be used)Open the transactions',
+      ]);
+    });
+
+    it('says what is wrong with a change to a charge, and offers what fixes it', async () => {
+      const table = 'period_charge_overrides';
+      const reason = 'invalid-override';
+      extraSetAside = [
+        setAside(table, 'sched-tax:2017-06-10', reason, 'payment-missing'),
+        setAside(table, 'sched-tax:2017-09-15', reason, 'payment-taken'),
+        setAside(table, 'sched-rent:2017-06-01', reason, 'amount'),
+        setAside(table, 'sched-rent:2017-07-01', reason, 'open-amount'),
+        setAside(table, 'sched-gym:2017-07-01', reason),
+        setAside(table, 'not a charge', reason, 'amount'),
+      ];
+      await renderPage();
+
+      const region = screen.getByRole('region', { name: 'Needs attention' });
+      expect(region).not.toHaveTextContent('the sentence of the server');
+      expect(
+        within(region)
+          .getAllByRole('listitem')
+          .slice(5, 11)
+          .map(item => item.textContent),
+      ).toEqual([
+        'The payment that is named for Tax office of 06/10/2017 does not exist any moreUse the payment that matches the scheduleRemove the change',
+        'The payment that is named for Tax office of 09/15/2017 pays an earlier charge alreadyUse the payment that matches the scheduleRemove the change',
+        'The expected amount that is stored for Landlord of 06/01/2017 cannot be usedRemove the change',
+        'The still expected amount that is stored for Landlord of 07/01/2017 cannot be usedRemove the change',
+        'A change to Gym of 07/01/2017 cannot be usedRemove the change',
+        'A change to a scheduled charge cannot be readRemove the change',
+      ]);
+
+      await userEvent.click(
+        within(attentionItem('does not exist any more')).getByRole('button', {
+          name: 'Use the payment that matches the schedule',
+        }),
+      );
+      await expectWrites([
+        'period-budget/set-charge-override',
+        { scheduleId: 'sched-tax', dueDate: '2017-06-10', transactionId: null },
+      ]);
+      write.mockClear();
+
+      await userEvent.click(
+        within(attentionItem('pays an earlier charge')).getByRole('button', {
+          name: 'Remove the change',
+        }),
+      );
+      await expectWrites([
+        'period-budget/clear-charge-override',
+        { id: 'sched-tax:2017-09-15' },
       ]);
     });
 
@@ -1931,6 +2481,17 @@ describe('PeriodBudgetPage', () => {
       expect(screen.getByRole('region', { name: 'Food' })).toBeInTheDocument();
     });
 
+    it('gives the amounts in words in privacy mode, which covers no amount on a phone', async () => {
+      await renderPage({ isPrivate: true });
+      await userEvent.click(screen.getByRole('tab', { name: 'Periods' }));
+
+      expect(
+        screen.getByRole('img', {
+          name: 'Spent 150.00 of 500.00, 50% of the period has passed',
+        }),
+      ).toBeInTheDocument();
+    });
+
     it('goes to the uncategorized transactions of the phone', async () => {
       await renderPage();
 
@@ -1941,6 +2502,40 @@ describe('PeriodBudgetPage', () => {
       expect(screen.getByTestId('location')).toHaveTextContent(
         '/categories/uncategorized',
       );
+    });
+  });
+
+  describe('where the app has it', () => {
+    it('is under the settings until it is an entry of the sidebar, without a frame of its own', async () => {
+      await renderRoutedPage({ isInSidebar: false });
+
+      expect(screen.getByTestId('location')).toHaveTextContent(
+        '/settings/period-budget',
+      );
+      // The frame and the title are those of the settings
+      expect(screen.queryByRole('main')).not.toBeInTheDocument();
+      expect(screen.queryByText('Period Budget')).not.toBeInTheDocument();
+    });
+
+    it('has one frame and one title as an entry of the sidebar', async () => {
+      await renderRoutedPage({ isInSidebar: true });
+
+      expect(screen.getByTestId('location')).toHaveTextContent(
+        /^\/period-budget$/,
+      );
+      expect(screen.getAllByRole('main')).toHaveLength(1);
+      expect(screen.getAllByText('Period Budget')).toHaveLength(1);
+    });
+
+    it('has one frame and one title on a phone, under the settings', async () => {
+      responsive.isNarrowWidth = true;
+      await renderRoutedPage({ isInSidebar: true });
+
+      expect(screen.getByTestId('location')).toHaveTextContent(
+        '/settings/period-budget',
+      );
+      expect(screen.getAllByRole('main')).toHaveLength(1);
+      expect(screen.getAllByText('Period Budget')).toHaveLength(1);
     });
   });
 });
