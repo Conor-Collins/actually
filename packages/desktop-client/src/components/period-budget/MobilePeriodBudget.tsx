@@ -14,6 +14,7 @@ import type { CategoryRowView, PeriodBudgetView } from '#period-budget';
 import { AsOfControls } from './AsOfControls';
 import { LabelledMoney } from './LabelledMoney';
 import { lineStyle } from './layout';
+import { MobileAccounts } from './MobileAccounts';
 import { MobilePeriodBar } from './MobilePeriodBar';
 import { Money } from './Money';
 import { NeedsAttention } from './NeedsAttention';
@@ -33,7 +34,9 @@ type MobilePeriodBudgetProps = {
   onSelect: (selection: Selection | null) => void;
 };
 
-type TabId = 'month' | 'periods';
+const TAB_IDS = ['month', 'periods', 'accounts'] as const;
+
+type TabId = (typeof TAB_IDS)[number];
 
 const panelStyle: CSSProperties = {
   display: 'flex',
@@ -55,7 +58,8 @@ function tabStyle({ isSelected }: { isSelected: boolean }): CSSProperties {
 }
 
 // The page on a phone: "Month" has the figures and the month's payments,
-// "Periods" has a short bar for each category and opens a period in place.
+// "Periods" has a short bar for each category and opens a period in place,
+// "Accounts" has the cash forecast of each selected account.
 export function MobilePeriodBudget({
   view,
   asOf,
@@ -82,7 +86,9 @@ export function MobilePeriodBudget({
   return (
     <Tabs
       selectedKey={tab}
-      onSelectionChange={key => setTab(key === 'periods' ? 'periods' : 'month')}
+      onSelectionChange={key =>
+        setTab(TAB_IDS.find(id => id === key) ?? 'month')
+      }
       style={{ display: 'flex', flexDirection: 'column', gap: 12 }}
     >
       <TabList aria-label={t('Period Budget')} style={{ display: 'flex' }}>
@@ -91,6 +97,9 @@ export function MobilePeriodBudget({
         </Tab>
         <Tab id="periods" style={tabStyle}>
           <Trans>Periods</Trans>
+        </Tab>
+        <Tab id="accounts" style={tabStyle}>
+          <Trans>Accounts</Trans>
         </Tab>
       </TabList>
 
@@ -226,6 +235,10 @@ export function MobilePeriodBudget({
             </View>
           ))
         )}
+      </TabPanel>
+
+      <TabPanel id="accounts" style={panelStyle}>
+        <MobileAccounts asOf={view.asOf} data={data} labels={labels} />
       </TabPanel>
     </Tabs>
   );

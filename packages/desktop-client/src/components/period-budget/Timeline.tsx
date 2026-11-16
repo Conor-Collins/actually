@@ -9,17 +9,13 @@ import { Text } from '@actual-app/components/text';
 import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
 
-import {
-  axisAround,
-  axisMonths,
-  axisPosition,
-  monthOf,
-  moveAxis,
-} from '#period-budget';
+import { axisAround, axisMonths, monthOf, moveAxis } from '#period-budget';
 import type { Axis, PeriodBudgetView } from '#period-budget';
 
+import { AccountsForecast } from './AccountsForecast';
+import { AxisHeader } from './AxisHeader';
 import { CategoryRow } from './CategoryRow';
-import { AMOUNT_WIDTH, lineStyle, NAME_WIDTH, percent } from './layout';
+import { AMOUNT_WIDTH, lineStyle, NAME_WIDTH } from './layout';
 import type { Selection } from './selection';
 import type { PeriodBudgetData } from './usePeriodBudgetData';
 import type { PeriodBudgetLabels } from './usePeriodBudgetLabels';
@@ -37,7 +33,8 @@ type TimelineProps = {
 const ZOOMS = [3, 6, 12];
 
 // The categories by group, each with the figures of its active period and
-// its periods on an axis of months that can be moved and zoomed.
+// its periods on an axis of months that can be moved and zoomed. The accounts
+// of the cash forecast are under them, on the same axis.
 export function Timeline({
   view,
   axis,
@@ -101,7 +98,7 @@ export function Timeline({
         </Text>
       </View>
 
-      <View style={{ overflowX: 'auto' }}>
+      <View style={{ overflowX: 'auto', gap: 24 }}>
         <View
           role="table"
           aria-label={t('Periods by category')}
@@ -139,27 +136,14 @@ export function Timeline({
                   {header}
                 </View>
               ))}
-              <View
-                role="columnheader"
-                aria-label={t('Periods from {{start}} to {{end}}', {
+              <AxisHeader
+                axis={axis}
+                label={t('Periods from {{start}} to {{end}}', {
                   start: labels.month(months[0]),
                   end: labels.month(months[months.length - 1]),
                 })}
-                style={{ flex: 1, position: 'relative', height: 16 }}
-              >
-                {months.map(month => (
-                  <View
-                    key={month}
-                    aria-hidden
-                    style={{ position: 'absolute', paddingLeft: 3 }}
-                    nativeStyle={{
-                      left: percent(axisPosition(axis, `${month}-01`)),
-                    }}
-                  >
-                    {labels.shortMonth(month)}
-                  </View>
-                ))}
-              </View>
+                labels={labels}
+              />
             </View>
           </View>
           {view.groups.map(({ group, rows }) => (
@@ -199,6 +183,12 @@ export function Timeline({
             </View>
           ))}
         </View>
+        <AccountsForecast
+          asOf={view.asOf}
+          axis={axis}
+          data={data}
+          labels={labels}
+        />
       </View>
     </View>
   );
