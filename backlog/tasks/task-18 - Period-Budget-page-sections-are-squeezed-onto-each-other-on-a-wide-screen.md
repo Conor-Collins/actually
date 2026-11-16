@@ -1,10 +1,10 @@
 ---
 id: TASK-18
 title: 'Period Budget page: sections are squeezed onto each other on a wide screen'
-status: In Progress
+status: Review
 assignee: []
 created_date: '2026-11-16T06:35:00Z'
-updated_date: '2026-11-16T06:36:00Z'
+updated_date: '2026-11-16T06:45:00Z'
 labels:
   - bug
 dependencies: []
@@ -29,4 +29,6 @@ Found by TASK-13 on 2026-11-15, the first time the page ran in a real browser (C
 
 <!-- SECTION:NOTES:BEGIN -->
 2026-11-15 06:50Z orchestrator: rung 1. Cause found with the built bundle in Chromium: the scrolling block's flex children shrink (View has min-height 0). Prototype by the orchestrator: one inner block with flex-shrink 0 in PeriodBudgetPage.tsx, and e2e/period-budget.test.ts (3 tests: 3 pass on the fix, 3 fail on main's bundle). Patch sha256 51e114e8.
+
+2026-11-15 06:50Z orchestrator: candidate fcec13361 (rung 1, round 1; the coder applied the orchestrator's patch, patch-id equal). Gate typecheck, lint, test: exit 0. Browser test on the candidate's bundle: 3 passed; on main's bundle: 3 failed. Sent to review.
 <!-- SECTION:NOTES:END -->
