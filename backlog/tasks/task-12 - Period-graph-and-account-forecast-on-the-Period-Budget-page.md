@@ -4,7 +4,7 @@ title: Period graph and account forecast on the Period Budget page
 status: In Progress
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-16T04:41:00Z'
+updated_date: '2026-11-16T05:17:00Z'
 labels:
   - ui
 dependencies:
@@ -40,4 +40,6 @@ Outline only. Waits on the owner's decisions (SPEC section 10): how offset payme
 2026-11-16 03:12Z: started after TASK-11 landed (7afe35c91). Pyramid-loop rung 1; the orchestrator prototypes the reference and tests in a scratch worktree as for TASK-11.
 
 2026-11-16 04:42Z: rung 1 round 1 candidate 7ae146edc on task-12-graph-and-forecast (one commit on 68a5c7a74; the orchestrator's patch applied by the local coder, patch-id verified). Gate running; review next.
+
+2026-11-16 05:18Z: review of 7ae146edc (round 1): REQUEST CHANGES. One blocking finding (an early payment of a period that has not begun had no connector), one should-fix (two lint suppressions for index keys), two notes (relative sibling imports: kept as the repository does; screen-reader text under the shared PrivacyFilter: inherited, follow-up), one surviving mutant (warning colour of a negative lowest balance). Round 2 candidate f97424508 (second commit on 7ae146edc; the orchestrator's patch applied by the local coder, patch-id verified). Gate running; review next.
 <!-- SECTION:NOTES:END -->
