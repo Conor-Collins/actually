@@ -9,11 +9,15 @@ import {
 import type { ScheduleData } from '#server/forecast/forecast-schedules';
 import { getScheduleDates } from '#server/schedules/occurrences';
 import { parseDate, subDays } from '#shared/months';
-import { projectPeriodCharges } from '#shared/period-budget';
+import {
+  listPeriodPayments,
+  projectPeriodCharges,
+} from '#shared/period-budget';
 import type {
   AccountSnapshot,
   CashMovement,
   PeriodChargesProjection,
+  PeriodPayment,
 } from '#shared/period-budget';
 import {
   deriveCharges,
@@ -54,10 +58,19 @@ export type ScheduledCashMovement = PlannedCashMovement & {
   isPosted: boolean;
 };
 
+export type PeriodBudgetPayment = PeriodPayment & {
+  account: string;
+  payee: string | null;
+};
+
 export type PeriodBudgetCalculation = {
   asOf: string;
   horizonEnd: string;
   projection: PeriodChargesProjection;
+  // Budget spending up to the as-of day that is in a category with a period,
+  // or is dated in the month of the as-of day, each with the period it counts
+  // in.
+  payments: PeriodBudgetPayment[];
   plannedPeriodIds: string[]; // periods that follow from a cadence and are not stored yet
   charges: DerivedCharge[];
   derivedOffsetIds: string[]; // payments counted in the period of their charge
@@ -433,6 +446,39 @@ export async function calculatePeriodBudget({
   });
   const projection = projectPeriodCharges({ ...loaded, asOf });
 
+  const transactionById = new Map<string, TransactionRow>();
+  for (const transaction of transactions) {
+    transactionById.set(transaction.id, transaction);
+  }
+  // A category has periods also when every one of them is set aside: its
+  // spending is then in no period, and the user has to see all of it.
+  const categoriesWithPeriod = new Set<string>();
+  for (const row of periodRows) {
+    if (!row.tombstone && row.category !== null) {
+      categoriesWithPeriod.add(row.category);
+    }
+  }
+  const monthStart = `${asOf.slice(0, 8)}01`;
+  const payments: PeriodBudgetPayment[] = [];
+  for (const payment of listPeriodPayments({
+    periods: loaded.periods,
+    postings: loaded.postings,
+    offsets: loaded.offsets,
+    asOf,
+  })) {
+    if (
+      categoriesWithPeriod.has(payment.category) ||
+      payment.date >= monthStart
+    ) {
+      const transaction = transactionById.get(payment.id);
+      payments.push({
+        ...payment,
+        account: transaction?.account ?? '',
+        payee: transaction?.payee ?? null,
+      });
+    }
+  }
+
   // Step 7: what the user should look at. A charge after the horizon may get
   // its period later, so it is not reported.
   const chargeById = new Map<string, DerivedCharge>();
@@ -733,6 +779,7 @@ export async function calculatePeriodBudget({
     asOf,
     horizonEnd,
     projection,
+    payments,
     plannedPeriodIds: planned.map(row => row.id),
     charges: derived.charges,
     derivedOffsetIds: derived.derivedOffsetIds.filter(id => postingIds.has(id)),

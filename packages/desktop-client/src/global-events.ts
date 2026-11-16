@@ -15,6 +15,7 @@ import {
   addNotification,
 } from './notifications/notificationsSlice';
 import { payeeQueries } from './payees';
+import { isPeriodBudgetChange, periodBudgetQueries } from './period-budget';
 import { loadPrefs } from './prefs/prefsSlice';
 import type { AppStore } from './redux/store';
 import { dashboardQueries, reportQueries } from './reports';
@@ -97,6 +98,14 @@ export function handleGlobalEvents(store: AppStore, queryClient: QueryClient) {
       promises.push(
         queryClient.invalidateQueries({
           queryKey: reportQueries.lists(),
+        }),
+      );
+    }
+
+    if (isPeriodBudgetChange(tables)) {
+      promises.push(
+        queryClient.invalidateQueries({
+          queryKey: periodBudgetQueries.all(),
         }),
       );
     }

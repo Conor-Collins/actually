@@ -19,6 +19,8 @@
     "#accounts": "./src/accounts/index.ts",
     "#budget": "./src/budget/index.ts",
     "#payees": "./src/payees/index.ts",
+    "#period-budget": "./src/period-budget/index.ts",
+    "#period-budget/*": "./src/period-budget/*.ts",
     "#queries": "./src/queries/index.ts",
     "#redux": "./src/redux/index.ts",
     "#reports": "./src/reports/index.ts",

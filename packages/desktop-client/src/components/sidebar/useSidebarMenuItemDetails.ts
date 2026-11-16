@@ -5,6 +5,7 @@ import {
   SvgLibrary,
   SvgReports,
   SvgTag,
+  SvgTime,
   SvgTuning,
   SvgUserGroup,
   SvgWallet,
@@ -34,5 +35,6 @@ export function useSidebarMenuItemDetails(): Record<
     tags: { title: t('Tags'), Icon: SvgTag },
     rules: { title: t('Rules'), Icon: SvgTuning },
     'bank-sync': { title: t('Bank Sync'), Icon: SvgLibrary },
+    'period-budget': { title: t('Period Budget'), Icon: SvgTime },
   };
 }

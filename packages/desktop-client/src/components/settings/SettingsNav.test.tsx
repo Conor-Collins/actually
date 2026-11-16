@@ -54,6 +54,7 @@ describe('SettingsNav', () => {
       '/settings/tags',
       '/settings/rules',
       '/settings/bank-sync',
+      '/settings/period-budget',
       '/settings/advanced',
       '/settings/experimental',
     ]);
@@ -76,6 +77,7 @@ describe('SettingsNav', () => {
       '/settings/tags',
       '/settings/rules',
       '/settings/bank-sync',
+      '/settings/period-budget',
       '/settings/advanced',
       '/settings/experimental',
     ]);

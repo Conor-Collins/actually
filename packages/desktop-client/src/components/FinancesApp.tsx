@@ -36,6 +36,7 @@ import { TransactionEdit } from './mobile/transactions/TransactionEdit';
 import { NotificationsPage } from './news/NotificationsPage';
 import { Notifications } from './Notifications';
 import { MobilePageHeaderProvider, MobilePageHeaderSlot } from './Page';
+import { PeriodBudgetPage } from './period-budget/PeriodBudgetPage';
 import { Reports } from './reports';
 import { NarrowAlternate, WideComponent } from './responsive';
 import { useMultiuserEnabled } from './ServerContext';
@@ -366,6 +367,14 @@ export function FinancesApp() {
                       }
                     />
                     <Route
+                      path="/period-budget"
+                      element={
+                        <SidebarMenuRoute id="period-budget">
+                          <PeriodBudgetPage />
+                        </SidebarMenuRoute>
+                      }
+                    />
+                    <Route
                       path="/rules"
                       element={
                         <SidebarMenuRoute id="rules">
@@ -431,6 +440,14 @@ export function FinancesApp() {
                         element={
                           <SidebarMenuRoute id="tags" isInSettings>
                             <ManageTagsPage />
+                          </SidebarMenuRoute>
+                        }
+                      />
+                      <Route
+                        path="period-budget"
+                        element={
+                          <SidebarMenuRoute id="period-budget" isInSettings>
+                            <PeriodBudgetPage />
                           </SidebarMenuRoute>
                         }
                       />
