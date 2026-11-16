@@ -3,13 +3,15 @@ id: TASK-15
 title: >-
   Loader test: a payment set aside for size is no longer a posted charge's
   payment
-status: Review
+status: Done
 assignee: []
 created_date: '2026-11-15T18:40:00Z'
-updated_date: '2026-11-16T05:56:00Z'
+updated_date: '2026-11-16T05:58:00Z'
 labels:
   - testing
 dependencies: []
+modified_files:
+  - packages/loot-core/src/shared/period-loader.test.ts
 priority: low
 ordinal: 15000
 ---
@@ -22,8 +24,8 @@ Follow-up from the TASK-8 round-3 review (finding 10, non-blocking). In packages
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A test in period-loader.test.ts has a posted charge whose payment is set aside only by the size rule and asserts: the payment is not in the returned postings, the charge is in paidOutsideBudget, no returned occurrence names the payment, and projectPeriodCharges accepts the result.
-- [ ] #2 The test fails when the payment lookup is built from the postings before the size rule, and passes on the landed code.
+- [x] #1 A test in period-loader.test.ts has a posted charge whose payment is set aside only by the size rule and asserts: the payment is not in the returned postings, the charge is in paidOutsideBudget, no returned occurrence names the payment, and projectPeriodCharges accepts the result.
+- [x] #2 The test fails when the payment lookup is built from the postings before the size rule, and passes on the landed code.
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -33,3 +35,9 @@ Follow-up from the TASK-8 round-3 review (finding 10, non-blocking). In packages
 
 Round 1 (rung 1, local coder applied the orchestrator's patch): candidate 63ae37d25, one test added to period-loader.test.ts, no production change. Orchestrator's gate exit 0 at 05:53Z. Independent review (gpt-6.1-sol xhigh) APPROVE at 05:55Z: both criteria met; the reviewer's own mutation (postingById built from validPostings) fails exactly the new test. No findings.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Landed task-15-loader-size-test as bcc191432 on 2026-11-15.
+<!-- SECTION:FINAL_SUMMARY:END -->
