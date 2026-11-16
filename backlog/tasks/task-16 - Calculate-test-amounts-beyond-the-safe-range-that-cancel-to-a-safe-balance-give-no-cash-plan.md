@@ -3,9 +3,10 @@ id: TASK-16
 title: >-
   Calculate test: amounts beyond the safe range that cancel to a safe balance
   give no cash plan
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-11-15T23:29:00Z'
+updated_date: '2026-11-16T05:43:00Z'
 labels:
   - testing
 dependencies: []
@@ -24,3 +25,9 @@ Follow-up from the TASK-10 round-5 review (finding 13, non-blocking). In package
 - [ ] #1 A test in calculate.test.ts stores -Number.MAX_SAFE_INTEGER and Number.MAX_SAFE_INTEGER + 1 in a selected account and asserts that cash is null.
 - [ ] #2 The test fails when the amount check in the balance loop uses Number.isInteger, and passes on the landed code.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-11-16 05:45Z orchestrator: started. Pyramid-loop rung 1; test and patch prepared by the orchestrator, applied by the coder, reviewed independently.
+<!-- SECTION:NOTES:END -->
