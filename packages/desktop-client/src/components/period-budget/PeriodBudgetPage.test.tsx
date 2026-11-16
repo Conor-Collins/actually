@@ -1,0 +1,1946 @@
+import { MemoryRouter, useLocation } from 'react-router';
+
+import { generateAccount } from '@actual-app/core/mocks';
+import { initServer } from '@actual-app/core/platform/client/connection';
+import type { PeriodBudgetCalculation } from '@actual-app/core/server/period-budget/calculate';
+import type { BudgetPeriod } from '@actual-app/core/shared/period-budget';
+import type { SetAsideRow } from '@actual-app/core/shared/period-loader';
+import type { Handlers } from '@actual-app/core/types/handlers';
+import type {
+  CategoryGroupEntity,
+  PayeeEntity,
+  PeriodBudgetRows,
+  ScheduleEntity,
+} from '@actual-app/core/types/models';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+
+import { accountQueries } from '#accounts';
+import {
+  configureTestAppStore,
+  createTestQueryClient,
+  TestProviders,
+} from '#mocks';
+import { payeeQueries } from '#payees';
+import {
+  calculate,
+  charge,
+  NO_ROWS,
+  period,
+  stored,
+} from '#period-budget/fixtures';
+import { mergeSyncedPrefs } from '#prefs/prefsSlice';
+
+import { PeriodBudgetPage } from './PeriodBudgetPage';
+
+vi.mock(
+  '@actual-app/core/platform/client/connection',
+  () => import('#mocks/connection'),
+);
+
+const responsive = vi.hoisted(() => ({ isNarrowWidth: false }));
+vi.mock('@actual-app/components/hooks/useResponsive', () => ({
+  useResponsive: () => responsive,
+}));
+
+type WriteResult = { id: string } | { error: string };
+
+const WRITE_NAMES = [
+  'period-budget/set-cadence',
+  'period-budget/stop-cadence',
+  'period-budget/create-period',
+  'period-budget/update-period',
+  'period-budget/delete-period',
+  'period-budget/restore-period',
+  'period-budget/carry',
+  'period-budget/set-offset',
+  'period-budget/clear-offset',
+  'period-budget/link-schedule',
+  'period-budget/unlink-schedule',
+  'period-budget/set-charge-override',
+  'period-budget/clear-charge-override',
+] as const;
+
+// The book: Food has a period for each month from the cadence (July only
+// follows from it), Tax has one period for the year with a linked schedule,
+// and Rent has nothing of the period budget yet.
+const GROUPS: CategoryGroupEntity[] = [
+  {
+    id: 'usual',
+    name: 'Usual expenses',
+    categories: [
+      { id: 'food', name: 'Food', group: 'usual' },
+      { id: 'tax', name: 'Tax', group: 'usual' },
+      { id: 'rent', name: 'Rent', group: 'usual' },
+    ],
+  },
+  {
+    id: 'income',
+    name: 'Income',
+    is_income: true,
+    categories: [
+      { id: 'salary', name: 'Salary', group: 'income', is_income: true },
+    ],
+  },
+];
+
+const PAYEES: PayeeEntity[] = [
+  { id: 'grocer', name: 'Grocer' },
+  { id: 'market', name: 'Market' },
+  { id: 'bakery', name: 'Bakery' },
+  { id: 'tax-office', name: 'Tax office' },
+  { id: 'landlord', name: 'Landlord' },
+  { id: 'to-checking', name: '', transfer_acct: 'checking' },
+];
+
+const CHECKING = { ...generateAccount('Checking'), id: 'checking' };
+
+const FOOD_FEBRUARY = period(
+  'food-feb',
+  'food',
+  '2017-02-01',
+  '2017-03-01',
+  38000,
+);
+const FOOD_MARCH = period(
+  'food-march',
+  'food',
+  '2017-03-01',
+  '2017-04-01',
+  40000,
+);
+const FOOD_MAY = period('food-may', 'food', '2017-05-01', '2017-06-01', 40000);
+const FOOD_JUNE = period(
+  'food-june',
+  'food',
+  '2017-06-01',
+  '2017-07-01',
+  40000,
+  10000,
+);
+const FOOD_JULY = period(
+  'food:2017-07-01',
+  'food',
+  '2017-07-01',
+  '2017-08-01',
+  40000,
+);
+// Stored, but set aside by the calculation because it overlaps May and June
+const FOOD_OVERLAPPING = period(
+  'food-bad',
+  'food',
+  '2017-05-15',
+  '2017-06-15',
+  1000,
+);
+const FOOD_AUGUST = period(
+  'food:2017-08-01',
+  'food',
+  '2017-08-01',
+  '2017-09-01',
+  40000,
+);
+const TAX_2017 = period('tax-2017', 'tax', '2017-01-01', '2018-01-01', 150000);
+const RENT_JANUARY = period(
+  'rent-january',
+  'rent',
+  '2017-01-01',
+  '2017-02-01',
+  80000,
+);
+
+type Payment = {
+  id: string;
+  category: string;
+  date: string;
+  amount: number;
+  payee: string;
+};
+
+const PAYMENTS: Payment[] = [
+  {
+    id: 'p-tax',
+    category: 'tax',
+    date: '2017-03-20',
+    amount: -30000,
+    payee: 'tax-office',
+  },
+  // April has no period
+  {
+    id: 'p-april',
+    category: 'food',
+    date: '2017-04-12',
+    amount: -5000,
+    payee: 'bakery',
+  },
+  {
+    id: 'p-may',
+    category: 'food',
+    date: '2017-05-10',
+    amount: -25000,
+    payee: 'grocer',
+  },
+  // Counted in June by the user's choice
+  {
+    id: 'p-early',
+    category: 'food',
+    date: '2017-05-30',
+    amount: -3000,
+    payee: 'market',
+  },
+  {
+    id: 'p-rent',
+    category: 'rent',
+    date: '2017-06-01',
+    amount: -90000,
+    payee: 'landlord',
+  },
+  {
+    id: 'p-june',
+    category: 'food',
+    date: '2017-06-05',
+    amount: -12000,
+    payee: 'grocer',
+  },
+];
+
+const CHARGES = [
+  charge('sched-tax', 'tax', '2017-03-15', 'tax-2017', 30000, {
+    status: 'paid',
+    paymentId: 'p-tax',
+    paymentDate: '2017-03-20',
+  }),
+  charge('sched-tax', 'tax', '2017-06-10', 'tax-2017', 30000),
+  charge('sched-tax', 'tax', '2017-09-15', 'tax-2017', 21000),
+  charge('sched-tax', 'tax', '2017-12-15', 'tax-2017', 30000, {
+    status: 'skipped',
+  }),
+  charge('sched-tax', 'tax', '2018-03-15', null, 30000),
+];
+
+const SET_ASIDE: SetAsideRow[] = [
+  {
+    table: 'period_budgets',
+    id: 'food-bad',
+    reason: 'overlap',
+    detail: 'it overlaps another period',
+  },
+  {
+    table: 'period_offsets',
+    id: 'tx-gone',
+    reason: 'offset-period-missing',
+    detail: 'its period is gone',
+  },
+  {
+    table: 'period_charge_overrides',
+    id: 'sched-old:2016-01-15',
+    reason: 'override-without-charge',
+    detail: 'no charge is due on 2016-01-15',
+  },
+  {
+    table: 'charges',
+    id: 'sched-tax:2018-03-15',
+    reason: 'charge-period-missing',
+    detail: 'no period contains 2018-03-15',
+  },
+  {
+    table: 'charges',
+    id: 'sched-odd:2017-02-01',
+    reason: 'invalid-charge',
+    detail: 'its amount is not a number',
+  },
+  {
+    table: 'transactions',
+    id: 'tx-odd',
+    reason: 'invalid-transaction',
+    detail: 'its date is not a day',
+  },
+];
+
+function schedule(id: string, name: string, payee: string): ScheduleEntity {
+  return {
+    id,
+    name,
+    rule: `rule-${id}`,
+    next_date: '2017-06-10',
+    completed: false,
+    posts_transaction: false,
+    tombstone: false,
+    _payee: payee,
+    _account: 'checking',
+    _amount: -30000,
+    _amountOp: 'is',
+    _date: '2017-06-10',
+    _conditions: [],
+    _actions: [],
+  };
+}
+
+const SCHEDULES = [
+  schedule('sched-tax', 'Tax office', 'tax-office'),
+  // The rules give its transactions the category Rent
+  schedule('sched-rent', 'Landlord', 'landlord'),
+  schedule('sched-gym', 'Gym', 'grocer'),
+  { ...schedule('sched-loan', 'Old loan', 'grocer'), completed: true },
+];
+
+const write = vi.fn(
+  async (_name: string, _args: unknown): Promise<WriteResult> => ({
+    id: 'stored-id',
+  }),
+);
+// July once the server has stored it, under the id and with the fields of the
+// write
+let storedJuly: BudgetPeriod | null = null;
+let extraPayments: Payment[] = [];
+let calculationError: string | null = null;
+// A book in which nothing is set aside or left without a period
+let isTidy = false;
+// August follows from the cadence too, after July
+let hasPlannedAugust = false;
+// Rent had one period, and it was deleted
+let hasDeletedRentPeriod = false;
+
+function rows(): PeriodBudgetRows {
+  return {
+    ...NO_ROWS,
+    cadences: [
+      {
+        id: 'food',
+        anchor_date: '2017-05-01',
+        months: 1,
+        active: true,
+        tombstone: false,
+      },
+    ],
+    periods: [
+      stored(FOOD_FEBRUARY, { tombstone: true }),
+      stored(FOOD_MARCH),
+      stored(FOOD_MAY),
+      stored(FOOD_JUNE, { carried_from: 'food-may' }),
+      stored(FOOD_OVERLAPPING),
+      stored(TAX_2017),
+      ...(storedJuly ? [stored(storedJuly)] : []),
+      ...(hasDeletedRentPeriod
+        ? [stored(RENT_JANUARY, { tombstone: true })]
+        : []),
+    ],
+    offsets: [{ id: 'p-early', period_id: 'food-june', tombstone: false }],
+    scheduleLinks: [
+      { id: 'sched-tax', category: 'tax', tombstone: false },
+      // Was linked to Tax once
+      { id: 'sched-gym', category: 'tax', tombstone: true },
+    ],
+    chargeOverrides: [
+      {
+        id: 'sched-tax:2017-09-15',
+        amount: 21000,
+        skipped: false,
+        transaction_id: null,
+        open_amount: null,
+        tombstone: false,
+      },
+      {
+        id: 'sched-tax:2017-12-15',
+        amount: null,
+        skipped: true,
+        transaction_id: null,
+        open_amount: null,
+        tombstone: false,
+      },
+    ],
+  };
+}
+
+function calculation(asOf: string): PeriodBudgetCalculation {
+  const july = storedJuly ?? FOOD_JULY;
+  const payments = [...PAYMENTS, ...extraPayments].filter(
+    payment => !isTidy || payment.id !== 'p-april',
+  );
+  const result = calculate({
+    asOf,
+    periods: [
+      FOOD_MARCH,
+      FOOD_MAY,
+      FOOD_JUNE,
+      july,
+      ...(hasPlannedAugust ? [FOOD_AUGUST] : []),
+      TAX_2017,
+    ],
+    postings: payments,
+    offsets: [{ transactionId: 'p-early', periodId: 'food-june' }],
+    occurrences: [
+      {
+        id: 'sched-tax:2017-06-10',
+        periodId: 'tax-2017',
+        date: '2017-06-10',
+        amount: 30000,
+        state: 'scheduled',
+      },
+      {
+        id: 'sched-tax:2017-09-15',
+        periodId: 'tax-2017',
+        date: '2017-09-15',
+        amount: 21000,
+        state: 'scheduled',
+      },
+    ],
+    fields: {
+      plannedPeriodIds: [
+        ...(storedJuly ? [] : [july.id]),
+        ...(hasPlannedAugust ? [FOOD_AUGUST.id] : []),
+      ],
+      charges: isTidy
+        ? CHARGES.filter(entry => entry.periodId !== null)
+        : CHARGES,
+      needsAttention: isTidy ? [] : SET_ASIDE,
+      unresolved: isTidy
+        ? []
+        : [
+            {
+              id: 'u1',
+              account: 'checking',
+              date: '2017-06-02',
+              amount: -700,
+              reason: 'uncategorized',
+            },
+          ],
+      cash: {
+        cashAvailable: 500000,
+        inAccounts: 620000,
+        owed: 120000,
+        projectedCash: 449000,
+        accounts: [],
+      },
+    },
+  });
+  return {
+    ...result,
+    payments: result.payments.map(payment => ({
+      ...payment,
+      payee: payments.find(entry => entry.id === payment.id)?.payee ?? null,
+    })),
+  };
+}
+
+function startServer() {
+  const handlers: Partial<Handlers> = {
+    'get-categories': async () => ({
+      grouped: GROUPS,
+      list: GROUPS.flatMap(group => group.categories ?? []),
+    }),
+    query: async () => ({ data: SCHEDULES, dependencies: [] }),
+    'rules-run': async ({ transaction }) =>
+      transaction.schedule === 'sched-rent'
+        ? { ...transaction, category: 'rent' }
+        : transaction,
+    'period-budget/get-rows': async () => rows(),
+    'period-budget/calculate': async ({ asOf }) =>
+      calculationError === null
+        ? calculation(asOf)
+        : { error: calculationError },
+  };
+  for (const name of WRITE_NAMES) {
+    handlers[name] = args => write(name, args);
+  }
+  handlers['period-budget/create-period'] = async args => {
+    const result = await write('period-budget/create-period', args);
+    if ('id' in result && args.start.startsWith('2017-07')) {
+      storedJuly = period(
+        result.id,
+        args.category,
+        args.start,
+        args.end,
+        args.budget,
+      );
+    }
+    return result;
+  };
+  initServer(handlers);
+}
+
+function Location() {
+  const location = useLocation();
+  return <div data-testid="location">{location.pathname}</div>;
+}
+
+// The page on the 15th of June 2017, or on another day of that month
+async function renderPage({
+  asOf = '2017-06-15',
+  isPrivate = false,
+}: { asOf?: string; isPrivate?: boolean } = {}) {
+  const queryClient = createTestQueryClient();
+  // The app's own queries for these were loaded before the connection mock
+  queryClient.setQueryData(accountQueries.list().queryKey, [CHECKING]);
+  queryClient.setQueryData(payeeQueries.list().queryKey, PAYEES);
+  const store = configureTestAppStore({ queryClient });
+  if (isPrivate) {
+    store.dispatch(mergeSyncedPrefs({ isPrivacyEnabled: 'true' }));
+  }
+  render(
+    <TestProviders store={store} queryClient={queryClient}>
+      <MemoryRouter initialEntries={['/period-budget']}>
+        <PeriodBudgetPage />
+        <Location />
+      </MemoryRouter>
+    </TestProviders>,
+  );
+  fireEvent.change(await screen.findByLabelText('As of'), {
+    target: { value: asOf },
+  });
+  await screen.findByRole('group', { name: 'Spent in June 2017' });
+  return store;
+}
+
+function figure(name: string) {
+  return screen.getByRole('group', { name });
+}
+
+function bar(category: string, periodName: string) {
+  return screen.getByRole('button', {
+    name: new RegExp(`^${category}, ${periodName},`),
+  });
+}
+
+function dot(name: string) {
+  return screen.getByRole('img', { name });
+}
+
+function rowOf(category: string) {
+  const row = screen
+    .getByRole('button', { name: category })
+    .closest<HTMLElement>('[role="row"]');
+  if (!row) {
+    throw new Error(`No row for ${category}`);
+  }
+  return row;
+}
+
+function amountsOf(category: string) {
+  return within(rowOf(category))
+    .getAllByRole('cell')
+    .slice(0, 4)
+    .map(cell => cell.textContent);
+}
+
+async function openPeriod(category: string, periodName: string) {
+  await userEvent.click(bar(category, periodName));
+  return screen.getByRole('region', { name: `${category}, ${periodName}` });
+}
+
+async function openCategory(category: string) {
+  await userEvent.click(screen.getByRole('button', { name: category }));
+  return screen.getByRole('region', { name: category });
+}
+
+function section(panel: HTMLElement, name: string) {
+  return within(panel).getByRole('group', { name });
+}
+
+async function choose(trigger: HTMLElement, option: string) {
+  await userEvent.click(trigger);
+  const menu = await screen.findByRole('menu');
+  await userEvent.click(within(menu).getByRole('button', { name: option }));
+}
+
+function type(field: HTMLElement, value: string) {
+  fireEvent.change(field, { target: { value } });
+}
+
+function attentionItem(text: string) {
+  const region = screen.getByRole('region', { name: 'Needs attention' });
+  const item = within(region)
+    .getAllByRole('listitem')
+    .find(entry => entry.textContent?.includes(text));
+  if (!item) {
+    throw new Error(`Nothing needs attention with "${text}"`);
+  }
+  return item;
+}
+
+// Every write the page sent, in order
+async function expectWrites(...expected: Array<[string, unknown]>) {
+  await waitFor(() => expect(write.mock.calls).toEqual(expected));
+}
+
+describe('PeriodBudgetPage', () => {
+  beforeEach(() => {
+    write.mockClear();
+    storedJuly = null;
+    extraPayments = [];
+    calculationError = null;
+    isTidy = false;
+    hasPlannedAugust = false;
+    hasDeletedRentPeriod = false;
+    responsive.isNarrowWidth = false;
+    startServer();
+  });
+
+  describe('the figures', () => {
+    it('labels the cash, the spending of the month and what is left in the active periods', async () => {
+      await renderPage();
+
+      const cash = figure('Cash in selected accounts');
+      expect(within(cash).getByText('5,000.00')).toBeInTheDocument();
+      expect(cash).toHaveTextContent('In accounts 6,200.00 · Owed 1,200.00');
+
+      const spent = figure('Spent in June 2017');
+      // Food and Rent of June; the payment of the 30th of May is not of June
+      expect(within(spent).getByText('1,020.00')).toBeInTheDocument();
+      expect(spent).toHaveTextContent('By transaction date, up to 06/15/2017');
+
+      const remaining = figure('Remaining in active periods');
+      // June of Food and the year of Tax
+      expect(within(remaining).getByText('1,550.00')).toBeInTheDocument();
+      expect(remaining).toHaveTextContent(
+        'Allowance left in the periods that contain 06/15/2017: 2',
+      );
+
+      const overspending = figure('Overspending in active periods');
+      expect(within(overspending).getByText('0.00')).toBeInTheDocument();
+      expect(overspending).not.toHaveTextContent('Overspent periods');
+
+      expect(document.body).not.toHaveTextContent(/monthly limit/i);
+    });
+
+    it('shows overspending on its own line and in the period', async () => {
+      extraPayments = [
+        {
+          id: 'p-feast',
+          category: 'food',
+          date: '2017-06-12',
+          amount: -40000,
+          payee: 'market',
+        },
+      ];
+      await renderPage();
+
+      const overspending = figure('Overspending in active periods');
+      expect(within(overspending).getByText('50.00')).toBeInTheDocument();
+      expect(overspending).toHaveTextContent('Overspent periods: 1');
+      expect(
+        screen.getByRole('button', {
+          name: 'Food, June 2017, spent 550.00 of 500.00, overspent by 50.00, active',
+        }),
+      ).toBeInTheDocument();
+
+      const panel = await openPeriod('Food', 'June 2017');
+      expect(section(panel, 'Overspent')).toHaveTextContent('50.00');
+      expect(section(panel, 'Remaining')).toHaveTextContent('-50.00');
+    });
+
+    it('follows the as-of day', async () => {
+      await renderPage();
+
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Previous month' }),
+      );
+
+      // Another month is looked at on its last day
+      expect(screen.getByLabelText('As of')).toHaveValue('2017-05-31');
+      const spent = await screen.findByRole('group', {
+        name: 'Spent in May 2017',
+      });
+      expect(within(spent).getByText('280.00')).toBeInTheDocument();
+      expect(amountsOf('Food')).toEqual([
+        '400.00',
+        '250.00',
+        '150.00',
+        '150.00',
+      ]);
+
+      await userEvent.click(screen.getByRole('button', { name: 'Today' }));
+
+      expect(screen.getByLabelText('As of')).toHaveValue('2017-01-01');
+      await screen.findByRole('group', { name: 'Spent in January 2017' });
+      expect(within(rowOf('Food')).getByText('No active period')).toBeVisible();
+      expect(screen.getByRole('button', { name: 'Today' })).toBeDisabled();
+    });
+
+    it('says when the calculation failed', async () => {
+      calculationError = 'the book is locked';
+      render(
+        <TestProviders>
+          <MemoryRouter>
+            <PeriodBudgetPage />
+          </MemoryRouter>
+        </TestProviders>,
+      );
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'The period budget could not be calculated: the book is locked',
+      );
+    });
+  });
+
+  describe('the timeline', () => {
+    it('shows each category with the amounts of its active period', async () => {
+      await renderPage();
+
+      expect(
+        screen.getAllByRole('columnheader').map(header => header.textContent),
+      ).toEqual(
+        expect.arrayContaining([
+          'Category',
+          'Allowance',
+          'Spent',
+          'Remaining',
+          'Expected remaining',
+        ]),
+      );
+      expect(
+        screen.getByRole('columnheader', {
+          name: 'Periods from January 2017 to December 2017',
+        }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('rowheader', { name: 'Usual expenses' }),
+      ).toBeInTheDocument();
+      expect(screen.queryByText('Salary')).not.toBeInTheDocument();
+
+      // The allowance of June has the balance carried from May in it
+      expect(amountsOf('Food')).toEqual([
+        '500.00',
+        '150.00',
+        '350.00',
+        '350.00',
+      ]);
+      // Two charges of the tax office are still expected
+      expect(amountsOf('Tax')).toEqual([
+        '1,500.00',
+        '300.00',
+        '1,200.00',
+        '690.00',
+      ]);
+      expect(within(rowOf('Rent')).getByText('No periods yet')).toBeVisible();
+    });
+
+    it('says in words what each bar shows', async () => {
+      await renderPage();
+
+      const names = [
+        'Food, March 2017, spent 0.00 of 400.00, remaining 400.00',
+        'Food, May 2017, spent 250.00 of 400.00, remaining 150.00',
+        'Food, June 2017, spent 150.00 of 500.00, remaining 350.00, active',
+        'Food, July 2017, spent 0.00 of 400.00, remaining 400.00, planned',
+        'Tax, 2017, spent 300.00 of 1,500.00, remaining 1,200.00, active',
+      ];
+      for (const name of names) {
+        expect(screen.getByRole('button', { name })).toBeInTheDocument();
+      }
+      expect(
+        within(screen.getByRole('table')).getAllByRole('button', {
+          name: /spent .* of /,
+        }),
+      ).toHaveLength(names.length);
+    });
+
+    it('draws each bar over the days of its period, filled by what is spent', async () => {
+      await renderPage();
+
+      // May is days 121 to 151 of the 365 on the axis; 250.00 of 400.00
+      const may = bar('Food', 'May 2017');
+      expect(may.style.left).toBe('32.877%');
+      expect(may.style.width).toBe('calc(8.493% - 2px)');
+      expect(within(may).getByTestId('period-spent').style.width).toBe('62.5%');
+      // 300.00 of 1,500.00
+      const tax = bar('Tax', '2017');
+      expect(tax.style.left).toBe('0%');
+      expect(tax.style.width).toBe('calc(100% - 2px)');
+      expect(within(tax).getByTestId('period-spent').style.width).toBe('20%');
+    });
+
+    it('says in words what each dot shows, at the day it is on', async () => {
+      await renderPage();
+
+      const names = [
+        'Payment on 05/10/2017: Grocer, -250.00',
+        'Payment on 06/05/2017: Grocer, -120.00',
+        'Payment on 05/30/2017, early for June 2017: Market, -30.00',
+        'Payment on 04/12/2017, in no period: Bakery, -50.00',
+        'Payment on 03/20/2017: Tax office, -300.00',
+        'Overdue charge of 06/10/2017: Tax office, 300.00',
+        'Expected charge on 09/15/2017: Tax office, 210.00',
+      ];
+      for (const name of names) {
+        expect(dot(name)).toBeInTheDocument();
+      }
+      // The charge that is paid and the one that is skipped have no dot, and
+      // the one of March 2018 is not in this year
+      expect(screen.getAllByRole('img')).toHaveLength(names.length);
+
+      // The middle of the 10th of May, the 130th of the 365 days
+      expect(
+        parseFloat(dot('Payment on 05/10/2017: Grocer, -250.00').style.left),
+      ).toBeCloseTo(35.479, 2);
+      const lines = screen.getAllByTestId('as-of-line');
+      expect(lines).toHaveLength(3);
+      // The middle of the 15th of June, the 166th day
+      expect(parseFloat(lines[0].style.left)).toBeCloseTo(45.342, 2);
+
+      // The early payment is joined to the first day of its period
+      const link = within(rowOf('Food')).getByTestId('payment-link');
+      expect(parseFloat(link.style.left)).toBeCloseTo(40.959, 2);
+      expect(parseFloat(link.style.width)).toBeCloseTo(0.548, 2);
+      expect(
+        within(rowOf('Tax')).queryByTestId('payment-link'),
+      ).not.toBeInTheDocument();
+    });
+
+    it('moves and zooms the months it shows', async () => {
+      await renderPage();
+
+      await userEvent.click(screen.getByRole('button', { name: '3 months' }));
+
+      expect(screen.getByRole('button', { name: '3 months' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+      expect(
+        screen.getByRole('columnheader', {
+          name: 'Periods from May 2017 to July 2017',
+        }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: /^Food, March 2017,/ }),
+      ).not.toBeInTheDocument();
+      expect(bar('Food', 'June 2017')).toBeInTheDocument();
+
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Show later months' }),
+      );
+
+      expect(
+        screen.getByRole('columnheader', {
+          name: 'Periods from June 2017 to August 2017',
+        }),
+      ).toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole('button', { name: '12 months' }));
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Show later months' }),
+      );
+
+      expect(
+        screen.getByRole('columnheader', {
+          name: 'Periods from January 2018 to December 2018',
+        }),
+      ).toBeInTheDocument();
+      expect(
+        dot('Expected charge on 03/15/2018, in no period: Tax office, 300.00'),
+      ).toBeInTheDocument();
+      expect(screen.queryByTestId('as-of-line')).not.toBeInTheDocument();
+    });
+
+    it('does not give amounts in the words of bars and dots in privacy mode', async () => {
+      await renderPage({ isPrivate: true });
+
+      expect(
+        screen.getByRole('button', {
+          name: 'Food, June 2017, spent hidden amount of hidden amount, remaining hidden amount, active',
+        }),
+      ).toBeInTheDocument();
+      expect(
+        dot('Payment on 06/05/2017: Grocer, hidden amount'),
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe('an opened period', () => {
+    it('opens under its row with its figures, payments and actions, and closes again', async () => {
+      await renderPage();
+
+      const panel = await openPeriod('Food', 'June 2017');
+
+      expect(bar('Food', 'June 2017')).toHaveAttribute('aria-expanded', 'true');
+      expect(panel).toHaveTextContent(
+        'This period is active on the as-of day.',
+      );
+      expect(section(panel, 'Allowance')).toHaveTextContent('500.00');
+      expect(section(panel, 'Spent')).toHaveTextContent('150.00');
+      expect(section(panel, 'Remaining')).toHaveTextContent('350.00');
+      expect(section(panel, 'Charges still expected')).toHaveTextContent(
+        '0.00',
+      );
+      expect(section(panel, 'Expected remaining')).toHaveTextContent('350.00');
+      expect(
+        within(panel).queryByRole('group', { name: 'Overspent' }),
+      ).not.toBeInTheDocument();
+
+      const payments = within(section(panel, 'Payments')).getAllByRole(
+        'listitem',
+      );
+      expect(payments).toHaveLength(2);
+      expect(payments[0]).toHaveTextContent(
+        '05/30/2017earlyMarketChecking-30.00Counted here by your choice',
+      );
+      expect(payments[1]).toHaveTextContent('06/05/2017GrocerChecking-120.00');
+      expect(section(panel, 'Scheduled charges')).toHaveTextContent(
+        'No scheduled charge is due in this period.',
+      );
+      for (const name of ['Edit', 'Link schedules', 'Delete']) {
+        expect(within(panel).getByRole('button', { name })).toBeEnabled();
+      }
+
+      // Another bar opens its own period in the place of this one
+      await userEvent.click(bar('Food', 'May 2017'));
+      expect(
+        screen.getByRole('region', { name: 'Food, May 2017' }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole('region', { name: 'Food, June 2017' }),
+      ).not.toBeInTheDocument();
+
+      // The same bar again closes it
+      await userEvent.click(bar('Food', 'May 2017'));
+      expect(
+        screen.queryByRole('region', { name: 'Food, May 2017' }),
+      ).not.toBeInTheDocument();
+
+      const reopened = await openPeriod('Tax', '2017');
+      await userEvent.click(
+        within(reopened).getByRole('button', { name: 'Close' }),
+      );
+      expect(
+        screen.queryByRole('region', { name: 'Tax, 2017' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('lists the scheduled charges with their state', async () => {
+      await renderPage();
+
+      const panel = await openPeriod('Tax', '2017');
+
+      expect(section(panel, 'Charges still expected')).toHaveTextContent(
+        '510.00',
+      );
+      expect(section(panel, 'Expected remaining')).toHaveTextContent('690.00');
+      const charges = within(section(panel, 'Scheduled charges')).getAllByRole(
+        'listitem',
+      );
+      expect(charges).toHaveLength(4);
+      expect(charges[0]).toHaveTextContent(
+        '03/15/2017Tax office300.00paid on 03/20/2017',
+      );
+      expect(charges[1]).toHaveTextContent('06/10/2017Tax office300.00overdue');
+      expect(charges[2]).toHaveTextContent(
+        '09/15/2017Tax office210.00expected',
+      );
+      expect(charges[3]).toHaveTextContent('12/15/2017Tax office300.00skipped');
+    });
+
+    it('changes the days and the allowance of a stored period', async () => {
+      await renderPage();
+      const panel = await openPeriod('Food', 'June 2017');
+
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Edit' }),
+      );
+      expect(within(panel).getByLabelText('First day')).toHaveValue(
+        '2017-06-01',
+      );
+      expect(within(panel).getByLabelText('Last day')).toHaveValue(
+        '2017-06-30',
+      );
+      // Without the carried balance
+      const allowance = within(panel).getByRole('textbox', {
+        name: 'Allowance',
+      });
+      expect(allowance).toHaveValue('400.00');
+      type(within(panel).getByLabelText('Last day'), '2017-06-29');
+      type(allowance, '450');
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Save' }),
+      );
+
+      // Only what changed, and the day after the last day
+      await expectWrites([
+        'period-budget/update-period',
+        { id: 'food-june', end: '2017-06-30', budget: 45000 },
+      ]);
+      expect(
+        await within(panel).findByRole('button', { name: 'Edit' }),
+      ).toBeInTheDocument();
+    });
+
+    it('does not save a period with days or an allowance that cannot be', async () => {
+      await renderPage();
+      const panel = await openPeriod('Food', 'June 2017');
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Edit' }),
+      );
+      const save = within(panel).getByRole('button', { name: 'Save' });
+
+      type(within(panel).getByLabelText('First day'), '');
+      await userEvent.click(save);
+      expect(within(panel).getByRole('alert')).toHaveTextContent(
+        'Enter the first and the last day of the period.',
+      );
+
+      type(within(panel).getByLabelText('First day'), '2017-07-01');
+      await userEvent.click(save);
+      expect(within(panel).getByRole('alert')).toHaveTextContent(
+        'The last day is before the first day.',
+      );
+
+      type(within(panel).getByLabelText('First day'), '2017-06-01');
+      type(within(panel).getByRole('textbox', { name: 'Allowance' }), '-5');
+      await userEvent.click(save);
+      expect(within(panel).getByRole('alert')).toHaveTextContent(
+        'Enter an allowance that is not below zero.',
+      );
+
+      // Nothing changed: the form closes and nothing is written
+      type(within(panel).getByRole('textbox', { name: 'Allowance' }), '400');
+      await userEvent.click(save);
+      expect(within(panel).getByRole('button', { name: 'Edit' })).toBeVisible();
+      expect(write).not.toHaveBeenCalled();
+    });
+
+    it('stores a planned period when it is changed, and keeps it open', async () => {
+      await renderPage();
+      const panel = await openPeriod('Food', 'July 2017');
+
+      expect(panel).toHaveTextContent(
+        'This period follows from the repeating periods. It is stored when you change it.',
+      );
+      expect(
+        within(panel).queryByRole('button', { name: 'Delete' }),
+      ).not.toBeInTheDocument();
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Edit' }),
+      );
+      type(within(panel).getByLabelText('First day'), '2017-07-02');
+      type(within(panel).getByRole('textbox', { name: 'Allowance' }), '420');
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Save' }),
+      );
+
+      await expectWrites([
+        'period-budget/create-period',
+        {
+          category: 'food',
+          start: '2017-07-02',
+          end: '2017-08-01',
+          budget: 42000,
+        },
+      ]);
+      // It has another id and another first day now, and is still the opened
+      // row
+      const storedPanel = await screen.findByRole('region', {
+        name: 'Food, 07/02/2017 to 07/31/2017',
+      });
+      expect(section(storedPanel, 'Allowance')).toHaveTextContent('420.00');
+      expect(
+        within(storedPanel).getByRole('button', { name: 'Delete' }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole('region', { name: 'Food' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('deletes a period and opens its category', async () => {
+      await renderPage();
+      const panel = await openPeriod('Food', 'June 2017');
+
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Delete' }),
+      );
+
+      await expectWrites(['period-budget/delete-period', { id: 'food-june' }]);
+      expect(
+        await screen.findByRole('region', { name: 'Food' }),
+      ).toBeInTheDocument();
+    });
+
+    it('carries the balance again when the period it came from changed', async () => {
+      await renderPage();
+      const panel = await openPeriod('Food', 'June 2017');
+
+      expect(panel).toHaveTextContent('carried 100.00 from May 2017');
+      expect(panel).toHaveTextContent('The balance of May 2017 is now 150.00.');
+      // May is where the balance came from already
+      expect(
+        within(panel).queryByRole('button', {
+          name: 'Carry balance from the previous period',
+        }),
+      ).not.toBeInTheDocument();
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Carry again' }),
+      );
+
+      await expectWrites([
+        'period-budget/carry',
+        { id: 'food-june', fromPeriodId: 'food-may', amount: 15000 },
+      ]);
+    });
+
+    it('removes a carried balance', async () => {
+      await renderPage();
+      const panel = await openPeriod('Food', 'June 2017');
+
+      await userEvent.click(
+        within(panel).getByRole('button', {
+          name: 'Remove the carried balance',
+        }),
+      );
+
+      await expectWrites([
+        'period-budget/carry',
+        { id: 'food-june', fromPeriodId: null, amount: 0 },
+      ]);
+    });
+
+    it('carries the balance of the period before it', async () => {
+      await renderPage();
+      const panel = await openPeriod('Food', 'May 2017');
+
+      expect(panel).not.toHaveTextContent('carried');
+      await userEvent.click(
+        within(panel).getByRole('button', {
+          name: 'Carry balance from the previous period',
+        }),
+      );
+
+      await expectWrites([
+        'period-budget/carry',
+        { id: 'food-may', fromPeriodId: 'food-march', amount: 40000 },
+      ]);
+    });
+
+    it('does not offer the balance of a period that is not stored yet', async () => {
+      hasPlannedAugust = true;
+      await renderPage();
+      const panel = await openPeriod('Food', 'August 2017');
+
+      // July, the period before it, only follows from the cadence
+      expect(within(panel).getByRole('button', { name: 'Edit' })).toBeVisible();
+      expect(
+        within(panel).queryByRole('button', {
+          name: 'Carry balance from the previous period',
+        }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('stores a planned period before a balance is carried to it', async () => {
+      await renderPage();
+      const panel = await openPeriod('Food', 'July 2017');
+
+      await userEvent.click(
+        within(panel).getByRole('button', {
+          name: 'Carry balance from the previous period',
+        }),
+      );
+
+      await expectWrites(
+        [
+          'period-budget/create-period',
+          {
+            category: 'food',
+            start: '2017-07-01',
+            end: '2017-08-01',
+            budget: 40000,
+          },
+        ],
+        [
+          'period-budget/carry',
+          { id: 'stored-id', fromPeriodId: 'food-june', amount: 35000 },
+        ],
+      );
+    });
+
+    it('names a transfer by the account it goes to', async () => {
+      extraPayments = [
+        {
+          id: 'p-transfer',
+          category: 'food',
+          date: '2017-06-07',
+          amount: -1000,
+          payee: 'to-checking',
+        },
+      ];
+      await renderPage();
+      const panel = await openPeriod('Food', 'June 2017');
+
+      expect(
+        within(section(panel, 'Payments'))
+          .getAllByRole('listitem')
+          .map(item => item.textContent),
+      ).toContainEqual(expect.stringContaining('Transfer: Checking'));
+    });
+
+    it('counts a payment in another period', async () => {
+      await renderPage();
+      const panel = await openPeriod('Food', 'May 2017');
+
+      await userEvent.click(
+        within(panel).getByRole('button', {
+          name: 'Count Grocer of 05/10/2017 in another period',
+        }),
+      );
+      await choose(
+        within(panel).getByRole('button', { name: 'Choose the period' }),
+        'June 2017',
+      );
+
+      await expectWrites([
+        'period-budget/set-offset',
+        { transactionId: 'p-may', periodId: 'food-june' },
+      ]);
+      await waitFor(() =>
+        expect(
+          within(panel).queryByRole('button', { name: 'Choose the period' }),
+        ).not.toBeInTheDocument(),
+      );
+    });
+
+    it('stores a planned period before a payment is counted in it', async () => {
+      await renderPage();
+      const panel = await openPeriod('Food', 'May 2017');
+
+      await userEvent.click(
+        within(panel).getByRole('button', {
+          name: 'Count Grocer of 05/10/2017 in another period',
+        }),
+      );
+      await choose(
+        within(panel).getByRole('button', { name: 'Choose the period' }),
+        'July 2017',
+      );
+
+      await expectWrites(
+        [
+          'period-budget/create-period',
+          {
+            category: 'food',
+            start: '2017-07-01',
+            end: '2017-08-01',
+            budget: 40000,
+          },
+        ],
+        [
+          'period-budget/set-offset',
+          { transactionId: 'p-may', periodId: 'stored-id' },
+        ],
+      );
+    });
+
+    it('counts a payment by its date again', async () => {
+      await renderPage();
+      const panel = await openPeriod('Food', 'June 2017');
+
+      // Only the payment that the user moved has the action
+      expect(
+        within(panel).queryByRole('button', {
+          name: 'Count Grocer of 06/05/2017 by its date',
+        }),
+      ).not.toBeInTheDocument();
+      await userEvent.click(
+        within(panel).getByRole('button', {
+          name: 'Count Market of 05/30/2017 by its date',
+        }),
+      );
+
+      await expectWrites([
+        'period-budget/clear-offset',
+        { transactionId: 'p-early' },
+      ]);
+    });
+
+    it('skips an expected charge', async () => {
+      await renderPage();
+      const panel = await openPeriod('Tax', '2017');
+
+      await userEvent.click(
+        within(panel).getByRole('button', {
+          name: 'Skip Tax office of 06/10/2017',
+        }),
+      );
+
+      await expectWrites([
+        'period-budget/set-charge-override',
+        { scheduleId: 'sched-tax', dueDate: '2017-06-10', skipped: true },
+      ]);
+    });
+
+    it('expects a skipped charge again', async () => {
+      await renderPage();
+      const panel = await openPeriod('Tax', '2017');
+
+      await userEvent.click(
+        within(panel).getByRole('button', {
+          name: 'Do not skip Tax office of 12/15/2017',
+        }),
+      );
+
+      await expectWrites([
+        'period-budget/set-charge-override',
+        { scheduleId: 'sched-tax', dueDate: '2017-12-15', skipped: false },
+      ]);
+    });
+
+    it('changes the amount of a charge', async () => {
+      await renderPage();
+      const panel = await openPeriod('Tax', '2017');
+
+      await userEvent.click(
+        within(panel).getByRole('button', {
+          name: 'Change Tax office of 09/15/2017',
+        }),
+      );
+      const amount = within(panel).getByLabelText('Expected amount');
+      expect(amount).toHaveValue('210.00');
+      type(amount, '250');
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Save' }),
+      );
+
+      await expectWrites([
+        'period-budget/set-charge-override',
+        { scheduleId: 'sched-tax', dueDate: '2017-09-15', amount: 25000 },
+      ]);
+    });
+
+    it('names the payment of a charge and what is still expected after it', async () => {
+      await renderPage();
+      const panel = await openPeriod('Tax', '2017');
+
+      await userEvent.click(
+        within(panel).getByRole('button', {
+          name: 'Change Tax office of 03/15/2017',
+        }),
+      );
+      type(
+        within(panel).getByLabelText('Still expected after a part payment'),
+        '50',
+      );
+      await choose(
+        within(panel).getByRole('button', {
+          name: 'The payment that matches the schedule',
+        }),
+        '03/20/2017, Tax office, -300.00',
+      );
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Save' }),
+      );
+
+      await expectWrites([
+        'period-budget/set-charge-override',
+        {
+          scheduleId: 'sched-tax',
+          dueDate: '2017-03-15',
+          openAmount: 5000,
+          transactionId: 'p-tax',
+        },
+      ]);
+    });
+
+    it('removes the changes to a charge', async () => {
+      await renderPage();
+      const panel = await openPeriod('Tax', '2017');
+
+      // Only the charges that were changed have the action
+      expect(
+        within(panel).getAllByRole('button', {
+          name: /^Remove the changes to/,
+        }),
+      ).toHaveLength(2);
+      await userEvent.click(
+        within(panel).getByRole('button', {
+          name: 'Remove the changes to Tax office of 09/15/2017',
+        }),
+      );
+
+      await expectWrites([
+        'period-budget/clear-charge-override',
+        { id: 'sched-tax:2017-09-15' },
+      ]);
+    });
+
+    it('says when a change was not saved', async () => {
+      write.mockResolvedValueOnce({ error: 'the periods overlap' });
+      const store = await renderPage();
+      const panel = await openPeriod('Food', 'June 2017');
+
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Delete' }),
+      );
+
+      await waitFor(() =>
+        expect(store.getState().notifications.notifications).toEqual([
+          expect.objectContaining({
+            type: 'error',
+            message: 'The change to the period budget was not saved.',
+            pre: 'the periods overlap',
+          }),
+        ]),
+      );
+      // The period is still the opened row
+      expect(
+        screen.getByRole('region', { name: 'Food, June 2017' }),
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe('an opened category', () => {
+    it('opens from its name and closes again', async () => {
+      await renderPage();
+
+      const panel = await openCategory('Food');
+
+      expect(screen.getByRole('button', { name: 'Food' })).toHaveAttribute(
+        'aria-expanded',
+        'true',
+      );
+      expect(section(panel, 'Repeating periods')).toHaveTextContent(
+        'A new period starts every month, counted from 05/01/2017.',
+      );
+      expect(section(panel, 'Deleted periods')).toHaveTextContent(
+        'February 2017Allowance380.00',
+      );
+      expect(section(panel, 'Spending in no period')).toHaveTextContent(
+        '04/12/2017Bakery-50.00',
+      );
+
+      await userEvent.click(screen.getByRole('button', { name: 'Food' }));
+      expect(
+        screen.queryByRole('region', { name: 'Food' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('opens from a period, to link schedules', async () => {
+      await renderPage();
+      const panel = await openPeriod('Tax', '2017');
+
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Link schedules' }),
+      );
+
+      const category = screen.getByRole('region', { name: 'Tax' });
+      expect(section(category, 'Scheduled charges')).toHaveTextContent(
+        'Tax office',
+      );
+      expect(section(category, 'Charges due in no period')).toHaveTextContent(
+        '03/15/2018Tax office300.00',
+      );
+    });
+
+    it('starts repeating periods, with the allowance of the first one', async () => {
+      await renderPage();
+      const panel = await openCategory('Rent');
+      const repeating = section(panel, 'Repeating periods');
+
+      // The first day of the month of the as-of day, and a month long
+      expect(
+        within(repeating).getByLabelText('First day of the first period'),
+      ).toHaveValue('2017-06-01');
+      expect(within(repeating).getByLabelText('Length in months')).toHaveValue(
+        1,
+      );
+      const start = within(repeating).getByRole('button', {
+        name: 'Start repeating',
+      });
+      await userEvent.click(start);
+      expect(within(repeating).getByRole('alert')).toHaveTextContent(
+        'Enter an allowance that is not below zero.',
+      );
+      expect(write).not.toHaveBeenCalled();
+
+      type(within(repeating).getByLabelText('Allowance of each period'), '900');
+      await userEvent.click(start);
+
+      await expectWrites([
+        'period-budget/set-cadence',
+        {
+          category: 'rent',
+          anchorDate: '2017-06-01',
+          months: 1,
+          budget: 90000,
+        },
+      ]);
+    });
+
+    it('changes how the periods repeat', async () => {
+      await renderPage();
+      const panel = await openCategory('Food');
+      const repeating = section(panel, 'Repeating periods');
+
+      await userEvent.click(
+        within(repeating).getByRole('button', { name: 'Change' }),
+      );
+      // Food has periods: they keep their allowances
+      expect(
+        within(repeating).queryByLabelText('Allowance of each period'),
+      ).not.toBeInTheDocument();
+      // The longest length there is
+      type(within(repeating).getByLabelText('Length in months'), '120');
+      await userEvent.click(
+        within(repeating).getByRole('button', { name: 'Save' }),
+      );
+
+      await expectWrites([
+        'period-budget/set-cadence',
+        { category: 'food', anchorDate: '2017-05-01', months: 120 },
+      ]);
+      // Saved: the form is closed again
+      expect(
+        await within(repeating).findByRole('button', { name: 'Change' }),
+      ).toBeVisible();
+    });
+
+    it('starts repeating periods without an allowance when the category had a period', async () => {
+      hasDeletedRentPeriod = true;
+      await renderPage();
+      const panel = await openCategory('Rent');
+      const repeating = section(panel, 'Repeating periods');
+
+      // The server takes an allowance only for a category that never had one
+      expect(
+        within(repeating).queryByLabelText('Allowance of each period'),
+      ).not.toBeInTheDocument();
+      await userEvent.click(
+        within(repeating).getByRole('button', { name: 'Start repeating' }),
+      );
+
+      await expectWrites([
+        'period-budget/set-cadence',
+        { category: 'rent', anchorDate: '2017-06-01', months: 1 },
+      ]);
+    });
+
+    it.each(['0', '121', '1.5'])(
+      'does not save a length of %s months',
+      async length => {
+        await renderPage();
+        const panel = await openCategory('Food');
+        const repeating = section(panel, 'Repeating periods');
+        await userEvent.click(
+          within(repeating).getByRole('button', { name: 'Change' }),
+        );
+
+        type(within(repeating).getByLabelText('Length in months'), length);
+        await userEvent.click(
+          within(repeating).getByRole('button', { name: 'Save' }),
+        );
+
+        expect(within(repeating).getByRole('alert')).toHaveTextContent(
+          'Enter a length from 1 to 120 months.',
+        );
+        expect(write).not.toHaveBeenCalled();
+      },
+    );
+
+    it('stops repeating periods', async () => {
+      await renderPage();
+      const panel = await openCategory('Food');
+
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Stop repeating' }),
+      );
+
+      await expectWrites(['period-budget/stop-cadence', { category: 'food' }]);
+    });
+
+    it('adds one period', async () => {
+      await renderPage();
+      const panel = await openCategory('Rent');
+      const adding = section(panel, 'Add one period');
+
+      // The month of the as-of day
+      expect(within(adding).getByLabelText('First day')).toHaveValue(
+        '2017-06-01',
+      );
+      expect(within(adding).getByLabelText('Last day')).toHaveValue(
+        '2017-06-30',
+      );
+      type(within(adding).getByLabelText('Last day'), '2017-08-31');
+      type(within(adding).getByRole('textbox', { name: 'Allowance' }), '900');
+      await userEvent.click(
+        within(adding).getByRole('button', { name: 'Add the period' }),
+      );
+
+      await expectWrites([
+        'period-budget/create-period',
+        {
+          category: 'rent',
+          start: '2017-06-01',
+          end: '2017-09-01',
+          budget: 90000,
+        },
+      ]);
+    });
+
+    it('adds a period of one day', async () => {
+      await renderPage();
+      const panel = await openCategory('Rent');
+      const adding = section(panel, 'Add one period');
+
+      type(within(adding).getByLabelText('Last day'), '2017-06-01');
+      type(within(adding).getByRole('textbox', { name: 'Allowance' }), '10');
+      await userEvent.click(
+        within(adding).getByRole('button', { name: 'Add the period' }),
+      );
+
+      await expectWrites([
+        'period-budget/create-period',
+        {
+          category: 'rent',
+          start: '2017-06-01',
+          end: '2017-06-02',
+          budget: 1000,
+        },
+      ]);
+    });
+
+    it('offers the next period after the last stored one', async () => {
+      await renderPage();
+      const panel = await openCategory('Food');
+      const adding = section(panel, 'Add one period');
+
+      expect(within(adding).getByLabelText('First day')).toHaveValue(
+        '2017-07-01',
+      );
+      expect(within(adding).getByLabelText('Last day')).toHaveValue(
+        '2017-07-31',
+      );
+      expect(
+        within(adding).getByRole('textbox', { name: 'Allowance' }),
+      ).toHaveValue('400.00');
+    });
+
+    it('restores a deleted period', async () => {
+      await renderPage();
+      const panel = await openCategory('Food');
+
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Restore February 2017' }),
+      );
+
+      await expectWrites(['period-budget/restore-period', { id: 'food-feb' }]);
+    });
+
+    it('links the schedule that the rules give its category', async () => {
+      await renderPage();
+      const panel = await openCategory('Rent');
+
+      expect(panel).toHaveTextContent(
+        'Landlord gets this category from the rules.',
+      );
+      await userEvent.click(
+        await within(panel).findByRole('button', { name: 'Link Landlord' }),
+      );
+
+      await expectWrites([
+        'period-budget/link-schedule',
+        { scheduleId: 'sched-rent', category: 'rent' },
+      ]);
+    });
+
+    it('links another schedule', async () => {
+      await renderPage();
+      const panel = await openCategory('Rent');
+
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Link another schedule' }),
+      );
+      const menu = await screen.findByRole('menu');
+      // Not the schedule that is linked to Tax, and not the suggested one
+      expect(
+        within(menu)
+          .getAllByRole('button')
+          .map(option => option.textContent),
+      ).toEqual(['Gym']);
+      await userEvent.click(within(menu).getByRole('button', { name: 'Gym' }));
+
+      await expectWrites([
+        'period-budget/link-schedule',
+        { scheduleId: 'sched-gym', category: 'rent' },
+      ]);
+    });
+
+    it('unlinks a schedule', async () => {
+      await renderPage();
+      const panel = await openCategory('Tax');
+
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Unlink Tax office' }),
+      );
+
+      await expectWrites([
+        'period-budget/unlink-schedule',
+        { scheduleId: 'sched-tax' },
+      ]);
+    });
+  });
+
+  describe('what needs attention', () => {
+    it('lists what the calculation left out or could not place', async () => {
+      await renderPage();
+
+      const region = screen.getByRole('region', { name: 'Needs attention' });
+      expect(region).toHaveTextContent('Needs attention (8)');
+      expect(
+        within(region)
+          .getAllByRole('listitem')
+          .map(item => item.textContent),
+      ).toEqual([
+        'A period of Food is not counted (it overlaps another period)Delete the periodOpen Food',
+        'The period chosen for a payment is not used (its period is gone)Remove the choice',
+        'A change to a scheduled charge has no charge on its date (no charge is due on 2016-01-15)Remove the change',
+        'A scheduled charge is not counted (its amount is not a number)Open the schedules',
+        'A transaction is not counted (its date is not a day)Open the transactions',
+        'Charges of Tax office are due on days with no period of Tax (1, the first on 03/15/2018)Add a period to TaxUnlink Tax office',
+        'Spending of Food that is in no period (1) 50.00Add a period to Food',
+        'Spending without a category (1) 7.00Categorize the transactions',
+      ]);
+    });
+
+    it('deletes a period that is not counted', async () => {
+      await renderPage();
+
+      await userEvent.click(
+        within(attentionItem('A period of Food')).getByRole('button', {
+          name: 'Delete the period',
+        }),
+      );
+
+      await expectWrites(['period-budget/delete-period', { id: 'food-bad' }]);
+    });
+
+    it('opens the category of a period that is not counted', async () => {
+      await renderPage();
+
+      await userEvent.click(
+        within(attentionItem('A period of Food')).getByRole('button', {
+          name: 'Open Food',
+        }),
+      );
+
+      expect(screen.getByRole('region', { name: 'Food' })).toBeInTheDocument();
+    });
+
+    it('removes the choice of a period that is gone', async () => {
+      await renderPage();
+
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Remove the choice' }),
+      );
+
+      await expectWrites([
+        'period-budget/clear-offset',
+        { transactionId: 'tx-gone' },
+      ]);
+    });
+
+    it('removes a change that has no charge', async () => {
+      await renderPage();
+
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Remove the change' }),
+      );
+
+      await expectWrites([
+        'period-budget/clear-charge-override',
+        { id: 'sched-old:2016-01-15' },
+      ]);
+    });
+
+    it('opens the category for spending and charges that are in no period', async () => {
+      await renderPage();
+
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Add a period to Food' }),
+      );
+      expect(screen.getByRole('region', { name: 'Food' })).toBeInTheDocument();
+
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Add a period to Tax' }),
+      );
+      expect(screen.getByRole('region', { name: 'Tax' })).toBeInTheDocument();
+      expect(
+        screen.queryByRole('region', { name: 'Food' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('unlinks the schedule whose charges are in no period', async () => {
+      await renderPage();
+
+      await userEvent.click(
+        within(attentionItem('Charges of Tax office')).getByRole('button', {
+          name: 'Unlink Tax office',
+        }),
+      );
+
+      await expectWrites([
+        'period-budget/unlink-schedule',
+        { scheduleId: 'sched-tax' },
+      ]);
+    });
+
+    it.each([
+      ['Categorize the transactions', '/accounts/uncategorized'],
+      ['Open the schedules', '/schedules'],
+      ['Open the transactions', '/accounts'],
+    ])('goes from "%s" to %s', async (name, path) => {
+      await renderPage();
+
+      await userEvent.click(screen.getByRole('button', { name }));
+
+      expect(screen.getByTestId('location')).toHaveTextContent(path);
+    });
+
+    it('says when nothing needs attention', async () => {
+      isTidy = true;
+      await renderPage();
+
+      const region = screen.getByRole('region', { name: 'Needs attention' });
+      expect(region).toHaveTextContent('Needs attention (0)');
+      expect(region).toHaveTextContent('Nothing needs attention.');
+    });
+  });
+
+  describe('on a phone', () => {
+    beforeEach(() => {
+      responsive.isNarrowWidth = true;
+    });
+
+    it('has the figures and the payments of the month on "Month"', async () => {
+      await renderPage();
+
+      expect(screen.getByRole('tab', { name: 'Month' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      );
+      expect(screen.queryByRole('table')).not.toBeInTheDocument();
+      expect(
+        within(figure('Remaining in active periods')).getByText('1,550.00'),
+      ).toBeInTheDocument();
+      expect(
+        within(figure('Cash in selected accounts')).getByText('5,000.00'),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('region', { name: 'Needs attention' }),
+      ).toHaveTextContent('Needs attention (8)');
+
+      // Latest first
+      expect(
+        within(figure('Payments in June 2017'))
+          .getAllByRole('listitem')
+          .map(item => item.textContent),
+      ).toEqual([
+        '06/05/2017GrocerFood-120.00',
+        '06/01/2017LandlordRent-900.00',
+      ]);
+    });
+
+    it('has a bar for each category on "Periods", and opens a period in place', async () => {
+      await renderPage();
+
+      await userEvent.click(screen.getByRole('tab', { name: 'Periods' }));
+
+      const group = screen.getByRole('group', { name: 'Usual expenses' });
+      const [food, tax, rent] = within(group).getAllByRole('button');
+      expect(food).toHaveTextContent('FoodJune 2017');
+      expect(
+        within(food).getByRole('group', { name: 'Remaining' }),
+      ).toHaveTextContent('350.00');
+      expect(
+        within(food).getByRole('group', { name: 'Expected remaining' }),
+      ).toHaveTextContent('350.00');
+      // The 15th of the 30 days of June
+      expect(
+        within(food).getByRole('img', {
+          name: 'Spent 150.00 of 500.00, 50% of the period has passed',
+        }),
+      ).toBeInTheDocument();
+      expect(within(food).getByTestId('period-progress').style.left).toBe(
+        '50%',
+      );
+      expect(within(food).getByTestId('period-spent').style.width).toBe('30%');
+      expect(tax).toHaveTextContent('Tax2017');
+      expect(
+        within(tax).getByRole('img', {
+          name: 'Spent 300.00 of 1,500.00, 45% of the period has passed',
+        }),
+      ).toBeInTheDocument();
+      // The 166th of the 365 days of 2017
+      expect(within(tax).getByTestId('period-progress').style.left).toBe(
+        '45.479%',
+      );
+      expect(within(tax).getByTestId('period-spent').style.width).toBe('20%');
+      expect(
+        within(tax).getByRole('group', { name: 'Expected remaining' }),
+      ).toHaveTextContent('690.00');
+      expect(rent).toHaveTextContent('RentNo periods yet');
+
+      await userEvent.click(food);
+
+      const panel = screen.getByRole('region', { name: 'Food, June 2017' });
+      expect(
+        within(section(panel, 'Payments')).getAllByRole('listitem'),
+      ).toHaveLength(2);
+      expect(
+        screen.queryByRole('group', { name: 'Usual expenses' }),
+      ).not.toBeInTheDocument();
+
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Close' }),
+      );
+      expect(
+        screen.getByRole('group', { name: 'Usual expenses' }),
+      ).toBeInTheDocument();
+    });
+
+    it('opens a category that has no active period', async () => {
+      await renderPage();
+      await userEvent.click(screen.getByRole('tab', { name: 'Periods' }));
+
+      await userEvent.click(
+        within(
+          screen.getByRole('group', { name: 'Usual expenses' }),
+        ).getAllByRole('button')[2],
+      );
+
+      const panel = screen.getByRole('region', { name: 'Rent' });
+      await userEvent.click(
+        await within(panel).findByRole('button', { name: 'Link Landlord' }),
+      );
+      await expectWrites([
+        'period-budget/link-schedule',
+        { scheduleId: 'sched-rent', category: 'rent' },
+      ]);
+    });
+
+    it('goes from what needs attention to the category on "Periods"', async () => {
+      await renderPage();
+
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Add a period to Food' }),
+      );
+
+      expect(screen.getByRole('tab', { name: 'Periods' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      );
+      expect(screen.getByRole('region', { name: 'Food' })).toBeInTheDocument();
+    });
+
+    it('goes to the uncategorized transactions of the phone', async () => {
+      await renderPage();
+
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Categorize the transactions' }),
+      );
+
+      expect(screen.getByTestId('location')).toHaveTextContent(
+        '/categories/uncategorized',
+      );
+    });
+  });
+});

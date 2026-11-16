@@ -1,6 +1,7 @@
 import {
   copyBudgetPeriod,
   createBudgetPeriod,
+  listPeriodPayments,
   projectCashBalances,
   projectPeriodCharges,
   summarizePeriodBudgets,
@@ -10,6 +11,7 @@ import type {
   BudgetPeriod,
   ChargeOccurrence,
   ExpensePosting,
+  PeriodOffset,
 } from './period-budget';
 
 function makePeriod(overrides: Partial<BudgetPeriod> = {}): BudgetPeriod {
@@ -4279,5 +4281,195 @@ describe('projectCashBalances', () => {
         horizonEnd: '2027-02-30',
       }),
     ).toThrow('horizonEnd "2027-02-30" is not a valid YYYY-MM-DD date');
+  });
+});
+
+describe('listPeriodPayments', () => {
+  const periods = [
+    makePeriod({
+      id: 'groceries-apr',
+      category: 'Groceries',
+      start: '2027-04-01',
+      end: '2027-05-01',
+    }),
+    makePeriod({
+      id: 'groceries-may',
+      category: 'Groceries',
+      start: '2027-05-01',
+      end: '2027-06-01',
+    }),
+    makePeriod({
+      id: 'insurance',
+      category: 'Insurance',
+      start: '2027-01-01',
+      end: '2028-01-01',
+    }),
+  ];
+
+  test('gives each posting up to the as-of day with the period it counts in', () => {
+    const postings = [
+      { id: 'late', category: 'Groceries', date: '2027-05-02', amount: -700 },
+      { id: 'g1', category: 'Groceries', date: '2027-04-05', amount: -4000 },
+      { id: 'before', category: 'Groceries', date: '2027-03-31', amount: -300 },
+      { id: 'early', category: 'Insurance', date: '2026-12-20', amount: -900 },
+      { id: 'other', category: 'Fun', date: '2027-04-10', amount: -500 },
+      { id: 'refund', category: 'Groceries', date: '2027-05-01', amount: 250 },
+      { id: 'future', category: 'Groceries', date: '2027-05-11', amount: -100 },
+    ];
+    const offsets = [
+      { transactionId: 'late', periodId: 'groceries-apr' },
+      { transactionId: 'early', periodId: 'insurance' },
+    ];
+
+    expect(
+      listPeriodPayments({ periods, postings, offsets, asOf: '2027-05-10' }),
+    ).toEqual([
+      { ...postings[0], periodId: 'groceries-apr' },
+      { ...postings[1], periodId: 'groceries-apr' },
+      { ...postings[2], periodId: null },
+      { ...postings[3], periodId: 'insurance' },
+      { ...postings[4], periodId: null },
+      { ...postings[5], periodId: 'groceries-may' },
+    ]);
+  });
+
+  test('a posting on the as-of day is listed and one on the day after is not', () => {
+    const postings = [
+      { id: 'on', category: 'Groceries', date: '2027-04-20', amount: -100 },
+      { id: 'after', category: 'Groceries', date: '2027-04-21', amount: -100 },
+    ];
+    expect(
+      listPeriodPayments({
+        periods,
+        postings,
+        offsets: [],
+        asOf: '2027-04-20',
+      }),
+    ).toEqual([{ ...postings[0], periodId: 'groceries-apr' }]);
+  });
+
+  test('gives only the fields of a payment', () => {
+    const posting = {
+      id: 'g1',
+      category: 'Groceries',
+      date: '2027-04-05',
+      amount: -4000,
+      notes: 'not a field of a payment',
+    };
+    expect(
+      listPeriodPayments({
+        periods,
+        postings: [posting],
+        offsets: [],
+        asOf: '2027-04-20',
+      }),
+    ).toEqual([
+      {
+        id: 'g1',
+        category: 'Groceries',
+        date: '2027-04-05',
+        amount: -4000,
+        periodId: 'groceries-apr',
+      },
+    ]);
+  });
+
+  test('refuses what the summary refuses', () => {
+    expect(() =>
+      listPeriodPayments({
+        periods,
+        postings: [],
+        offsets: [{ transactionId: 't', periodId: 'missing' }],
+        asOf: '2027-04-20',
+      }),
+    ).toThrow('offset for transaction "t" names unknown period "missing"');
+    expect(() =>
+      listPeriodPayments({
+        periods,
+        postings: [],
+        offsets: [],
+        asOf: '2027-04-31',
+      }),
+    ).toThrow('asOf "2027-04-31" is not a valid YYYY-MM-DD date');
+  });
+
+  test('agrees with the summary for many books', () => {
+    let seed = 20261115;
+    function pick(count: number): number {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return Math.floor((seed / 2147483648) * count);
+    }
+    function day(month: number, dayOfMonth: number): string {
+      return `2027-${String(month).padStart(2, '0')}-${String(dayOfMonth).padStart(2, '0')}`;
+    }
+    const categories = ['Groceries', 'Insurance', 'Fun'];
+
+    for (let book = 0; book < 60; book++) {
+      // Periods of one to three months with gaps, for the first two
+      // categories only.
+      const bookPeriods: BudgetPeriod[] = [];
+      for (const category of categories.slice(0, 2)) {
+        let month = 1 + pick(3);
+        while (month <= 9) {
+          const length = 1 + pick(3);
+          bookPeriods.push(
+            makePeriod({
+              id: `${category}:${month}`,
+              category,
+              start: day(month, 1),
+              end: day(month + length, 1),
+              budget: 1000 * pick(50),
+              carryover: 100 * (pick(21) - 10),
+            }),
+          );
+          month += length + pick(2);
+        }
+      }
+      const postings: ExpensePosting[] = [];
+      const offsets: PeriodOffset[] = [];
+      const postingCount = pick(40);
+      for (let index = 0; index < postingCount; index++) {
+        const category = categories[pick(3)];
+        const id = `t${index}`;
+        postings.push({
+          id,
+          category,
+          date: day(1 + pick(12), 1 + pick(28)),
+          amount: pick(10) === 0 ? pick(5000) : -pick(5000),
+        });
+        const own = bookPeriods.filter(period => period.category === category);
+        if (own.length > 0 && pick(4) === 0) {
+          offsets.push({
+            transactionId: id,
+            periodId: own[pick(own.length)].id,
+          });
+        }
+      }
+      const asOf = day(1 + pick(12), 1 + pick(28));
+
+      const input = { periods: bookPeriods, postings, offsets, asOf };
+      const summary = summarizePeriodBudgets(input);
+      const payments = listPeriodPayments(input);
+
+      expect(payments.map(payment => payment.id)).toEqual(
+        postings.filter(posting => posting.date <= asOf).map(p => p.id),
+      );
+      for (const { period, netSpending } of summary.periods) {
+        const counted = payments
+          .filter(payment => payment.periodId === period.id)
+          .reduce((sum, payment) => sum + payment.amount, 0);
+        expect(counted === 0 ? 0 : -counted).toBe(netSpending);
+      }
+      expect(
+        payments
+          .filter(payment => payment.periodId === null)
+          .map(payment => payment.id),
+      ).toEqual(summary.unassignedPostingIds);
+      const monthStart = `${asOf.slice(0, 8)}01`;
+      const inMonth = payments
+        .filter(payment => payment.date >= monthStart)
+        .reduce((sum, payment) => sum + payment.amount, 0);
+      expect(inMonth === 0 ? 0 : -inMonth).toBe(summary.monthlyActualSpending);
+    }
   });
 });

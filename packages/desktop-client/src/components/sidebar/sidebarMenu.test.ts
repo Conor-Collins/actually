@@ -6,6 +6,7 @@ import {
   parseSidebarMenuItems,
   parseSidebarStartPage,
 } from './sidebarMenu';
+import type { SidebarMenuItem } from './sidebarMenu';
 
 describe('parseSidebarMenuItems', () => {
   it('returns the defaults when nothing is saved', () => {
@@ -17,6 +18,7 @@ describe('parseSidebarMenuItems', () => {
       { id: 'tags', hidden: true },
       { id: 'rules', hidden: true },
       { id: 'bank-sync', hidden: true },
+      { id: 'period-budget', hidden: true },
     ]);
   });
 
@@ -35,6 +37,7 @@ describe('parseSidebarMenuItems', () => {
       { id: 'tags', hidden: true },
       { id: 'rules', hidden: false },
       { id: 'bank-sync', hidden: true },
+      { id: 'period-budget', hidden: false },
     ];
 
     expect(parseSidebarMenuItems(JSON.stringify(saved))).toEqual(saved);
@@ -53,7 +56,7 @@ describe('parseSidebarMenuItems', () => {
     expect(items.filter(item => item.id === 'reports')).toEqual([
       { id: 'reports', hidden: false },
     ]);
-    expect(items).toHaveLength(7);
+    expect(items).toHaveLength(8);
   });
 
   it('inserts missing pages at their default position', () => {
@@ -72,9 +75,11 @@ describe('parseSidebarMenuItems', () => {
       'tags',
       'rules',
       'bank-sync',
+      'period-budget',
     ]);
     expect(items.find(item => item.id === 'reports')?.hidden).toBe(false);
     expect(items.find(item => item.id === 'payees')?.hidden).toBe(true);
+    expect(items.find(item => item.id === 'period-budget')?.hidden).toBe(true);
   });
 
   it('always keeps budget and reports in the sidebar', () => {
@@ -109,10 +114,20 @@ describe('parseSidebarStartPage', () => {
     expect(parseSidebarStartPage(undefined, items)).toBe('reports');
     expect(parseSidebarStartPage('unknown', items)).toBe('reports');
   });
+
+  it('a page that is new to a saved list never becomes the first page', () => {
+    expect(items.map(item => item.id).indexOf('period-budget')).toBe(
+      items.length - 1,
+    );
+  });
 });
 
 describe('moveSidebarMenuItem', () => {
-  const items = getDefaultSidebarMenuItems().slice(0, 3);
+  const items: SidebarMenuItem[] = [
+    { id: 'budget', hidden: false },
+    { id: 'reports', hidden: false },
+    { id: 'schedules', hidden: false },
+  ];
 
   it('moves a page before the target', () => {
     expect(
@@ -143,6 +158,7 @@ describe('isInMobileSettingsNav', () => {
     expect(isInMobileSettingsNav('tags')).toBe(false);
     expect(isInMobileSettingsNav('payees')).toBe(true);
     expect(isInMobileSettingsNav('bank-sync')).toBe(true);
+    expect(isInMobileSettingsNav('period-budget')).toBe(true);
   });
 });
 
@@ -150,12 +166,18 @@ describe('getSidebarMenuItemPath', () => {
   it('uses a top-level path for pages in the sidebar', () => {
     expect(getSidebarMenuItemPath('payees', true)).toBe('/payees');
     expect(getSidebarMenuItemPath('budget', true)).toBe('/budget');
+    expect(getSidebarMenuItemPath('period-budget', true)).toBe(
+      '/period-budget',
+    );
   });
 
   it('keeps settings sections under /settings when they are not in the sidebar', () => {
     expect(getSidebarMenuItemPath('payees', false)).toBe('/settings/payees');
     expect(getSidebarMenuItemPath('schedules', false)).toBe(
       '/settings/schedules',
+    );
+    expect(getSidebarMenuItemPath('period-budget', false)).toBe(
+      '/settings/period-budget',
     );
   });
 });

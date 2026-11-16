@@ -202,6 +202,30 @@ function validateSummarizeInput({
   }
 }
 
+// The period a posting counts in: the period of its offset, or else the first
+// period of its category that contains its date.
+function findPeriodOfPosting(
+  posting: ExpensePosting,
+  periods: readonly BudgetPeriod[],
+  offsetByTransactionId: ReadonlyMap<string, PeriodOffset>,
+  periodById: ReadonlyMap<string, BudgetPeriod>,
+): BudgetPeriod | undefined {
+  const offset = offsetByTransactionId.get(posting.id);
+  if (offset !== undefined) {
+    return periodById.get(offset.periodId);
+  }
+  for (const candidate of periods) {
+    if (
+      candidate.category === posting.category &&
+      candidate.start <= posting.date &&
+      posting.date < candidate.end
+    ) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
 export function summarizePeriodBudgets({
   periods,
   postings,
@@ -238,22 +262,12 @@ export function summarizePeriodBudgets({
         `posting ${posting.id}: monthly actual spending sum`,
       );
     }
-    const offset = offsetByTransactionId.get(posting.id);
-    let period: BudgetPeriod | undefined;
-    if (offset !== undefined) {
-      period = periodById.get(offset.periodId);
-    } else {
-      for (const candidate of periods) {
-        if (
-          candidate.category === posting.category &&
-          candidate.start <= posting.date &&
-          posting.date < candidate.end
-        ) {
-          period = candidate;
-          break;
-        }
-      }
-    }
+    const period = findPeriodOfPosting(
+      posting,
+      periods,
+      offsetByTransactionId,
+      periodById,
+    );
     if (period === undefined) {
       unassignedPostingIds.push(posting.id);
     } else {
@@ -313,6 +327,51 @@ export function summarizePeriodBudgets({
     monthlyActualSpending: monthlySum === 0 ? 0 : -monthlySum,
     unassignedPostingIds,
   };
+}
+
+export type PeriodPayment = ExpensePosting & {
+  periodId: string | null; // the period the payment counts in, null when it has none
+};
+
+// Every posting up to the as-of day with the period it counts in, in the order
+// of `postings`. The summary counts each of them in the same period.
+export function listPeriodPayments({
+  periods,
+  postings,
+  offsets,
+  asOf,
+}: SummarizePeriodBudgetsInput): PeriodPayment[] {
+  validateSummarizeInput({ periods, postings, offsets, asOf });
+
+  const offsetByTransactionId = new Map<string, PeriodOffset>();
+  for (const offset of offsets) {
+    offsetByTransactionId.set(offset.transactionId, offset);
+  }
+  const periodById = new Map<string, BudgetPeriod>();
+  for (const period of periods) {
+    periodById.set(period.id, period);
+  }
+
+  const payments: PeriodPayment[] = [];
+  for (const posting of postings) {
+    if (posting.date > asOf) {
+      continue;
+    }
+    const period = findPeriodOfPosting(
+      posting,
+      periods,
+      offsetByTransactionId,
+      periodById,
+    );
+    payments.push({
+      id: posting.id,
+      category: posting.category,
+      date: posting.date,
+      amount: posting.amount,
+      periodId: period?.id ?? null,
+    });
+  }
+  return payments;
 }
 
 export type ChargeOccurrence = {

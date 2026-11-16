@@ -15,6 +15,7 @@ import { pushModal } from './modals/modalsSlice';
 import { addNotification } from './notifications/notificationsSlice';
 import type { Notification } from './notifications/notificationsSlice';
 import { payeeQueries } from './payees';
+import { isPeriodBudgetChange, periodBudgetQueries } from './period-budget';
 import { loadPrefs } from './prefs/prefsSlice';
 import type { AppStore } from './redux/store';
 import { dashboardQueries, reportQueries } from './reports';
@@ -150,6 +151,12 @@ export function listenForSyncEvent(store: AppStore, queryClient: QueryClient) {
       if (tables.includes('custom_reports')) {
         void queryClient.invalidateQueries({
           queryKey: reportQueries.lists(),
+        });
+      }
+
+      if (isPeriodBudgetChange(tables)) {
+        void queryClient.invalidateQueries({
+          queryKey: periodBudgetQueries.all(),
         });
       }
     } else if (event.type === 'error') {

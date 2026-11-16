@@ -2603,3 +2603,195 @@ describe('period-budget/calculate: input', () => {
     expect(accountOf(result, 'checking').transferNeeded).toBe(20000);
   });
 });
+
+describe('period-budget/calculate: payments', () => {
+  function paymentsOf(result: PeriodBudgetCalculation) {
+    return [...result.payments].sort((a, b) => (a.id < b.id ? -1 : 1));
+  }
+
+  it('lists the payments of the worked example with their periods', async () => {
+    await storeExample();
+    const result = await calculate();
+    expect(paymentsOf(result)).toEqual([
+      {
+        id: 'cinema',
+        category: 'fun',
+        date: '2027-04-10',
+        amount: -5000,
+        periodId: 'fun:2027-04-01',
+        account: 'checking',
+        payee: null,
+      },
+      {
+        id: 'food-1',
+        category: 'groceries',
+        date: '2027-04-05',
+        amount: -40000,
+        periodId: 'groceries:2027-04-01',
+        account: 'checking',
+        payee: null,
+      },
+      {
+        id: 'food-2',
+        category: 'groceries',
+        date: '2027-04-12',
+        amount: -28000,
+        periodId: 'groceries:2027-04-01',
+        account: 'checking',
+        payee: null,
+      },
+      {
+        id: 'insurance-paid',
+        category: 'insurance',
+        date: '2027-03-15',
+        amount: -120000,
+        periodId: 'insurance:2027-01-01',
+        account: 'checking',
+        payee: null,
+      },
+      {
+        id: 'rent-paid',
+        category: 'rent',
+        date: '2027-04-01',
+        amount: -150000,
+        periodId: 'rent:2027-04-01',
+        account: 'checking',
+        payee: null,
+      },
+    ]);
+  });
+
+  it('the payments of a period add up to its spending, and those of the month to the monthly spending', async () => {
+    const taxSchedule = await storeExample();
+    await spend('tax-early', '2027-03-30', -91000, 'taxes', {
+      schedule: taxSchedule,
+    });
+    await spend('food-late', '2027-05-02', -700, 'groceries');
+    expect(
+      await handlers['period-budget/set-offset']({
+        transactionId: 'food-late',
+        periodId: 'groceries:2027-04-01',
+      }),
+    ).toEqual({ id: 'food-late' });
+    await spend('food-before', '2027-03-31', -300, 'groceries');
+
+    for (const asOf of ['2027-03-31', '2027-04-20', '2027-05-10']) {
+      const result = await calculate(asOf, '2027-05-31');
+      for (const { period, netSpending } of result.projection.summary.periods) {
+        const counted = result.payments
+          .filter(payment => payment.periodId === period.id)
+          .reduce((sum, payment) => sum + payment.amount, 0);
+        expect(counted === 0 ? 0 : -counted).toBe(netSpending);
+      }
+      const monthStart = `${asOf.slice(0, 8)}01`;
+      const inMonth = result.payments
+        .filter(payment => payment.date >= monthStart)
+        .reduce((sum, payment) => sum + payment.amount, 0);
+      expect(inMonth === 0 ? 0 : -inMonth).toBe(
+        result.projection.summary.monthlyActualSpending,
+      );
+      expect(
+        result.payments
+          .filter(payment => payment.periodId === null)
+          .map(payment => payment.id)
+          .sort(),
+      ).toEqual([...result.projection.summary.unassignedPostingIds].sort());
+    }
+
+    const result = await calculate('2027-05-10', '2027-05-31');
+    expect(
+      paymentsOf(result)
+        .filter(payment => payment.id.includes('-'))
+        .map(payment => [payment.id, payment.periodId]),
+    ).toEqual([
+      ['food-1', 'groceries:2027-04-01'],
+      ['food-2', 'groceries:2027-04-01'],
+      ['food-before', null],
+      ['food-late', 'groceries:2027-04-01'],
+      ['insurance-paid', 'insurance:2027-01-01'],
+      ['rent-paid', 'rent:2027-04-01'],
+      ['tax-early', 'taxes:2027-04-01'],
+    ]);
+    expect(result.derivedOffsetIds).toEqual(['tax-early']);
+  });
+
+  it('a payment in a category without a period is listed only in the month of the as-of day', async () => {
+    await period('groceries', '2027-04-01', '2027-05-01', 60000);
+    await spend('rent-march', '2027-03-01', -150000, 'rent');
+    await spend('rent-april', '2027-04-01', -150000, 'rent');
+    await spend('food-march', '2027-03-05', -4000, 'groceries');
+    await spend('food-april', '2027-04-05', -4000, 'groceries');
+    await spend('food-first', '2027-04-01', -100, 'groceries');
+    await spend('rent-later', '2027-04-21', -100, 'rent');
+
+    const result = await calculate();
+    expect(
+      paymentsOf(result).map(payment => [payment.id, payment.periodId]),
+    ).toEqual([
+      ['food-april', 'groceries:2027-04-01'],
+      ['food-first', 'groceries:2027-04-01'],
+      ['food-march', null],
+      ['rent-april', null],
+    ]);
+    expect(result.projection.summary.unassignedPostingIds.sort()).toEqual([
+      'food-march',
+      'rent-april',
+      'rent-march',
+    ]);
+  });
+
+  it('gives the payee and the account, and the parts of a split in place of the split', async () => {
+    await period('groceries', '2027-04-01', '2027-05-01', 60000);
+    await period('fun', '2027-04-01', '2027-05-01', 20000);
+    const shop = await db.insertPayee({ name: 'Shop' });
+    await db.insertTransaction({
+      id: 'from-savings',
+      account: 'savings',
+      date: '2027-04-03',
+      amount: -1200,
+      category: 'groceries',
+      payee: shop,
+    });
+    await spend('split', '2027-04-06', -5000, null, { is_parent: true });
+    await spend('part-food', '2027-04-06', -3000, 'groceries', {
+      is_child: true,
+      parent_id: 'split',
+      payee: shop,
+    });
+    await spend('part-fun', '2027-04-06', -2000, 'fun', {
+      is_child: true,
+      parent_id: 'split',
+    });
+
+    const result = await calculate();
+    expect(paymentsOf(result)).toEqual([
+      {
+        id: 'from-savings',
+        category: 'groceries',
+        date: '2027-04-03',
+        amount: -1200,
+        periodId: 'groceries:2027-04-01',
+        account: 'savings',
+        payee: shop,
+      },
+      {
+        id: 'part-food',
+        category: 'groceries',
+        date: '2027-04-06',
+        amount: -3000,
+        periodId: 'groceries:2027-04-01',
+        account: 'checking',
+        payee: shop,
+      },
+      {
+        id: 'part-fun',
+        category: 'fun',
+        date: '2027-04-06',
+        amount: -2000,
+        periodId: 'fun:2027-04-01',
+        account: 'checking',
+        payee: null,
+      },
+    ]);
+  });
+});
