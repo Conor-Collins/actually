@@ -1,9 +1,10 @@
 ---
 id: TASK-18
 title: 'Period Budget page: sections are squeezed onto each other on a wide screen'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-11-16T06:35:00Z'
+updated_date: '2026-11-16T06:36:00Z'
 labels:
   - bug
 dependencies: []
@@ -23,3 +24,9 @@ Found by TASK-13 on 2026-11-15, the first time the page ran in a real browser (C
 - [ ] #2 A Playwright test in packages/desktop-client/e2e checks the first criterion and starts repeating periods for the last category of the demo file through its form. It fails on main before the fix and passes after it.
 - [ ] #3 The phone layout and the existing page tests are unchanged and pass.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-11-15 06:50Z orchestrator: rung 1. Cause found with the built bundle in Chromium: the scrolling block's flex children shrink (View has min-height 0). Prototype by the orchestrator: one inner block with flex-shrink 0 in PeriodBudgetPage.tsx, and e2e/period-budget.test.ts (3 tests: 3 pass on the fix, 3 fail on main's bundle). Patch sha256 51e114e8.
+<!-- SECTION:NOTES:END -->
