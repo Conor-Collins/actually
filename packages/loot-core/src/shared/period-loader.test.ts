@@ -1137,6 +1137,34 @@ describe('loadPeriodBudgetInput: amounts that are too large together', () => {
     }
   });
 
+  it('counts a charge as paid outside the budget when its payment is set aside for its size', () => {
+    const result = load({
+      periods: [period('p1', '2027-01-01', '2027-02-01', { budget: 0 })],
+      occurrences: [
+        charge('c1', 'p1', '2027-01-05', {
+          amount: 0,
+          state: 'posted',
+          transactionId: 't1',
+          transactionDate: '2027-01-05',
+        }),
+      ],
+      postings: [
+        posting('t1', '2027-01-05', -MAX),
+        posting('t2', '2027-01-06', -1),
+      ],
+      asOf: '2027-01-10',
+    });
+    // Only the size rule sets the payment aside: it is a valid posting of the
+    // period's category, and nothing else is set aside.
+    expect(result.setAside).toEqual([
+      aside('transactions', 't1', 'amounts-too-large', TOO_LARGE),
+    ]);
+    expect(result.postings.map(p => p.id)).toEqual(['t2']);
+    expect(result.paidOutsideBudget).toEqual(['c1']);
+    expect(result.occurrences).toEqual([]);
+    expect(calculate(result).summary.monthlyActualSpending).toBe(1);
+  });
+
   it('sets aside what belongs to a period that is too large', () => {
     const result = load({
       periods: [
