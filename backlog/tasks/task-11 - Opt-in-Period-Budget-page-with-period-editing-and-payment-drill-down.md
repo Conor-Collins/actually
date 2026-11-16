@@ -1,10 +1,10 @@
 ---
 id: TASK-11
 title: Opt-in Period Budget page with period editing and payment drill-down
-status: In Progress
+status: Review
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-15T23:38:00Z'
+updated_date: '2026-11-16T03:05:00Z'
 labels:
   - ui
 dependencies:
@@ -40,4 +40,6 @@ Outline only. Waits on the owner's decisions (SPEC section 10): how a user creat
 2026-11-15: the owner approved plan B ("Plan B, all approved"). The plan is docs/plans/period-budget.md (commit 6f90e400f); section references in the acceptance criteria (B1 to B9, S1 to S8) are to that file. Acceptance criteria set from its section B9.
 
 2026-11-15 23:38Z orchestrator: started. Plan: one branch task-11-period-budget-page; steps A (payments list in the calculation), B (sidebar id, routes, queries), C (wide page), D (actions), E (Needs attention), F (phone tabs). Sidebar follows plan S7 literally: hidden by default means listed under Settings until switched on.
+
+Rung 1 (local qwen3.8-27b applying orchestrator-written patches), 3 reviewed rounds. Round 1 471f99df9: REQUEST CHANGES (2 blocking, 6 should-fix). Round 2 da9330f44: REQUEST CHANGES (3 should-fix). Round 3 c2a5c2591: gate exit 0 at 03:01Z, reviewer (codex gpt-6.1-sol xhigh) APPROVE at 03:05Z, no blocking or should-fix findings; one note (a split part that names itself as its parent can be offered as a payment) and three reviewer test additions go to a follow-up ticket. Orchestrator mutation run on round 3: 26 of 26 killed.
 <!-- SECTION:NOTES:END -->
