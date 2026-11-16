@@ -1,6 +1,8 @@
 import { useTranslation } from 'react-i18next';
 
+import type { PeriodBudgetCalculation } from '@actual-app/core/server/period-budget/calculate';
 import type {
+  AccountEntity,
   PeriodBudgetRows,
   ScheduleEntity,
 } from '@actual-app/core/types/models';
@@ -23,7 +25,10 @@ import type {
 export type PeriodBudgetData = {
   // Null until the first calculation has arrived
   view: PeriodBudgetView | null;
+  // What the view is built from; the cash forecast is made from it as well
+  calculation: PeriodBudgetCalculation | null;
   rows: PeriodBudgetRows | null;
+  accounts: AccountEntity[];
   schedules: ScheduleEntity[];
   suggestedCategories: SuggestedCategories;
   error: Error | null;
@@ -105,7 +110,9 @@ export function usePeriodBudgetData({
 
   return {
     view,
+    calculation: view === null ? null : (calculation ?? null),
     rows,
+    accounts,
     schedules,
     suggestedCategories: suggestedQuery.data ?? {},
     error: rowsQuery.error ?? calculationQuery.error ?? null,

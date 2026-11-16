@@ -46,6 +46,7 @@ export function OpenedRow({
       key={view.period.id}
       row={row}
       view={view}
+      asOf={asOf}
       data={data}
       labels={labels}
       onClose={() => onSelect(null)}

@@ -44,6 +44,8 @@ export type SyncedPrefs = Partial<
     | `show-group-${string}`
     | 'sidebar-menu-items'
     | 'sidebar-start-page'
+    // How far ahead the cash forecast of the period budget looks
+    | 'period-budget-horizon'
     | 'sync-transfer-date'
     // Number of minutes between automatic bank syncs. '0' (or unset) disables
     // automatic syncing.

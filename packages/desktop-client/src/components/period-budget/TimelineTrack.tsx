@@ -1,5 +1,4 @@
 import { Fragment } from 'react';
-import { useTranslation } from 'react-i18next';
 
 import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
@@ -10,13 +9,12 @@ import {
   axisPosition,
   axisSpan,
   isOnAxis,
-  outstandingOf,
+  isShownCharge,
 } from '#period-budget';
 import type {
   Axis,
   CategoryRowView,
   ChargeView,
-  PaymentView,
   PeriodView,
 } from '#period-budget';
 
@@ -29,6 +27,7 @@ import {
 } from './layout';
 import { PeriodBar } from './PeriodBar';
 import { TimelineDot } from './TimelineDot';
+import { useMarkLabels } from './useMarkLabels';
 import type { PeriodBudgetData } from './usePeriodBudgetData';
 import type { PeriodBudgetLabels } from './usePeriodBudgetLabels';
 
@@ -61,7 +60,7 @@ export function TimelineTrack({
   selectedPeriodId,
   onSelectPeriod,
 }: TimelineTrackProps) {
-  const { t } = useTranslation();
+  const { paymentLabel, chargeLabel } = useMarkLabels(data, labels);
   const dayWidth = axisPosition(axis, monthUtils.addDays(axis.start, 1));
 
   // The middle of a day
@@ -69,57 +68,8 @@ export function TimelineTrack({
     return axisPosition(axis, day) + dayWidth / 2;
   }
 
-  function paymentLabel(payment: PaymentView, view: PeriodView | null) {
-    const values = {
-      date: labels.day(payment.date),
-      payee: data.payeeName(payment.payee),
-      amount: labels.spokenMoney(payment.amount),
-      period: view ? labels.period(view.period) : '',
-    };
-    if (view === null) {
-      return t(
-        'Payment on {{date}}, in no period: {{payee}}, {{amount}}',
-        values,
-      );
-    }
-    if (payment.timing === 'early') {
-      return t(
-        'Payment on {{date}}, early for {{period}}: {{payee}}, {{amount}}',
-        values,
-      );
-    }
-    if (payment.timing === 'late') {
-      return t(
-        'Payment on {{date}}, late for {{period}}: {{payee}}, {{amount}}',
-        values,
-      );
-    }
-    return t('Payment on {{date}}: {{payee}}, {{amount}}', values);
-  }
-
-  function chargeLabel(charge: ChargeView, hasPeriod: boolean) {
-    const values = {
-      date: labels.day(charge.dueDate),
-      schedule: data.scheduleName(charge.scheduleId),
-      amount: labels.spokenMoney(outstandingOf(charge)),
-    };
-    if (!hasPeriod) {
-      return t(
-        'Expected charge on {{date}}, in no period: {{schedule}}, {{amount}}',
-        values,
-      );
-    }
-    if (charge.isOverdue) {
-      return t('Overdue charge of {{date}}: {{schedule}}, {{amount}}', values);
-    }
-    return t('Expected charge on {{date}}: {{schedule}}, {{amount}}', values);
-  }
-
-  function isShownCharge(charge: ChargeView) {
-    return (
-      isOnAxis(axis, charge.dueDate) &&
-      (charge.status === 'expected' || outstandingOf(charge) > 0)
-    );
+  function isOnTrack(charge: ChargeView) {
+    return isOnAxis(axis, charge.dueDate) && isShownCharge(charge);
   }
 
   return (
@@ -241,7 +191,7 @@ export function TimelineTrack({
 
       {row.periods.flatMap(view =>
         view.charges
-          .filter(isShownCharge)
+          .filter(isOnTrack)
           .map(charge => (
             <TimelineDot
               key={charge.id}
@@ -254,7 +204,7 @@ export function TimelineTrack({
           )),
       )}
 
-      {row.chargesWithoutPeriod.filter(isShownCharge).map(charge => (
+      {row.chargesWithoutPeriod.filter(isOnTrack).map(charge => (
         <TimelineDot
           key={charge.id}
           position={at(charge.dueDate)}

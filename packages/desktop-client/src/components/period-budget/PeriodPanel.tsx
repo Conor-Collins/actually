@@ -22,6 +22,7 @@ import { PanelSection } from './PanelSection';
 import { PeriodCharges } from './PeriodCharges';
 import { PeriodForm } from './PeriodForm';
 import type { PeriodFormValues } from './PeriodForm';
+import { PeriodGraph } from './PeriodGraph';
 import { PeriodPayments } from './PeriodPayments';
 import type { PeriodBudgetData } from './usePeriodBudgetData';
 import type { PeriodBudgetLabels } from './usePeriodBudgetLabels';
@@ -29,6 +30,7 @@ import type { PeriodBudgetLabels } from './usePeriodBudgetLabels';
 type PeriodPanelProps = {
   row: CategoryRowView;
   view: PeriodView;
+  asOf: string;
   data: PeriodBudgetData;
   labels: PeriodBudgetLabels;
   onClose: () => void;
@@ -37,11 +39,12 @@ type PeriodPanelProps = {
   onStored: (period: PeriodRef) => void;
 };
 
-// A period's opened row: its figures, its actions, and the payments and
-// charges that count in it.
+// A period's opened row: its figures, its actions, its graph, and the
+// payments and charges that count in it.
 export function PeriodPanel({
   row,
   view,
+  asOf,
   data,
   labels,
   onClose,
@@ -270,6 +273,14 @@ export function PeriodPanel({
           )}
         </View>
       )}
+
+      <PeriodGraph
+        row={row}
+        view={view}
+        asOf={asOf}
+        data={data}
+        labels={labels}
+      />
 
       <PanelSection title={t('Payments')}>
         <PeriodPayments row={row} view={view} data={data} labels={labels} />
