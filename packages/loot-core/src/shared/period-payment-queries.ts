@@ -23,8 +23,8 @@ type RunQuery = <Row>(query: Query) => Promise<{ data: Row[] }>;
 
 // The money that left an account on these days, in any category or in none,
 // with the parts of a split in place of the split, the latest first. Actual
-// also gives a part whose split is no whole transaction: see
-// listNameablePayments.
+// also gives a part whose split is a part itself, or is of a deleted account:
+// see listNameablePayments.
 export function nameablePaymentsQuery({ start, end }: PaymentDays): Query {
   return q('transactions')
     .filter({
@@ -33,6 +33,8 @@ export function nameablePaymentsQuery({ start, end }: PaymentDays): Query {
       // The calculation leaves out a transaction whose account is deleted,
       // so it cannot pay a charge
       account: { $ne: null },
+      // A part that has itself as its split is a part of no transaction
+      parent_id: { $ne: '$id' },
     })
     .options({ splits: 'inline' })
     .select('*')

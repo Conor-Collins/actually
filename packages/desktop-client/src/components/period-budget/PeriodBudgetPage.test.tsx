@@ -256,9 +256,15 @@ const LEDGER: TransactionEntity[] = [
   transaction('t-day-32-after', '2017-04-16', -400, 'bakery'),
   // Long before the charge
   transaction('t-early', '2016-12-20', -30000, 'tax-office'),
-  // A part that has itself as its split: the calculation leaves it out
+  // A part that has itself as its split, and a part of that part: the
+  // calculation leaves both out
   {
     ...transaction('t-part-alone', '2017-03-14', -700, 'bakery'),
+    is_child: true,
+    parent_id: 't-part-alone',
+  },
+  {
+    ...transaction('t-part-of-part', '2017-03-13', -800, 'bakery'),
     is_child: true,
     parent_id: 't-part-alone',
   },
@@ -295,7 +301,12 @@ function meets(entry: TransactionEntity, conditions: unknown): boolean {
     if (!isRecord(condition)) {
       return value === condition;
     }
-    return Object.entries(condition).every(([operator, bound]) => {
+    return Object.entries(condition).every(([operator, given]) => {
+      // '$id' is the id of the same transaction
+      const bound =
+        typeof given === 'string' && given.startsWith('$')
+          ? fields.get(given.slice(1))
+          : given;
       if (operator === '$lt') {
         return isBefore(value, bound);
       }

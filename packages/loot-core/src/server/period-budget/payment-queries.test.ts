@@ -257,9 +257,8 @@ describe('listNameablePayments', () => {
     await insertSplit('split');
     await insertPart('alone', 'alone');
 
-    // Actual's query gives it
+    // The query leaves it out by itself
     expect(await idsOf(nameablePaymentsQuery(MARCH))).toEqual([
-      'alone',
       'split-a',
       'split-b',
     ]);
@@ -295,6 +294,38 @@ describe('listNameablePayments', () => {
       'split-b',
     ]);
     expect(await listedIds()).toEqual(['split-a', 'split-b']);
+  });
+
+  it('gives a part whose split is of a day that is not asked for', async () => {
+    await db.insertTransaction({
+      id: 'february',
+      account: 'checking',
+      date: '2027-02-27',
+      amount: -100,
+      is_parent: true,
+    });
+    await insertPart('part-in-march', 'february');
+
+    expect(await listedIds()).toEqual(['part-in-march']);
+  });
+
+  it('gives the parts of a split of a closed account', async () => {
+    await db.insertAccount({ id: 'old', name: 'Old', closed: 1 });
+    await insertSplit('split', 'old');
+
+    expect(await listedIds()).toEqual(['split-a', 'split-b']);
+  });
+
+  it('gives the parts of a split whose id has a quote in it', async () => {
+    await db.insertTransaction({
+      id: 'plain',
+      account: 'checking',
+      date: '2027-03-20',
+      amount: -100,
+    });
+    await insertSplit("it's");
+
+    expect(await listedIds()).toEqual(['plain', "it's-a", "it's-b"]);
   });
 });
 

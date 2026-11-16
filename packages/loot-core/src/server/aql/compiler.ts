@@ -726,7 +726,7 @@ const compileOp = saveStack('op', (state, fieldRef, opData) => {
 
       return (
         `${String(left)} IN (` +
-        ids.map(id => `'${String(id)}'`).join(',') +
+        ids.map(id => `'${String(id).replace(/'/g, "''")}'`).join(',') +
         ')'
       );
     }
