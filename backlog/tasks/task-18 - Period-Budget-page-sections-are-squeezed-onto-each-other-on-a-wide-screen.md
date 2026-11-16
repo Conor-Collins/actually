@@ -1,13 +1,16 @@
 ---
 id: TASK-18
 title: 'Period Budget page: sections are squeezed onto each other on a wide screen'
-status: Review
+status: Done
 assignee: []
 created_date: '2026-11-16T06:35:00Z'
-updated_date: '2026-11-16T06:45:00Z'
+updated_date: '2026-11-16T07:03:00Z'
 labels:
   - bug
 dependencies: []
+modified_files:
+  - packages/desktop-client/e2e/period-budget.test.ts
+  - packages/desktop-client/src/components/period-budget/PeriodBudgetPage.tsx
 priority: high
 ordinal: 18000
 ---
@@ -20,9 +23,9 @@ Found by TASK-13 on 2026-11-15, the first time the page ran in a real browser (C
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 On a wide screen, with the demo file in a 1280x720 window, no section of the Period Budget page is shorter than what is in it, the sections lie under each other, and the page scrolls down to the accounts. This holds when the page is opened in Settings and when it is opened from its sidebar entry.
-- [ ] #2 A Playwright test in packages/desktop-client/e2e checks the first criterion and starts repeating periods for the last category of the demo file through its form. It fails on main before the fix and passes after it.
-- [ ] #3 The phone layout and the existing page tests are unchanged and pass.
+- [x] #1 On a wide screen, with the demo file in a 1280x720 window, no section of the Period Budget page is shorter than what is in it, the sections lie under each other, and the page scrolls down to the accounts. This holds when the page is opened in Settings and when it is opened from its sidebar entry.
+- [x] #2 A Playwright test in packages/desktop-client/e2e checks the first criterion and starts repeating periods for the last category of the demo file through its form. It fails on main before the fix and passes after it.
+- [x] #3 The phone layout and the existing page tests are unchanged and pass.
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -32,3 +35,9 @@ Found by TASK-13 on 2026-11-15, the first time the page ran in a real browser (C
 
 2026-11-15 06:50Z orchestrator: candidate fcec13361 (rung 1, round 1; the coder applied the orchestrator's patch, patch-id equal). Gate typecheck, lint, test: exit 0. Browser test on the candidate's bundle: 3 passed; on main's bundle: 3 failed. Sent to review.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Landed task-18-period-page-layout as d2d4baa06 on 2026-11-15.
+<!-- SECTION:FINAL_SUMMARY:END -->
