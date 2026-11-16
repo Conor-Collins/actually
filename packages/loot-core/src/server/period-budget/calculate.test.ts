@@ -2478,6 +2478,27 @@ describe('period-budget/calculate: cash movements', () => {
     expect((await calculate('2027-04-21')).cash?.cashAvailable).toBe(70000);
   });
 
+  it('gives no cash plan when amounts that are too large cancel each other to a balance that is not', async () => {
+    await storeExample();
+    const large = Number.MAX_SAFE_INTEGER;
+    await spend('down', '2027-04-21', -large, null, { account: 'savings' });
+    await spend('up', '2027-04-21', large + 1, null, { account: 'savings' });
+    // The second amount is a whole number that is stored as it is, and it is
+    // larger than an amount can be. Together the two are 1.
+    expect(
+      db.runQuery<{ amount: number }>(
+        'SELECT amount FROM transactions WHERE id IN (?, ?) ORDER BY amount',
+        ['down', 'up'],
+        true,
+      ),
+    ).toEqual([{ amount: -large }, { amount: large + 1 }]);
+    expect((await calculate()).cash?.cashAvailable).toBe(420000);
+    expect((await calculate('2027-04-21')).cash).toBeNull();
+
+    await handlers['period-budget/exclude-account']({ accountId: 'savings' });
+    expect((await calculate('2027-04-21')).cash?.cashAvailable).toBe(70000);
+  });
+
   it('an account that is not selected and has no exact balance leaves the cash plan as it is', async () => {
     await storeExample();
     await db.insertAccount({ id: 'old', name: 'Old', closed: 1 });
