@@ -1,15 +1,47 @@
 ---
 id: TASK-12
 title: Period graph and account forecast on the Period Budget page
-status: Review
+status: Done
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-16T05:24:00Z'
+updated_date: '2026-11-16T05:27:00Z'
 labels:
   - ui
 dependencies:
   - TASK-10
   - TASK-11
+modified_files:
+  - packages/desktop-client/src/components/period-budget/AccountChoice.tsx
+  - packages/desktop-client/src/components/period-budget/AccountPanel.tsx
+  - packages/desktop-client/src/components/period-budget/AccountRow.tsx
+  - packages/desktop-client/src/components/period-budget/AccountTrack.tsx
+  - packages/desktop-client/src/components/period-budget/AccountsForecast.tsx
+  - packages/desktop-client/src/components/period-budget/AxisHeader.tsx
+  - packages/desktop-client/src/components/period-budget/CashTotals.tsx
+  - packages/desktop-client/src/components/period-budget/ForecastSummary.tsx
+  - packages/desktop-client/src/components/period-budget/GraphLine.tsx
+  - packages/desktop-client/src/components/period-budget/GraphMark.tsx
+  - packages/desktop-client/src/components/period-budget/HorizonControl.tsx
+  - packages/desktop-client/src/components/period-budget/MobileAccounts.tsx
+  - packages/desktop-client/src/components/period-budget/MobilePeriodBudget.tsx
+  - packages/desktop-client/src/components/period-budget/OpenedRow.tsx
+  - >-
+    packages/desktop-client/src/components/period-budget/PeriodBudgetForecast.test.tsx
+  - packages/desktop-client/src/components/period-budget/PeriodGraph.tsx
+  - packages/desktop-client/src/components/period-budget/PeriodPanel.tsx
+  - packages/desktop-client/src/components/period-budget/Timeline.tsx
+  - packages/desktop-client/src/components/period-budget/TimelineTrack.tsx
+  - packages/desktop-client/src/components/period-budget/useCashForecast.ts
+  - packages/desktop-client/src/components/period-budget/useMarkLabels.ts
+  - packages/desktop-client/src/components/period-budget/usePeriodBudgetData.ts
+  - packages/desktop-client/src/period-budget/forecast.test.ts
+  - packages/desktop-client/src/period-budget/forecast.ts
+  - packages/desktop-client/src/period-budget/graph.test.ts
+  - packages/desktop-client/src/period-budget/graph.ts
+  - packages/desktop-client/src/period-budget/horizon.test.ts
+  - packages/desktop-client/src/period-budget/horizon.ts
+  - packages/desktop-client/src/period-budget/index.ts
+  - packages/loot-core/src/types/prefs.ts
 priority: low
 ordinal: 12000
 ---
@@ -24,10 +56,10 @@ Outline only. Waits on the owner's decisions (SPEC section 10): how offset payme
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 The full graph in the opened row follows the conventions of spec section 7; a payment outside its period is drawn at its real date with the connector, and the payment list says so in words.
-- [ ] #2 Account rows on the shared axis show what S5 lists, with the "in accounts" and "owed" split of B5.
-- [ ] #3 The horizon control of S5 changes the forecast and is remembered.
-- [ ] #4 The phone "Accounts" tab shows the same figures.
+- [x] #1 The full graph in the opened row follows the conventions of spec section 7; a payment outside its period is drawn at its real date with the connector, and the payment list says so in words.
+- [x] #2 Account rows on the shared axis show what S5 lists, with the "in accounts" and "owed" split of B5.
+- [x] #3 The horizon control of S5 changes the forecast and is remembered.
+- [x] #4 The phone "Accounts" tab shows the same figures.
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -45,3 +77,9 @@ Outline only. Waits on the owner's decisions (SPEC section 10): how offset payme
 
 2026-11-16 05:25Z: review of f97424508 (round 2, codex gpt-6.1-sol xhigh): APPROVE. All four criteria met; round-1 findings 1 and 2 resolved, 3 accepted as triaged, 4 a follow-up. One note (a test that fails on React duplicate-key warnings in the graph) goes to a follow-up. Orchestrator's gate on f97424508: exit 0 at 05:20Z. Landing.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Landed task-12-graph-and-forecast as ccf85668b on 2026-11-15.
+<!-- SECTION:FINAL_SUMMARY:END -->
