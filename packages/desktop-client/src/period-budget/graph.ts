@@ -27,6 +27,8 @@ export type GraphCharge = {
 
 // A level part of a line.
 export type GraphRun = {
+  // The line, the payment or charge the part begins at, and its zone
+  id: string;
   kind: 'spent' | 'expected';
   // Where it is against the days of the period: before them, in them, or
   // after them
@@ -38,6 +40,8 @@ export type GraphRun = {
 
 // Where a line steps from one level to the next.
 export type GraphRise = {
+  // The line, and the payment or charge of the step
+  id: string;
   kind: 'spent' | 'expected';
   x: number;
   from: number;
@@ -66,7 +70,9 @@ export type PeriodGraph = {
   high: number;
 };
 
-type Step = { x: number; level: number };
+// A step of a line: `id` is its payment or charge, and nothing where the
+// line begins
+type Step = { id: string; x: number; level: number };
 
 export function isShownCharge(charge: ChargeView): boolean {
   return charge.status === 'expected' || outstandingOf(charge) > 0;
@@ -142,6 +148,7 @@ export function buildPeriodGraph(view: PeriodView, asOf: string): PeriodGraph {
     steps.forEach((step, index) => {
       if (index > 0) {
         rises.push({
+          id: `${kind}:${step.id}`,
           kind,
           x: step.x,
           from: steps[index - 1].level,
@@ -155,9 +162,11 @@ export function buildPeriodGraph(view: PeriodView, asOf: string): PeriodGraph {
         .sort((a, b) => a - b);
       for (let part = 0; part + 1 < cuts.length; part++) {
         if (cuts[part + 1] > cuts[part]) {
+          const zone = zoneOf(cuts[part], cuts[part + 1]);
           runs.push({
+            id: `${kind}:${step.id}:${zone}`,
             kind,
-            zone: zoneOf(cuts[part], cuts[part + 1]),
+            zone,
             from: cuts[part],
             to: cuts[part + 1],
             level: step.level,
@@ -167,21 +176,30 @@ export function buildPeriodGraph(view: PeriodView, asOf: string): PeriodGraph {
     });
   }
 
-  // Before the days shown this line has no length
+  // The line ends at the as-of day. An early payment is joined to its period
+  // also when the period has not begun: then the line goes on to its first day
   draw(
     'spent',
     [
-      { x: 0, level: 0 },
-      ...graphPayments.map(({ x, level }) => ({ x, level })),
+      { id: '', x: 0, level: 0 },
+      ...graphPayments.map(({ payment, x, level }) => ({
+        id: payment.id,
+        x,
+        level,
+      })),
     ],
-    nowX,
+    Math.max(nowX, periodFrom),
   );
   if (graphCharges.length > 0) {
     draw(
       'expected',
       [
-        { x: nowX, level: spent },
-        ...graphCharges.map(({ x, level }) => ({ x, level })),
+        { id: '', x: nowX, level: spent },
+        ...graphCharges.map(({ charge, x, level }) => ({
+          id: charge.id,
+          x,
+          level,
+        })),
       ],
       1,
     );

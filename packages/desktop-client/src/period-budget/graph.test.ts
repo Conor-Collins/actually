@@ -108,7 +108,7 @@ describe('buildPeriodGraph', () => {
       { payment: { id: 'p1' }, x: 4.5 / 30, level: 12000 },
     ]);
     expect(graph.charges).toEqual([]);
-    expect(graph.runs).toEqual([
+    expect(graph.runs).toMatchObject([
       { kind: 'spent', zone: 'inside', from: 0, to: 4.5 / 30, level: 0 },
       {
         kind: 'spent',
@@ -118,7 +118,7 @@ describe('buildPeriodGraph', () => {
         level: 12000,
       },
     ]);
-    expect(graph.rises).toEqual([
+    expect(graph.rises).toMatchObject([
       { kind: 'spent', x: 4.5 / 30, from: 0, to: 12000 },
     ]);
   });
@@ -158,7 +158,7 @@ describe('buildPeriodGraph', () => {
       // A refund takes the line down
       ['refund', 'inside', middle(11), 13000],
     ]);
-    expect(graph.runs).toEqual([
+    expect(graph.runs).toMatchObject([
       { kind: 'spent', zone: 'early', from: 0, to: middle(0), level: 0 },
       // From the payment to the first day of the period
       {
@@ -190,10 +190,121 @@ describe('buildPeriodGraph', () => {
         level: 13000,
       },
     ]);
-    expect(graph.rises).toEqual([
+    expect(graph.rises).toMatchObject([
       { kind: 'spent', x: middle(0), from: 0, to: 3000 },
       { kind: 'spent', x: middle(6), from: 3000, to: 15000 },
       { kind: 'spent', x: middle(11), from: 15000, to: 13000 },
+    ]);
+    // Each part and each step is named by its line and its payment
+    expect(graph.runs.map(run => run.id)).toEqual([
+      'spent::early',
+      'spent:p-early:early',
+      'spent:p-early:inside',
+      'spent:p1:inside',
+      'spent:refund:inside',
+    ]);
+    expect(graph.rises.map(rise => rise.id)).toEqual([
+      'spent:p-early',
+      'spent:p1',
+      'spent:refund',
+    ]);
+  });
+
+  it('joins an early payment to a period that has not begun', () => {
+    const early = {
+      asOf: '2017-05-31',
+      postings: [posting('p-early', '2017-05-30', -3000)],
+      offsets: [{ transactionId: 'p-early', periodId: JUNE.id }],
+    };
+    const { graph } = graphOf(early);
+
+    // The 30th of May to the 30th of June: 32 days, the as-of day the second
+    expect(graph).toMatchObject({
+      start: '2017-05-30',
+      periodFrom: 2 / 32,
+      spent: 3000,
+      asOfPlace: 'shown',
+      asOfX: middle(1),
+    });
+    expect(graph.runs).toEqual([
+      {
+        id: 'spent::early',
+        kind: 'spent',
+        zone: 'early',
+        from: 0,
+        to: middle(0),
+        level: 0,
+      },
+      // Past the as-of day, to the first day of the period
+      {
+        id: 'spent:p-early:early',
+        kind: 'spent',
+        zone: 'early',
+        from: middle(0),
+        to: 2 / 32,
+        level: 3000,
+      },
+    ]);
+
+    // And so with a charge that is still expected: its line begins at the
+    // as-of day
+    const withCharge = graphOf({
+      ...early,
+      charges: [charge('milk', 'food', '2017-06-12', JUNE.id, 5000)],
+    }).graph;
+    expect(withCharge.runs).toEqual([
+      ...graph.runs,
+      {
+        id: 'expected::early',
+        kind: 'expected',
+        zone: 'early',
+        from: middle(1),
+        to: 2 / 32,
+        level: 3000,
+      },
+      {
+        id: 'expected::inside',
+        kind: 'expected',
+        zone: 'inside',
+        from: 2 / 32,
+        to: middle(13),
+        level: 3000,
+      },
+      {
+        id: 'expected:milk:2017-06-12:inside',
+        kind: 'expected',
+        zone: 'inside',
+        from: middle(13),
+        to: 1,
+        level: 8000,
+      },
+    ]);
+    expect(withCharge.rises).toEqual([
+      { id: 'spent:p-early', kind: 'spent', x: middle(0), from: 0, to: 3000 },
+      {
+        id: 'expected:milk:2017-06-12',
+        kind: 'expected',
+        x: middle(13),
+        from: 3000,
+        to: 8000,
+      },
+    ]);
+  });
+
+  it('names the steps of two payments on one day apart', () => {
+    const { graph } = graphOf({
+      asOf: '2017-06-15',
+      postings: [
+        posting('a', '2017-06-05', -1000),
+        posting('b', '2017-06-05', -2000),
+      ],
+    });
+
+    expect(graph.rises.map(rise => rise.id)).toEqual(['spent:a', 'spent:b']);
+    // No part between them: it has no length
+    expect(graph.runs.map(run => run.id)).toEqual([
+      'spent::inside',
+      'spent:b:inside',
     ]);
   });
 
@@ -229,7 +340,7 @@ describe('buildPeriodGraph', () => {
       ['p1', 'inside', middle(4), 12000],
       ['p-late', 'late', middle(31), 16000],
     ]);
-    expect(graph.runs).toEqual([
+    expect(graph.runs).toMatchObject([
       { kind: 'spent', zone: 'inside', from: 0, to: middle(4), level: 0 },
       {
         kind: 'spent',
@@ -302,7 +413,7 @@ describe('buildPeriodGraph', () => {
       ['club:2017-06-20', middle(21), 7000, 27000],
       ['paper:2017-06-25', middle(26), 1000, 28000],
     ]);
-    expect(graph.runs.filter(run => run.kind === 'expected')).toEqual([
+    expect(graph.runs.filter(run => run.kind === 'expected')).toMatchObject([
       {
         kind: 'expected',
         zone: 'inside',
@@ -325,19 +436,21 @@ describe('buildPeriodGraph', () => {
         level: 28000,
       },
     ]);
-    expect(graph.rises.filter(rise => rise.kind === 'expected')).toEqual([
+    expect(graph.rises.filter(rise => rise.kind === 'expected')).toMatchObject([
       { kind: 'expected', x: middle(16), from: 15000, to: 20000 },
       { kind: 'expected', x: middle(21), from: 20000, to: 27000 },
       { kind: 'expected', x: middle(26), from: 27000, to: 28000 },
     ]);
     // The spent line ends where the expected one begins
-    expect(graph.runs.filter(run => run.kind === 'spent').at(-1)).toEqual({
-      kind: 'spent',
-      zone: 'inside',
-      from: middle(6),
-      to: middle(16),
-      level: 15000,
-    });
+    expect(graph.runs.filter(run => run.kind === 'spent').at(-1)).toMatchObject(
+      {
+        kind: 'spent',
+        zone: 'inside',
+        from: middle(6),
+        to: middle(16),
+        level: 15000,
+      },
+    );
   });
 
   it('has no spent line for a period that is shown before its first day', () => {
@@ -358,7 +471,7 @@ describe('buildPeriodGraph', () => {
       low: 0,
       high: 7000,
     });
-    expect(graph.runs).toEqual([
+    expect(graph.runs).toMatchObject([
       { kind: 'expected', zone: 'inside', from: 0, to: 19.5 / 31, level: 0 },
       {
         kind: 'expected',
@@ -368,7 +481,7 @@ describe('buildPeriodGraph', () => {
         level: 7000,
       },
     ]);
-    expect(graph.rises).toEqual([
+    expect(graph.rises).toMatchObject([
       { kind: 'expected', x: 19.5 / 31, from: 0, to: 7000 },
     ]);
   });
@@ -399,10 +512,10 @@ describe('buildPeriodGraph', () => {
 
     expect(graph.asOfPlace).toBe('after');
     expect(graph.charges).toMatchObject([{ x: 1, amount: 5000, level: 5000 }]);
-    expect(graph.runs).toEqual([
+    expect(graph.runs).toMatchObject([
       { kind: 'spent', zone: 'inside', from: 0, to: 1, level: 0 },
     ]);
-    expect(graph.rises).toEqual([
+    expect(graph.rises).toMatchObject([
       { kind: 'expected', x: 1, from: 0, to: 5000 },
     ]);
   });

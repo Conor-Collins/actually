@@ -125,15 +125,13 @@ export function PeriodGraph({
             color={theme.noticeText}
             testId="graph-allowance"
           />
-          {graph.runs.map((run, index) => {
+          {graph.runs.map(run => {
             // Outside the period's days: the thin line that joins a payment
             // to its period
             const isLink = run.zone !== 'inside';
             return (
               <LineRun
-                // The runs of a graph do not change places
-                // oxlint-disable-next-line react/no-array-index-key
-                key={index}
+                key={run.id}
                 from={run.from}
                 to={run.to}
                 y={y(run.level)}
@@ -144,10 +142,9 @@ export function PeriodGraph({
               />
             );
           })}
-          {graph.rises.map((rise, index) => (
+          {graph.rises.map(rise => (
             <LineRise
-              // oxlint-disable-next-line react/no-array-index-key
-              key={index}
+              key={rise.id}
               x={rise.x}
               fromY={y(rise.from)}
               toY={y(rise.to)}

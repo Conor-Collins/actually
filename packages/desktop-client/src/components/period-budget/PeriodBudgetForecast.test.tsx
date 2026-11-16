@@ -1,5 +1,6 @@
 import { MemoryRouter } from 'react-router';
 
+import { theme } from '@actual-app/components/theme';
 import { generateAccount } from '@actual-app/core/mocks';
 import { initServer } from '@actual-app/core/platform/client/connection';
 import type {
@@ -519,6 +520,13 @@ const CHECKING_TRANSFERS = [
   '07/10/2017Card bill-250.00',
 ];
 
+// An amount under zero is in this colour
+const WARNING = { color: theme.errorText };
+
+function amountsIn(container: HTMLElement, amount: string) {
+  return within(container).getAllByText(amount);
+}
+
 function expectCheckingPanel(panel: HTMLElement) {
   expect(group('Balance on 06/15/2017', panel)).toHaveTextContent('1,000.00');
   expect(group('Lowest balance', panel)).toHaveTextContent('-280.00');
@@ -775,6 +783,27 @@ describe('the forecast of the period budget', () => {
       ).toEqual([expect.stringMatching(/^05\/30\/2017earlyGrocerChecking/)]);
     });
 
+    it('joins an early payment to a period that has not begun', async () => {
+      charges = [];
+      await renderPage({ asOf: '2017-05-31' });
+      const { graph } = await openJune();
+
+      // The as-of day is the day before the band, which begins at 6.25%
+      expect(within(graph).getByTestId('graph-as-of').style.left).toBe(
+        '4.688%',
+      );
+      // The thin line goes on past it, to the first day of the period
+      expect(
+        within(graph).getAllByTestId('graph-early-link').map(placeOf),
+      ).toEqual([
+        { left: '0%', width: '1.563%', top: '100%' },
+        { left: '1.563%', width: '4.688%', top: '94%' },
+      ]);
+      // Nothing is spent in the days of the period yet, and nothing expected
+      expect(within(graph).queryByTestId('graph-spent')).toBeNull();
+      expect(within(graph).queryByTestId('graph-expected')).toBeNull();
+    });
+
     it('has a late payment at its real date, joined to the period, and says so in words', async () => {
       payments = [...PAYMENTS, LATE_PAYMENT];
       await renderPage({ asOf: '2017-07-10' });
@@ -966,6 +995,86 @@ describe('the forecast of the period budget', () => {
       expect(group('Expected on 07/31/2017', totals)).toHaveTextContent(
         '5,270.00',
       );
+    });
+
+    it('has a balance under zero, and a transfer that is needed, in the colour of a warning', async () => {
+      await renderPage();
+
+      const checking = accountRow('Checking');
+      expect(amountsIn(checking, '1,000.00')[0]).not.toHaveStyle(WARNING);
+      expect(amountsIn(checking, '-280.00')[0]).toHaveStyle(WARNING);
+      expect(amountsIn(checking, '1,770.00')[0]).not.toHaveStyle(WARNING);
+      const card = accountRow('Card');
+      // Its balance and its lowest balance
+      expect(amountsIn(card, '-250.00')).toHaveLength(2);
+      for (const amount of amountsIn(card, '-250.00')) {
+        expect(amount).toHaveStyle(WARNING);
+      }
+      expect(amountsIn(card, '0.00')[0]).not.toHaveStyle(WARNING);
+      // The balance of Savings and its lowest balance
+      const savings = accountRow('Savings');
+      expect(amountsIn(savings, '3,000.00')).toHaveLength(2);
+      for (const amount of amountsIn(savings, '3,000.00')) {
+        expect(amount).not.toHaveStyle(WARNING);
+      }
+
+      const totals = group('Cash in the forecast');
+      expect(amountsIn(totals, '3,750.00')[0]).not.toHaveStyle(WARNING);
+      expect(amountsIn(totals, '5,270.00')[0]).not.toHaveStyle(WARNING);
+
+      const panel = await openAccount('Checking');
+      expect(
+        amountsIn(group('Balance on 06/15/2017', panel), '1,000.00')[0],
+      ).not.toHaveStyle(WARNING);
+      expect(
+        amountsIn(group('Lowest balance', panel), '-280.00')[0],
+      ).toHaveStyle(WARNING);
+      expect(
+        amountsIn(group('Balance on 07/31/2017', panel), '1,770.00')[0],
+      ).not.toHaveStyle(WARNING);
+      expect(
+        amountsIn(group('Transfer needed', panel), '280.00')[0],
+      ).toHaveStyle(WARNING);
+
+      const savingsPanel = await openAccount('Savings');
+      expect(
+        amountsIn(group('Lowest balance', savingsPanel), '3,000.00')[0],
+      ).not.toHaveStyle(WARNING);
+    });
+
+    it('has what is owed in the colour of a warning, in the row, the opened account and the sums', async () => {
+      // Only Card is counted, and its bill is paid after the end of June
+      leftOutIds = ['checking', 'savings', 'holiday'];
+      await renderPage({ horizon: 'this-month' });
+
+      expect(cellsOf('Card')).toEqual([
+        '-250.00',
+        '-250.00',
+        'not forecast',
+        '-250.00',
+        '',
+      ]);
+      for (const amount of amountsIn(accountRow('Card'), '-250.00')) {
+        expect(amount).toHaveStyle(WARNING);
+      }
+      const totals = group('Cash in the forecast');
+      expect(
+        amountsIn(group('Balances together', totals), '-250.00')[0],
+      ).toHaveStyle(WARNING);
+      expect(
+        amountsIn(group('Expected on 06/30/2017', totals), '-250.00')[0],
+      ).toHaveStyle(WARNING);
+
+      const panel = await openAccount('Card');
+      for (const name of [
+        'Balance on 06/15/2017',
+        'Lowest balance',
+        'Balance on 06/30/2017',
+      ]) {
+        expect(amountsIn(group(name, panel), '-250.00')[0]).toHaveStyle(
+          WARNING,
+        );
+      }
     });
 
     it('draws the closing balance on the axis of the periods, with the days an account is short', async () => {
