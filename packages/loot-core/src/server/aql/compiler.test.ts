@@ -830,6 +830,17 @@ describe('sheet language', () => {
     );
     expect(result.sql).toMatch("id IN ('one','two','three')");
   });
+
+  it('$oneof keeps a quote in an id inside the text of the id', () => {
+    const result = generateSQLWithState(
+      q('transactions')
+        .filter({ id: { $oneof: ["o'ne", "' OR '1' = '1"] } })
+        .select(['amount'])
+        .serialize(),
+      schemaWithRefs,
+    );
+    expect(result.sql).toMatch("id IN ('o''ne',''' OR ''1'' = ''1')");
+  });
 });
 
 describe('Type conversions', () => {

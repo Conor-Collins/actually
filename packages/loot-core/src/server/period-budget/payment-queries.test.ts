@@ -2,6 +2,7 @@ import { aqlQuery } from '#server/aql';
 import * as db from '#server/db';
 import { loadMappings } from '#server/db/mappings';
 import {
+  listNameablePayments,
   nameablePaymentsQuery,
   paymentByIdQuery,
 } from '#shared/period-payment-queries';
@@ -19,6 +20,48 @@ async function idsOf(query: Query): Promise<string[]> {
 }
 
 const MARCH = { start: '2027-03-01', end: '2027-03-31' };
+
+async function listedIds(): Promise<string[]> {
+  const payments = await listNameablePayments<Listed>(aqlQuery, MARCH);
+  return payments.map(payment => payment.id);
+}
+
+// A split of March 15 with two parts
+async function insertSplit(id: string, account = 'checking') {
+  await db.insertTransaction({
+    id,
+    account,
+    date: '2027-03-15',
+    amount: -500,
+    is_parent: true,
+  });
+  for (const [part, amount] of [
+    ['a', -200],
+    ['b', -300],
+  ] satisfies Array<[string, number]>) {
+    await db.insertTransaction({
+      id: `${id}-${part}`,
+      account,
+      date: '2027-03-15',
+      amount,
+      category: 'rent',
+      is_child: true,
+      parent_id: id,
+    });
+  }
+}
+
+async function insertPart(id: string, parent_id: string) {
+  await db.insertTransaction({
+    id,
+    account: 'checking',
+    date: '2027-03-20',
+    amount: -100,
+    category: 'rent',
+    is_child: true,
+    parent_id,
+  });
+}
 
 beforeEach(async () => {
   await global.emptyDatabase()();
@@ -176,6 +219,113 @@ describe('nameablePaymentsQuery', () => {
     await db.deleteAccount({ id: 'gone' });
 
     expect(await idsOf(nameablePaymentsQuery(MARCH))).toEqual(['kept']);
+  });
+
+  it('gives a payment of a closed account', async () => {
+    await db.insertAccount({ id: 'old', name: 'Old', closed: 1 });
+    await db.insertTransaction({
+      id: 'from-closed',
+      account: 'old',
+      date: '2027-03-10',
+      amount: -100,
+    });
+
+    expect(await listed(nameablePaymentsQuery(MARCH))).toMatchObject([
+      { id: 'from-closed', account: 'old' },
+    ]);
+    expect(await listedIds()).toEqual(['from-closed']);
+  });
+});
+
+describe('listNameablePayments', () => {
+  it('gives what the query gives while every part has its split', async () => {
+    await db.insertTransaction({
+      id: 'plain',
+      account: 'checking',
+      date: '2027-03-20',
+      amount: -100,
+    });
+    await insertSplit('split');
+    await insertSplit('other');
+
+    const ids = ['plain', 'other-a', 'other-b', 'split-a', 'split-b'];
+    expect(await idsOf(nameablePaymentsQuery(MARCH))).toEqual(ids);
+    expect(await listedIds()).toEqual(ids);
+  });
+
+  it('gives no part that has itself as its split', async () => {
+    await insertSplit('split');
+    await insertPart('alone', 'alone');
+
+    // The query leaves it out by itself
+    expect(await idsOf(nameablePaymentsQuery(MARCH))).toEqual([
+      'split-a',
+      'split-b',
+    ]);
+    expect(await listedIds()).toEqual(['split-a', 'split-b']);
+  });
+
+  it('gives no part whose split is a part', async () => {
+    await insertSplit('split');
+    await insertPart('part-of-part', 'split-a');
+
+    expect(await idsOf(nameablePaymentsQuery(MARCH))).toEqual([
+      'part-of-part',
+      'split-a',
+      'split-b',
+    ]);
+    expect(await listedIds()).toEqual(['split-a', 'split-b']);
+  });
+
+  it('gives no part whose split is in a deleted account', async () => {
+    await insertSplit('split');
+    await db.insertTransaction({
+      id: 'left-behind',
+      account: 'gone',
+      date: '2027-03-12',
+      amount: -100,
+    });
+    await insertPart('part-elsewhere', 'left-behind');
+    await db.deleteAccount({ id: 'gone' });
+
+    expect(await idsOf(nameablePaymentsQuery(MARCH))).toEqual([
+      'part-elsewhere',
+      'split-a',
+      'split-b',
+    ]);
+    expect(await listedIds()).toEqual(['split-a', 'split-b']);
+  });
+
+  it('gives a part whose split is of a day that is not asked for', async () => {
+    await db.insertTransaction({
+      id: 'february',
+      account: 'checking',
+      date: '2027-02-27',
+      amount: -100,
+      is_parent: true,
+    });
+    await insertPart('part-in-march', 'february');
+
+    expect(await listedIds()).toEqual(['part-in-march']);
+  });
+
+  it('gives the parts of a split of a closed account', async () => {
+    await db.insertAccount({ id: 'old', name: 'Old', closed: 1 });
+    await insertSplit('split', 'old');
+
+    expect(await listedIds()).toEqual(['split-a', 'split-b']);
+  });
+
+  it('gives the parts of a split whose id has a quote in it', async () => {
+    await db.insertTransaction({
+      id: 'plain',
+      account: 'checking',
+      date: '2027-03-20',
+      amount: -100,
+    });
+    await insertSplit("it's");
+
+    expect(await listedIds()).toEqual(['plain', "it's-a", "it's-b"]);
   });
 });
 
