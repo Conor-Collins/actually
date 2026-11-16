@@ -1,5 +1,9 @@
 import { send } from '@actual-app/core/platform/client/connection';
 import type { PeriodBudgetCalculation } from '@actual-app/core/server/period-budget/calculate';
+import {
+  nameablePaymentsQuery,
+  paymentByIdQuery,
+} from '@actual-app/core/shared/period-payment-queries';
 import { q } from '@actual-app/core/shared/query';
 import { getScheduledAmount } from '@actual-app/core/shared/schedules';
 import type {
@@ -85,10 +89,9 @@ export const periodBudgetQueries = {
       },
       staleTime: Infinity,
     }),
-  // What can be named as the payment of a charge: the money that left any
-  // account on these days, in any category or in none, with the parts of a
-  // split in place of the split. The transaction `keepId` is listed whatever
-  // it is, so that a payment that is named already stays in the list.
+  // What can be named as the payment of a charge on these days. The
+  // transaction `keepId` is listed first whatever it is, so that a payment
+  // that is named already stays in the list.
   nameablePayments: ({ start, end, keepId }: PaymentRange) =>
     queryOptions<TransactionEntity[]>({
       queryKey: [
@@ -100,23 +103,13 @@ export const periodBudgetQueries = {
       ],
       queryFn: async () => {
         const { data }: { data: TransactionEntity[] } = await aqlQuery(
-          q('transactions')
-            .filter({
-              $and: [{ date: { $gte: start } }, { date: { $lte: end } }],
-              amount: { $lt: 0 },
-            })
-            .options({ splits: 'inline' })
-            .select('*')
-            .orderBy([{ date: 'desc' }, 'id']),
+          nameablePaymentsQuery({ start, end }),
         );
         if (keepId === null || data.some(entry => entry.id === keepId)) {
           return data;
         }
         const { data: kept }: { data: TransactionEntity[] } = await aqlQuery(
-          q('transactions')
-            .filter({ id: keepId })
-            .options({ splits: 'all' })
-            .select('*'),
+          paymentByIdQuery(keepId),
         );
         return [...kept, ...data];
       },

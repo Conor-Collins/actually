@@ -299,6 +299,9 @@ function meets(entry: TransactionEntity, conditions: unknown): boolean {
       if (operator === '$lte') {
         return !isBefore(bound, value);
       }
+      if (operator === '$ne') {
+        return value !== bound;
+      }
       throw new Error(`The ledger of the test does not know ${operator}`);
     });
   });
@@ -390,6 +393,8 @@ let hasDeletedRentPeriod = false;
 let namedJunePaymentId: string | null = null;
 // More rows that the calculation set aside
 let extraSetAside: SetAsideRow[] = [];
+// What the answers about transactions wait for
+let ledgerHold: Promise<void> | null = null;
 
 function rows(): PeriodBudgetRows {
   return {
@@ -535,6 +540,7 @@ function startServer() {
       if (query.table !== 'transactions') {
         return { data: SCHEDULES, dependencies: [] };
       }
+      await ledgerHold;
       const found = LEDGER.filter(entry =>
         query.filterExpressions.every(conditions => meets(entry, conditions)),
       );
@@ -752,6 +758,19 @@ function holdNextWrite() {
   };
 }
 
+// Makes the server answer about transactions only when the test says so
+function holdLedger() {
+  const waiting: Array<() => void> = [];
+  ledgerHold = new Promise<void>(resolve => {
+    waiting.push(resolve);
+  });
+  return () => {
+    for (const answer of waiting) {
+      answer();
+    }
+  };
+}
+
 // A row that the calculation set aside, with a sentence the page must not
 // show
 function setAside(
@@ -779,6 +798,7 @@ describe('PeriodBudgetPage', () => {
     hasDeletedRentPeriod = false;
     namedJunePaymentId = null;
     extraSetAside = [];
+    ledgerHold = null;
     responsive.isNarrowWidth = false;
     startServer();
   });
@@ -1688,6 +1708,102 @@ describe('PeriodBudgetPage', () => {
       ]);
     });
 
+    it('keeps a payment that is chosen in the list when other days are asked for', async () => {
+      await renderPage();
+      const panel = await openPeriod('Tax', '2017');
+      await userEvent.click(
+        within(panel).getByRole('button', {
+          name: 'Change Tax office of 03/15/2017',
+        }),
+      );
+      const chosen = '03/20/2017, Tax office, Checking, -300.00';
+      await choose(
+        await within(panel).findByRole('button', {
+          name: 'The payment that matches the schedule',
+        }),
+        chosen,
+      );
+
+      // The 20th of March is not one of these days
+      type(within(panel).getByLabelText('Payments until'), '2017-03-10');
+
+      await waitFor(async () =>
+        expect(
+          await optionsOf(within(panel).getByRole('button', { name: chosen })),
+        ).toEqual([
+          'The payment that matches the schedule',
+          chosen,
+          '03/10/2017, Grocer, Checking, -305.00',
+          '02/12/2017, Bakery, Checking, -2.00',
+        ]),
+      );
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Save' }),
+      );
+      await expectWrites([
+        'period-budget/set-charge-override',
+        {
+          scheduleId: 'sched-tax',
+          dueDate: '2017-03-15',
+          transactionId: 'p-tax',
+        },
+      ]);
+    });
+
+    it('says when the payment that is named does not exist any more, and lets it go', async () => {
+      namedJunePaymentId = 't-deleted';
+      await renderPage();
+      const panel = await openPeriod('Tax', '2017');
+      await userEvent.click(
+        within(panel).getByRole('button', {
+          name: 'Change Tax office of 06/10/2017',
+        }),
+      );
+
+      const paidBy = await within(panel).findByRole('button', {
+        name: 'A payment that does not exist any more',
+      });
+      expect(await optionsOf(paidBy)).toEqual([
+        'The payment that matches the schedule',
+        'A payment that does not exist any more',
+      ]);
+      await choose(paidBy, 'The payment that matches the schedule');
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Save' }),
+      );
+
+      await expectWrites([
+        'period-budget/set-charge-override',
+        { scheduleId: 'sched-tax', dueDate: '2017-06-10', transactionId: null },
+      ]);
+    });
+
+    it('does not say that the named payment is gone before the payments are known', async () => {
+      namedJunePaymentId = 't-early';
+      await renderPage();
+      const panel = await openPeriod('Tax', '2017');
+      const answer = holdLedger();
+      await userEvent.click(
+        within(panel).getByRole('button', {
+          name: 'Change Tax office of 06/10/2017',
+        }),
+      );
+
+      expect(within(panel).getByLabelText('Payments until')).toBeVisible();
+      expect(
+        within(panel).queryByRole('button', {
+          name: 'A payment that does not exist any more',
+        }),
+      ).toBeNull();
+
+      answer();
+      expect(
+        await within(panel).findByRole('button', {
+          name: '12/20/2016, Tax office, Checking, -300.00',
+        }),
+      ).toBeVisible();
+    });
+
     it('does not give amounts in the list of payments in privacy mode', async () => {
       await renderPage({ isPrivate: true });
       const panel = await openPeriod('Tax', '2017');
@@ -2210,6 +2326,8 @@ describe('PeriodBudgetPage', () => {
         setAside(table, 'sched-rent:2017-07-01', reason, 'open-amount'),
         setAside(table, 'sched-gym:2017-07-01', reason),
         setAside(table, 'not a charge', reason, 'amount'),
+        // The 30th of February is no day
+        setAside(table, 'sched-tax:2017-02-30', reason),
       ];
       await renderPage();
 
@@ -2218,7 +2336,7 @@ describe('PeriodBudgetPage', () => {
       expect(
         within(region)
           .getAllByRole('listitem')
-          .slice(5, 11)
+          .slice(5, 12)
           .map(item => item.textContent),
       ).toEqual([
         'The payment that is named for Tax office of 06/10/2017 does not exist any moreUse the payment that matches the scheduleRemove the change',
@@ -2226,6 +2344,7 @@ describe('PeriodBudgetPage', () => {
         'The expected amount that is stored for Landlord of 06/01/2017 cannot be usedRemove the change',
         'The still expected amount that is stored for Landlord of 07/01/2017 cannot be usedRemove the change',
         'A change to Gym of 07/01/2017 cannot be usedRemove the change',
+        'A change to a scheduled charge cannot be readRemove the change',
         'A change to a scheduled charge cannot be readRemove the change',
       ]);
 

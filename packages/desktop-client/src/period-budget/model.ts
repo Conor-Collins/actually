@@ -6,6 +6,7 @@ import * as monthUtils from '@actual-app/core/shared/months';
 import type { BudgetPeriod } from '@actual-app/core/shared/period-budget';
 import type { DerivedCharge } from '@actual-app/core/shared/period-charges';
 import type { SetAsideRow } from '@actual-app/core/shared/period-loader';
+import { isValidDay } from '@actual-app/core/shared/period-store';
 import type {
   CategoryEntity,
   CategoryGroupEntity,
@@ -21,11 +22,9 @@ export type Axis = {
   end: string;
 };
 
-const DAY = /^\d{4}-\d{2}-\d{2}$/;
-
-// Whether a text has the form of a day, as a date field gives it.
+// Whether a text is a day of the calendar, by the rule of the server.
 export function isDay(value: string | null): value is string {
-  return value !== null && DAY.test(value);
+  return isValidDay(value);
 }
 
 export function monthOf(day: string): string {

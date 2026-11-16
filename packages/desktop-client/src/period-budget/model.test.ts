@@ -19,6 +19,7 @@ import {
   findPeriod,
   findRow,
   horizonEndFor,
+  isDay,
   isOnAxis,
   lastDayOf,
   makeAxis,
@@ -247,6 +248,19 @@ describe('horizonEndFor', () => {
 });
 
 describe('period helpers', () => {
+  it('takes for a day what the calendar has, written as the server stores it', () => {
+    expect(isDay('2017-02-28')).toBe(true);
+    expect(isDay('2016-02-29')).toBe(true);
+    // 2017 is not a leap year
+    expect(isDay('2017-02-29')).toBe(false);
+    expect(isDay('2017-02-30')).toBe(false);
+    expect(isDay('2017-04-31')).toBe(false);
+    expect(isDay('2017-13-01')).toBe(false);
+    expect(isDay('2017-2-1')).toBe(false);
+    expect(isDay('soon')).toBe(false);
+    expect(isDay(null)).toBe(false);
+  });
+
   it('converts between the last day and the day after it', () => {
     expect(lastDayOf('2026-03-01')).toBe('2026-02-28');
     expect(endAfter('2026-02-28')).toBe('2026-03-01');

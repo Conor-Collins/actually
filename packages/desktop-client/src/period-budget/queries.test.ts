@@ -1,4 +1,4 @@
-import { isPeriodBudgetChange } from './queries';
+import { isPeriodBudgetChange, periodBudgetQueries } from './queries';
 
 describe('isPeriodBudgetChange', () => {
   it.each([
@@ -30,5 +30,30 @@ describe('isPeriodBudgetChange', () => {
       false,
     );
     expect(isPeriodBudgetChange([])).toBe(false);
+  });
+});
+
+describe('nameablePayments', () => {
+  it('is another query for other days and for another payment to keep', () => {
+    const march: { start: string; end: string; keepId: string | null } = {
+      start: '2017-03-01',
+      end: '2017-03-31',
+      keepId: null,
+    };
+    const keyOf = (range: Partial<typeof march>) =>
+      JSON.stringify(
+        periodBudgetQueries.nameablePayments({ ...march, ...range }).queryKey,
+      );
+
+    const keys = [
+      keyOf({}),
+      keyOf({ start: '2017-02-01' }),
+      keyOf({ end: '2017-04-30' }),
+      keyOf({ keepId: 'a' }),
+      keyOf({ keepId: 'b' }),
+    ];
+
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(keyOf({ ...march })).toBe(keys[0]);
   });
 });

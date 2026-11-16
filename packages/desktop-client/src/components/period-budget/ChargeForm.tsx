@@ -57,6 +57,8 @@ export function ChargeForm({
   const amount = useAmountText(charge.amount);
   const openAmount = useAmountText(storedOpenAmount);
   const [paymentId, setPaymentId] = useState(storedPaymentId ?? '');
+  // The payment that was chosen here, to keep it in the list on other days
+  const [chosen, setChosen] = useState<TransactionEntity | null>(null);
   const [from, setFrom] = useState(() =>
     monthUtils.subDays(charge.dueDate, DAYS_AROUND),
   );
@@ -74,7 +76,21 @@ export function ChargeForm({
     // Keep the list while other days are fetched
     placeholderData: previous => previous,
   });
-  const payments = paymentsQuery.data ?? [];
+  const listed = paymentsQuery.data ?? [];
+  const payments =
+    chosen !== null && !listed.some(payment => payment.id === chosen.id)
+      ? [chosen, ...listed]
+      : listed;
+  // The payment that is named can be deleted since
+  const isNamedPaymentGone =
+    paymentId !== '' &&
+    paymentsQuery.data !== undefined &&
+    !payments.some(payment => payment.id === paymentId);
+
+  function choose(id: string) {
+    setPaymentId(id);
+    setChosen(payments.find(payment => payment.id === id) ?? null);
+  }
 
   function paymentLabel(payment: TransactionEntity) {
     const words = {
@@ -170,12 +186,20 @@ export function ChargeForm({
             value={paymentId}
             options={[
               ['', t('The payment that matches the schedule')],
+              ...(isNamedPaymentGone
+                ? [
+                    [
+                      paymentId,
+                      t('A payment that does not exist any more'),
+                    ] satisfies [string, string],
+                  ]
+                : []),
               ...payments.map((payment): [string, string] => [
                 payment.id,
                 paymentLabel(payment),
               ]),
             ]}
-            onChange={setPaymentId}
+            onChange={choose}
             style={{ maxWidth: '100%' }}
           />
         </View>
