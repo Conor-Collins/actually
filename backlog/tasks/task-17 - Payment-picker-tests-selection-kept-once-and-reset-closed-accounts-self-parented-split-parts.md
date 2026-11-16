@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-16T03:09:00Z'
-updated_date: '2026-11-16T05:43:00Z'
+updated_date: '2026-11-16T06:14:00Z'
 labels:
   - testing
 dependencies: []
@@ -32,4 +32,6 @@ Follow-up from the TASK-11 round-3 review (approved at c2a5c2591, landed as 7afe
 
 <!-- SECTION:NOTES:BEGIN -->
 2026-11-16 05:45Z orchestrator: started. Pyramid-loop rung 1; test and patch prepared by the orchestrator, applied by the coder, reviewed independently.
+
+Round 1 (rung 1, local coder applied the orchestrator's patch): candidate 7d60a7695, gate exit 0 at 06:01Z. Independent review (gpt-6.1-sol xhigh) REQUEST CHANGES at 06:06Z: criteria 1 to 3 met; criterion 4 'not met literally' (the rule was in listNameablePayments, the query alone still gave the part); should-fix: a quote in the id of a split made the list fail ($oneof puts ids into SQL unescaped); note: two reviewer mutants survived (split restricted to the asked days, splits of closed accounts left out). Round 2 (same rung): candidate 683e2660a: $oneof doubles quotes (aql/compiler.ts, as the reviewer proposed), nameablePaymentsQuery itself leaves out a part that is its own split (criterion 4 as written, no ticket text change), three more real-database tests and one compiler test; orchestrator's mutants 15 of 15 killed.
 <!-- SECTION:NOTES:END -->
