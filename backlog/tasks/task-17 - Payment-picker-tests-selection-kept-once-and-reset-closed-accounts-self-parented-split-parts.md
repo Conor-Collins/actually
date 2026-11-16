@@ -3,13 +3,21 @@ id: TASK-17
 title: >-
   Payment picker tests: selection kept once and reset, closed accounts,
   self-parented split parts
-status: Review
+status: Done
 assignee: []
 created_date: '2026-11-16T03:09:00Z'
-updated_date: '2026-11-16T06:20:00Z'
+updated_date: '2026-11-16T06:23:00Z'
 labels:
   - testing
 dependencies: []
+modified_files:
+  - >-
+    packages/desktop-client/src/components/period-budget/PeriodBudgetPage.test.tsx
+  - packages/desktop-client/src/period-budget/queries.ts
+  - packages/loot-core/src/server/aql/compiler.test.ts
+  - packages/loot-core/src/server/aql/compiler.ts
+  - packages/loot-core/src/server/period-budget/payment-queries.test.ts
+  - packages/loot-core/src/shared/period-payment-queries.ts
 priority: low
 ordinal: 17000
 ---
@@ -22,10 +30,10 @@ Follow-up from the TASK-11 round-3 review (approved at c2a5c2591, landed as 7afe
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A page test in PeriodBudgetPage.test.tsx chooses a payment whose day is inside the asked days and asserts that the list has it once; it fails when the remembered choice is always prepended.
-- [ ] #2 A page test chooses a payment, goes back to the schedule match, changes the days so that the payment is outside them, and asserts that the payment is no longer listed; it fails when the remembered choice is not cleared.
-- [ ] #3 A test in payment-queries.test.ts asserts that a payment of a closed account is given by nameablePaymentsQuery; it fails when closed accounts are left out.
-- [ ] #4 A part of a split whose parent is itself is not offered by nameablePaymentsQuery, by the same rule the calculation uses for a valid parent, with a real-database test.
+- [x] #1 A page test in PeriodBudgetPage.test.tsx chooses a payment whose day is inside the asked days and asserts that the list has it once; it fails when the remembered choice is always prepended.
+- [x] #2 A page test chooses a payment, goes back to the schedule match, changes the days so that the payment is outside them, and asserts that the payment is no longer listed; it fails when the remembered choice is not cleared.
+- [x] #3 A test in payment-queries.test.ts asserts that a payment of a closed account is given by nameablePaymentsQuery; it fails when closed accounts are left out.
+- [x] #4 A part of a split whose parent is itself is not offered by nameablePaymentsQuery, by the same rule the calculation uses for a valid parent, with a real-database test.
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -37,3 +45,9 @@ Round 1 (rung 1, local coder applied the orchestrator's patch): candidate 7d60a7
 
 Round 2 review (gpt-6.1-sol xhigh) APPROVE at 06:20Z on 683e2660a, gate exit 0 at 06:16Z: all three round-1 findings resolved, criteria 1 to 4 met as written, no ticket change proposed. One note, not fixed here: no test holds the String() conversion of non-string $oneof values (reviewer mutant id.replace survives; the code is correct). Follow-up for the owner: an id compared alone (filter({ id })) is still put into SQL unescaped.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Landed task-17-payment-picker-tests as 3722b1dce on 2026-11-15.
+<!-- SECTION:FINAL_SUMMARY:END -->
