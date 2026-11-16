@@ -1,7 +1,7 @@
 import { send } from '@actual-app/core/platform/client/connection';
 import type { PeriodBudgetCalculation } from '@actual-app/core/server/period-budget/calculate';
 import {
-  nameablePaymentsQuery,
+  listNameablePayments,
   paymentByIdQuery,
 } from '@actual-app/core/shared/period-payment-queries';
 import { q } from '@actual-app/core/shared/query';
@@ -102,9 +102,10 @@ export const periodBudgetQueries = {
         keepId,
       ],
       queryFn: async () => {
-        const { data }: { data: TransactionEntity[] } = await aqlQuery(
-          nameablePaymentsQuery({ start, end }),
-        );
+        const data = await listNameablePayments<TransactionEntity>(aqlQuery, {
+          start,
+          end,
+        });
         if (keepId === null || data.some(entry => entry.id === keepId)) {
           return data;
         }

@@ -256,6 +256,12 @@ const LEDGER: TransactionEntity[] = [
   transaction('t-day-32-after', '2017-04-16', -400, 'bakery'),
   // Long before the charge
   transaction('t-early', '2016-12-20', -30000, 'tax-office'),
+  // A part that has itself as its split: the calculation leaves it out
+  {
+    ...transaction('t-part-alone', '2017-03-14', -700, 'bakery'),
+    is_child: true,
+    parent_id: 't-part-alone',
+  },
 ];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -301,6 +307,9 @@ function meets(entry: TransactionEntity, conditions: unknown): boolean {
       }
       if (operator === '$ne') {
         return value !== bound;
+      }
+      if (operator === '$oneof') {
+        return Array.isArray(bound) && bound.includes(value);
       }
       throw new Error(`The ledger of the test does not know ${operator}`);
     });
@@ -1748,6 +1757,74 @@ describe('PeriodBudgetPage', () => {
           transactionId: 'p-tax',
         },
       ]);
+    });
+
+    it('lists a payment that is chosen once while its day is one of the days', async () => {
+      await renderPage();
+      const panel = await openPeriod('Tax', '2017');
+      await userEvent.click(
+        within(panel).getByRole('button', {
+          name: 'Change Tax office of 03/15/2017',
+        }),
+      );
+      const chosen = '03/20/2017, Tax office, Checking, -300.00';
+      await choose(
+        await within(panel).findByRole('button', {
+          name: 'The payment that matches the schedule',
+        }),
+        chosen,
+      );
+
+      expect(
+        await optionsOf(within(panel).getByRole('button', { name: chosen })),
+      ).toEqual([
+        'The payment that matches the schedule',
+        '04/15/2017, Bakery, Checking, -3.00',
+        chosen,
+        '03/18/2017, Tax office, Savings, -300.00',
+        '03/10/2017, Grocer, Checking, -305.00',
+        '02/12/2017, Bakery, Checking, -2.00',
+      ]);
+    });
+
+    it('lets a chosen payment go from the list when the schedule match is chosen again', async () => {
+      await renderPage();
+      const panel = await openPeriod('Tax', '2017');
+      await userEvent.click(
+        within(panel).getByRole('button', {
+          name: 'Change Tax office of 03/15/2017',
+        }),
+      );
+      const match = 'The payment that matches the schedule';
+      const chosen = '03/20/2017, Tax office, Checking, -300.00';
+      await choose(
+        await within(panel).findByRole('button', { name: match }),
+        chosen,
+      );
+      await choose(within(panel).getByRole('button', { name: chosen }), match);
+
+      // The 20th of March is not one of these days
+      type(within(panel).getByLabelText('Payments until'), '2017-03-10');
+
+      await waitFor(async () =>
+        expect(
+          await optionsOf(within(panel).getByRole('button', { name: match })),
+        ).toEqual([
+          match,
+          '03/10/2017, Grocer, Checking, -305.00',
+          '02/12/2017, Bakery, Checking, -2.00',
+        ]),
+      );
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Save' }),
+      );
+      // Nothing was changed: the form closes without a write
+      await waitFor(() =>
+        expect(
+          within(panel).queryByRole('button', { name: 'Save' }),
+        ).toBeNull(),
+      );
+      expect(write).not.toHaveBeenCalled();
     });
 
     it('says when the payment that is named does not exist any more, and lets it go', async () => {
