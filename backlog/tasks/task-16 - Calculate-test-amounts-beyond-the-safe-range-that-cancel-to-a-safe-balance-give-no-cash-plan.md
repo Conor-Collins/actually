@@ -3,10 +3,10 @@ id: TASK-16
 title: >-
   Calculate test: amounts beyond the safe range that cancel to a safe balance
   give no cash plan
-status: In Progress
+status: Review
 assignee: []
 created_date: '2026-11-15T23:29:00Z'
-updated_date: '2026-11-16T05:43:00Z'
+updated_date: '2026-11-16T05:58:00Z'
 labels:
   - testing
 dependencies: []
@@ -30,4 +30,6 @@ Follow-up from the TASK-10 round-5 review (finding 13, non-blocking). In package
 
 <!-- SECTION:NOTES:BEGIN -->
 2026-11-16 05:45Z orchestrator: started. Pyramid-loop rung 1; test and patch prepared by the orchestrator, applied by the coder, reviewed independently.
+
+Round 1 (rung 1, local coder applied the orchestrator's patch): candidate 366cc17e1, one test added to calculate.test.ts, no production change. Orchestrator's gate exit 0 at 05:56Z. Independent review (gpt-6.1-sol xhigh) APPROVE at 05:58Z: both criteria met; the reviewer's own mutation (Number.isInteger in the balance loop) fails exactly the new test. No findings.
 <!-- SECTION:NOTES:END -->
