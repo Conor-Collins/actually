@@ -49,71 +49,78 @@ export function PeriodBudgetPage() {
     }
   }
 
+  // On a wide screen the page scrolls inside the frame it is opened in. What
+  // scrolls is one block as tall as what is in it: the sections themselves
+  // would otherwise be squeezed to the height of the window, onto each other.
   const content = (
     <View
       style={{
         flex: isNarrowWidth ? undefined : 1,
         overflowY: isNarrowWidth ? undefined : 'auto',
-        gap: 16,
-        paddingBottom: 20,
       }}
     >
-      {error && (
-        <View role="alert" style={{ gap: 4 }}>
-          <Text style={{ color: theme.errorText }}>
-            <Trans>The period budget could not be calculated.</Trans>
+      <View style={{ flexShrink: 0, gap: 16, paddingBottom: 20 }}>
+        {error && (
+          <View role="alert" style={{ gap: 4 }}>
+            <Text style={{ color: theme.errorText }}>
+              <Trans>The period budget could not be calculated.</Trans>
+            </Text>
+            {/* What the server said, for a report of the problem */}
+            <Text
+              style={{
+                fontFamily: 'monospace',
+                fontSize: 12,
+                color: theme.pageTextSubdued,
+              }}
+            >
+              {error.message}
+            </Text>
+          </View>
+        )}
+        {view === null && !error && (
+          <Text role="status" style={{ color: theme.pageTextSubdued }}>
+            <Trans>Calculating the period budget</Trans>
           </Text>
-          {/* What the server said, for a report of the problem */}
-          <Text
-            style={{
-              fontFamily: 'monospace',
-              fontSize: 12,
-              color: theme.pageTextSubdued,
-            }}
-          >
-            {error.message}
-          </Text>
-        </View>
-      )}
-      {view === null && !error && (
-        <Text role="status" style={{ color: theme.pageTextSubdued }}>
-          <Trans>Calculating the period budget</Trans>
-        </Text>
-      )}
-      {view !== null && isNarrowWidth && (
-        <MobilePeriodBudget
-          view={view}
-          asOf={asOf}
-          onAsOfChange={changeAsOf}
-          data={data}
-          labels={labels}
-          selection={selection}
-          onSelect={setSelection}
-        />
-      )}
-      {view !== null && !isNarrowWidth && (
-        <>
-          <AsOfControls asOf={asOf} onAsOfChange={changeAsOf} labels={labels} />
-          <PeriodBudgetFigures view={view} labels={labels} />
-          <NeedsAttention
+        )}
+        {view !== null && isNarrowWidth && (
+          <MobilePeriodBudget
             view={view}
-            data={data}
-            labels={labels}
-            onOpenCategory={categoryId =>
-              setSelection({ categoryId, period: null })
-            }
-          />
-          <Timeline
-            view={view}
-            axis={axis}
-            onAxisChange={setAxis}
+            asOf={asOf}
+            onAsOfChange={changeAsOf}
             data={data}
             labels={labels}
             selection={selection}
             onSelect={setSelection}
           />
-        </>
-      )}
+        )}
+        {view !== null && !isNarrowWidth && (
+          <>
+            <AsOfControls
+              asOf={asOf}
+              onAsOfChange={changeAsOf}
+              labels={labels}
+            />
+            <PeriodBudgetFigures view={view} labels={labels} />
+            <NeedsAttention
+              view={view}
+              data={data}
+              labels={labels}
+              onOpenCategory={categoryId =>
+                setSelection({ categoryId, period: null })
+              }
+            />
+            <Timeline
+              view={view}
+              axis={axis}
+              onAxisChange={setAxis}
+              data={data}
+              labels={labels}
+              selection={selection}
+              onSelect={setSelection}
+            />
+          </>
+        )}
+      </View>
     </View>
   );
 
