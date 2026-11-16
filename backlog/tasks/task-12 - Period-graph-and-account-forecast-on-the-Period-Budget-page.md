@@ -1,10 +1,10 @@
 ---
 id: TASK-12
 title: Period graph and account forecast on the Period Budget page
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-15T16:13:00Z'
+updated_date: '2026-11-16T03:09:00Z'
 labels:
   - ui
 dependencies:
@@ -36,4 +36,6 @@ Outline only. Waits on the owner's decisions (SPEC section 10): how offset payme
 2026-11-15: two candidate plans (A stored records, B cadence and derivation) are in /data/t3-work/actually-approvals/plans-2026-11-15/ and wait for the owner's choice. Scope and acceptance criteria are unchanged until then.
 
 2026-11-15: the owner approved plan B ("Plan B, all approved"). The plan is docs/plans/period-budget.md (commit 6f90e400f); section references in the acceptance criteria (B1 to B9, S1 to S8) are to that file. Acceptance criteria set from its section B9.
+
+2026-11-16 03:12Z: started after TASK-11 landed (7afe35c91). Pyramid-loop rung 1; the orchestrator prototypes the reference and tests in a scratch worktree as for TASK-11.
 <!-- SECTION:NOTES:END -->
