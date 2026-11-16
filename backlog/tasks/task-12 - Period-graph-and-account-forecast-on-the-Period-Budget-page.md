@@ -4,7 +4,7 @@ title: Period graph and account forecast on the Period Budget page
 status: In Progress
 assignee: []
 created_date: '2026-11-13T16:09:00Z'
-updated_date: '2026-11-16T03:09:00Z'
+updated_date: '2026-11-16T04:41:00Z'
 labels:
   - ui
 dependencies:
@@ -38,4 +38,6 @@ Outline only. Waits on the owner's decisions (SPEC section 10): how offset payme
 2026-11-15: the owner approved plan B ("Plan B, all approved"). The plan is docs/plans/period-budget.md (commit 6f90e400f); section references in the acceptance criteria (B1 to B9, S1 to S8) are to that file. Acceptance criteria set from its section B9.
 
 2026-11-16 03:12Z: started after TASK-11 landed (7afe35c91). Pyramid-loop rung 1; the orchestrator prototypes the reference and tests in a scratch worktree as for TASK-11.
+
+2026-11-16 04:42Z: rung 1 round 1 candidate 7ae146edc on task-12-graph-and-forecast (one commit on 68a5c7a74; the orchestrator's patch applied by the local coder, patch-id verified). Gate running; review next.
 <!-- SECTION:NOTES:END -->
