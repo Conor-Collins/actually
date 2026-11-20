@@ -13,6 +13,7 @@ import type {
   SetAsideRow,
 } from './period-loader';
 import { isValidDay, isWholeNumber } from './period-store';
+import { MAX_SAFE_NUMBER } from './util';
 
 // A schedule the user linked to a category, with a negative amount.
 export type ChargeSchedule = {
@@ -742,7 +743,7 @@ type PlanCashInput = {
   horizonEnd: string;
 };
 
-const LARGEST = Number.MAX_SAFE_INTEGER;
+const LARGEST = MAX_SAFE_NUMBER;
 
 // The cash forecast of the selected accounts. A movement dated on or before
 // the as-of day has not happened yet (the balances do not hold it), so it
