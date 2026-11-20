@@ -1,13 +1,19 @@
 ---
 id: TASK-22
 title: 'Period Budget page: a first visit while offline shows no category rows'
-status: Review
+status: Done
 assignee: []
 created_date: '2026-11-20T02:51:00Z'
-updated_date: '2026-11-20T06:09:00Z'
+updated_date: '2026-11-20T06:11:00Z'
 labels:
   - bug
 dependencies: []
+modified_files:
+  - >-
+    packages/desktop-client/src/components/period-budget/PeriodBudgetForecast.test.tsx
+  - >-
+    packages/desktop-client/src/components/period-budget/PeriodBudgetPage.test.tsx
+  - packages/desktop-client/src/components/period-budget/usePeriodBudgetData.ts
 priority: low
 ordinal: 22000
 ---
@@ -37,3 +43,9 @@ Found by the independent review of TASK-19 on 2026-11-20. TASK-19 lets the page'
 
 2026-11-20 06:10Z: round 3 candidate f013a6724 (test-only: fixtures seed the page's accounts key). Full gate on oak-paryl passed on this SHA (/tmp/actually-orch/gate-task-22-r3.log). Astra high round 3: APPROVE f013a6724d7ed5f45596ff39736fcc461b92761d; both criteria met; the base hook fails the test at the Food row and the round-1 key fails it at Checking. Ledger: rung 3 Luna low 2 turns without candidate, rung 4 Sol low rounds 1-3.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Landed task-22-offline-first-visit as 9c05c73e2 on 2026-11-19.
+<!-- SECTION:FINAL_SUMMARY:END -->
