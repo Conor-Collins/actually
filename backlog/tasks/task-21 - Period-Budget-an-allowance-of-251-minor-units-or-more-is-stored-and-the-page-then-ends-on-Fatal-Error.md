@@ -3,13 +3,21 @@ id: TASK-21
 title: >-
   Period Budget: an allowance of 2^51 minor units or more is stored and the page
   then ends on Fatal Error
-status: Review
+status: Done
 assignee: []
 created_date: '2026-11-16T15:00:00Z'
-updated_date: '2026-11-20T03:24:00Z'
+updated_date: '2026-11-20T03:26:00Z'
 labels:
   - bug
 dependencies: []
+modified_files:
+  - >-
+    packages/desktop-client/src/components/period-budget/PeriodBudgetPage.test.tsx
+  - packages/loot-core/src/server/period-budget/calculate.test.ts
+  - packages/loot-core/src/shared/period-charges.test.ts
+  - packages/loot-core/src/shared/period-charges.ts
+  - packages/loot-core/src/shared/period-loader.test.ts
+  - packages/loot-core/src/shared/period-loader.ts
 priority: high
 ordinal: 21000
 ---
@@ -40,3 +48,9 @@ Found by the independent review of TASK-13 on 2026-11-16 with 2^52 and reproduce
 
 2026-11-20T03:24Z Orchestrator: round 2 e17259a4c is test-only (the page fixture's dates no longer overlap another period; the repeated loader test removed), as the approving review asked; no new review round needed for test-only fixes. Gate exit 0 on oak-paryl at 03:24Z. Landing.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Landed task-21-allowance as 702464871 on 2026-11-19.
+<!-- SECTION:FINAL_SUMMARY:END -->
