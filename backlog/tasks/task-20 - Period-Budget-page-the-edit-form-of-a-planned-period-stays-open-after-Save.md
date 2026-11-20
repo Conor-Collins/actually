@@ -1,13 +1,17 @@
 ---
 id: TASK-20
 title: 'Period Budget page: the edit form of a planned period stays open after Save'
-status: Review
+status: Done
 assignee: []
 created_date: '2026-11-16T14:52:00Z'
-updated_date: '2026-11-20T03:34:00Z'
+updated_date: '2026-11-20T03:36:00Z'
 labels:
   - bug
 dependencies: []
+modified_files:
+  - >-
+    packages/desktop-client/src/components/period-budget/PeriodBudgetPage.test.tsx
+  - packages/desktop-client/src/components/period-budget/PeriodPanel.tsx
 priority: medium
 ordinal: 20000
 ---
@@ -35,3 +39,9 @@ Found by TASK-13 on 2026-11-16 (docs/verification/period-budget.md, finding 1) a
 
 2026-11-20T03:34Z Orchestrator: rung 4 round 2 candidate 793d10d58 (restores the date-change test; gate exit 0 on oak-paryl 03:33Z). Review (gpt-6.2-astra, high) APPROVE at 03:34Z: both criteria met, restored test byte-identical to the original, removing onStored now fails it. Landing.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Landed task-20-planned-form-closes as b49dfdea6 on 2026-11-19.
+<!-- SECTION:FINAL_SUMMARY:END -->
