@@ -3,10 +3,10 @@ id: TASK-21
 title: >-
   Period Budget: an allowance of 2^51 minor units or more is stored and the page
   then ends on Fatal Error
-status: In Progress
+status: Review
 assignee: []
 created_date: '2026-11-16T15:00:00Z'
-updated_date: '2026-11-20T02:51:00Z'
+updated_date: '2026-11-20T03:24:00Z'
 labels:
   - bug
 dependencies: []
@@ -22,9 +22,9 @@ Found by the independent review of TASK-13 on 2026-11-16 with 2^52 and reproduce
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A period whose allowance Actual cannot show does not stop the Period Budget page from opening: either the handlers refuse an allowance above 2^51 - 1 minor units, or the page sets such a period aside and lists it under Needs attention, or both. The choice is recorded on the ticket
-- [ ] #2 A file that has such a period already (it arrived by sync) opens the page, and the period can be deleted there
-- [ ] #3 Tests hold both criteria and fail on main before the fix
+- [x] #1 A period whose allowance Actual cannot show does not stop the Period Budget page from opening: either the handlers refuse an allowance above 2^51 - 1 minor units, or the page sets such a period aside and lists it under Needs attention, or both. The choice is recorded on the ticket
+- [x] #2 A file that has such a period already (it arrived by sync) opens the page, and the period can be deleted there
+- [x] #3 Tests hold both criteria and fail on main before the fix
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -37,4 +37,6 @@ Found by the independent review of TASK-13 on 2026-11-16 with 2^52 and reproduce
 2026-11-20T02:29Z Orchestrator: rung 3 (gpt-6-luna, low) ended six turns in a row without a candidate, each after one or two minutes and despite explicit instructions to finish; I count that as rung 3 failed (no candidate to review) and moved the same Code thread to rung 4 (gpt-6.2-sol, low). No review ran yet.
 
 2026-11-20T02:51Z Orchestrator: rung 4 round 1 candidate 9d9819d2d (gate exit 0 on oak-paryl 02:44Z and on err-narel). Review (gpt-6.2-astra, high) APPROVE at 02:46Z, with one should-fix in the page test fixture (it overlapped another period, so it was not what the server would set aside) and a note that one new loader test repeats an existing one; both test-only, sent back to the coder as round 2 without a new review round. Choice for criterion 1: the loader sets aside periods whose amounts are past Actual's display limit (2^51 - 1 minor units) and lists them under Needs attention, where they can be deleted; create and update still accept such amounts. The cash forecast uses the same limit.
+
+2026-11-20T03:24Z Orchestrator: round 2 e17259a4c is test-only (the page fixture's dates no longer overlap another period; the repeated loader test removed), as the approving review asked; no new review round needed for test-only fixes. Gate exit 0 on oak-paryl at 03:24Z. Landing.
 <!-- SECTION:NOTES:END -->
