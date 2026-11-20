@@ -1,9 +1,10 @@
 ---
 id: TASK-22
 title: 'Period Budget page: a first visit while offline shows no category rows'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-11-20T02:51:00Z'
+updated_date: '2026-11-20T03:37:00Z'
 labels:
   - bug
 dependencies: []
@@ -22,3 +23,9 @@ Found by the independent review of TASK-19 on 2026-11-20. TASK-19 lets the page'
 - [ ] #1 With the browser offline and an empty query cache, the Period Budget page shows its category rows, and a stored period can be opened and edited
 - [ ] #2 A page test starts offline with a fresh query client, holds the first criterion, and fails on main
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-11-20T03:37Z Orchestrator: started on err-narel at rung 3 (gpt-6-luna, low), as the owner asked for lingering tasks; base is main d23f5523f (sent as a bundle). Review and landing on oak-paryl.
+<!-- SECTION:NOTES:END -->
