@@ -3,9 +3,10 @@ id: TASK-24
 title: >-
   Prototype: schedules by category with several payees, schedule from a filtered
   view, cleanup step
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-11-20T18:41:00Z'
+updated_date: '2026-11-20T19:29:00Z'
 labels:
   - prototype
 dependencies: []
@@ -27,3 +28,9 @@ Conor, 2026-11-20: "I should also be able to convert a filtered view to a schedu
 - [ ] #4 After saving, a cleanup step lists four checkboxes with exactly what each will change: clear the monthly budget amounts of the category in the covered months, remove the old single-payee schedules it replaces, link the matched transactions to the new schedule, move same-payee transactions in other categories to this category; nothing changes until confirmed, and the changes can be undone with Actual's undo
 - [ ] #5 Tests cover the category and multi-payee matching, the prefill, the linked period and each cleanup action; the gate passes
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-11-20: owner chose to start these prototype tickets at rung 4 (Sol low), cloud, no GPU. Code thread on oak-paryl, worktree task-24-*, brief /var/lib/t3/actually-orch/briefs/task-24-brief.md. Prototype branch: not landed on main until the owner has given notes.
+<!-- SECTION:NOTES:END -->
