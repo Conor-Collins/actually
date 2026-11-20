@@ -1,9 +1,10 @@
 ---
 id: TASK-23
 title: 'Prototype: account view date range control and filtered sum under Payment'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-11-20T18:41:00Z'
+updated_date: '2026-11-20T19:29:00Z'
 labels:
   - prototype
 dependencies: []
@@ -25,3 +26,9 @@ Conor, 2026-11-20, on the running copy of his server: "the time filter should re
 - [ ] #4 Existing date filters (month is, year is, date between) saved in filters or URLs still work and show in the range control; other filters are unchanged
 - [ ] #5 Page tests cover the arrows, the chart ignoring the date, and the sum; the gate passes
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-11-20: owner chose to start these prototype tickets at rung 4 (Sol low), cloud, no GPU. Code thread on oak-paryl, worktree task-23-*, brief /var/lib/t3/actually-orch/briefs/task-23-brief.md. Prototype branch: not landed on main until the owner has given notes.
+<!-- SECTION:NOTES:END -->
