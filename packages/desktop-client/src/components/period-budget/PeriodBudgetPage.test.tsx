@@ -13,6 +13,7 @@ import type {
   ScheduleEntity,
   TransactionEntity,
 } from '@actual-app/core/types/models';
+import { onlineManager } from '@tanstack/react-query';
 import {
   fireEvent,
   render,
@@ -398,8 +399,9 @@ const write = vi.fn(
     id: 'stored-id',
   }),
 );
-// July once the server has stored it, under the id and with the fields of the
-// write
+const calculateRequest = vi.fn<Handlers['period-budget/calculate']>();
+let juneBudget = FOOD_JUNE.budget;
+// July once the server has stored it, under the id and with the fields of the write
 let storedJuly: BudgetPeriod | null = null;
 let extraPayments: Payment[] = [];
 let calculationError: string | null = null;
@@ -432,7 +434,10 @@ function rows(): PeriodBudgetRows {
       stored(FOOD_FEBRUARY, { tombstone: true }),
       stored(FOOD_MARCH),
       stored(FOOD_MAY),
-      stored(FOOD_JUNE, { carried_from: 'food-may' }),
+      stored(
+        { ...FOOD_JUNE, budget: juneBudget },
+        { carried_from: 'food-may' },
+      ),
       ...(isTidy ? [] : [stored(FOOD_OVERLAPPING)]),
       stored(TAX_2017),
       ...(storedJuly ? [stored(storedJuly)] : []),
@@ -489,7 +494,7 @@ function calculation(asOf: string): PeriodBudgetCalculation {
     periods: [
       FOOD_MARCH,
       FOOD_MAY,
-      FOOD_JUNE,
+      { ...FOOD_JUNE, budget: juneBudget },
       july,
       ...(hasPlannedAugust ? [FOOD_AUGUST] : []),
       TAX_2017,
@@ -551,6 +556,9 @@ function calculation(asOf: string): PeriodBudgetCalculation {
 }
 
 function startServer() {
+  calculateRequest.mockImplementation(async ({ asOf }) =>
+    calculationError === null ? calculation(asOf) : { error: calculationError },
+  );
   const handlers: Partial<Handlers> = {
     'get-categories': async () => ({
       grouped: GROUPS,
@@ -573,10 +581,7 @@ function startServer() {
         ? { ...transaction, category: 'rent' }
         : transaction,
     'period-budget/get-rows': async () => rows(),
-    'period-budget/calculate': async ({ asOf }) =>
-      calculationError === null
-        ? calculation(asOf)
-        : { error: calculationError },
+    'period-budget/calculate': calculateRequest,
   };
   for (const name of WRITE_NAMES) {
     handlers[name] = args => write(name, args);
@@ -591,6 +596,17 @@ function startServer() {
         args.end,
         args.budget,
       );
+    }
+    return result;
+  };
+  handlers['period-budget/update-period'] = async args => {
+    const result = await write('period-budget/update-period', args);
+    if (
+      'id' in result &&
+      args.id === FOOD_JUNE.id &&
+      args.budget !== undefined
+    ) {
+      juneBudget = args.budget;
     }
     return result;
   };
@@ -808,8 +824,11 @@ async function expectWrites(...expected: Array<[string, unknown]>) {
 }
 
 describe('PeriodBudgetPage', () => {
+  afterEach(() => onlineManager.setOnline(true));
   beforeEach(() => {
     write.mockClear();
+    calculateRequest.mockClear();
+    juneBudget = FOOD_JUNE.budget;
     storedJuly = null;
     extraPayments = [];
     calculationError = null;
@@ -824,6 +843,20 @@ describe('PeriodBudgetPage', () => {
   });
 
   describe('the figures', () => {
+    it('recalculates when the as-of day changes offline', async () => {
+      await renderPage();
+      onlineManager.setOnline(false);
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Previous month' }),
+      );
+      expect(calculateRequest).toHaveBeenCalledWith(
+        expect.objectContaining({ asOf: '2017-05-31' }),
+      );
+      const spent = await screen.findByRole('group', {
+        name: 'Spent in May 2017',
+      });
+      expect(within(spent).getByText('280.00')).toBeVisible();
+    });
     it('labels the cash, the spending of the month and what is left in the active periods', async () => {
       await renderPage();
 
@@ -1105,6 +1138,27 @@ describe('PeriodBudgetPage', () => {
   });
 
   describe('an opened period', () => {
+    it('saves an allowance change offline', async () => {
+      isTidy = true;
+      await renderPage();
+      onlineManager.setOnline(false);
+      const panel = await openPeriod('Food', 'June 2017');
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Edit' }),
+      );
+      type(within(panel).getByRole('textbox', { name: 'Allowance' }), '450');
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Save' }),
+      );
+      await expectWrites([
+        'period-budget/update-period',
+        { id: 'food-june', budget: 45000 },
+      ]);
+      expect(
+        await within(panel).findByRole('button', { name: 'Edit' }),
+      ).toBeInTheDocument();
+      expect(section(panel, 'Allowance')).toHaveTextContent('550.00');
+    });
     it('opens under its row with its figures, payments and actions, and closes again', async () => {
       await renderPage();
 
