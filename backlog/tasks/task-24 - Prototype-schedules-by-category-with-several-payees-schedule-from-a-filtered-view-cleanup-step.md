@@ -6,7 +6,7 @@ title: >-
 status: Review
 assignee: []
 created_date: '2026-11-20T18:41:00Z'
-updated_date: '2026-11-20T20:12:00Z'
+updated_date: '2026-11-20T20:39:00Z'
 labels:
   - prototype
 dependencies: []
@@ -39,4 +39,6 @@ Conor, 2026-11-20: "I should also be able to convert a filtered view to a schedu
 2026-11-20 20:02Z: r2 candidate b1ec315fc, gate passed. Astra r2 REQUEST CHANGES: blocking one-year conversion reuses and overwrites a longer period's allowance. Round 3 sent.
 
 2026-11-20 20:12Z: r3 candidate 2f777555a (exact-year reuse only), gate passed (gate-task-24-r3.log). Astra high r3 APPROVE 2f777555aa9ece01acda842ed09fdf8e3e31d7be. Known integration issue with TASK-23: the header menu condition reads filteredAmount, which TASK-23 removes (All Accounts crashes in the merge); to be fixed in an integration step.
+
+2026-11-20 20:40Z: prototype branch prototype-notes-1 at 0bcf53c8b (main 58789a957 + TASK-25 583dc9a78 + TASK-24 incl. TASK-23 f2c4251f7, integration commits 0dbaedaa2 and 65e4346ad); full gate passed (gate-prototype-2.log); Astra high integration review r2 APPROVE 0bcf53c8b412e15baad63681090090e21b6935e5. Served for the owner on 127.0.0.1:5107 from a fresh snapshot copy, Insurance 2026 schedule and period created through the new flow (cleanup skipped). Waiting for the owner's notes; not landed.
 <!-- SECTION:NOTES:END -->
