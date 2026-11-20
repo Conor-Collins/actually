@@ -4,7 +4,7 @@ title: 'Prototype: account view date range control and filtered sum under Paymen
 status: Review
 assignee: []
 created_date: '2026-11-20T18:41:00Z'
-updated_date: '2026-11-20T20:15:00Z'
+updated_date: '2026-11-20T20:39:00Z'
 labels:
   - prototype
 dependencies: []
@@ -37,4 +37,6 @@ Conor, 2026-11-20, on the running copy of his server: "the time filter should re
 2026-11-20 20:03Z: r2 candidate bcb1da7f3, gate passed. Astra r2 REQUEST CHANGES: blocking footer stale after an amount edit; note splits forced closed. Round 3 sent.
 
 2026-11-20 20:15Z: r3 candidate f2c4251f7 (post-save refresh, expand-splits), gate passed (gate-task-23-r3.log). Astra high r3 APPROVE f2c4251f762ac87890a9554c3f7dd472202f1f23; note: '1 transactions' plural. Prototype only, not landed.
+
+2026-11-20 20:40Z: prototype branch prototype-notes-1 at 0bcf53c8b (main 58789a957 + TASK-25 583dc9a78 + TASK-24 incl. TASK-23 f2c4251f7, integration commits 0dbaedaa2 and 65e4346ad); full gate passed (gate-prototype-2.log); Astra high integration review r2 APPROVE 0bcf53c8b412e15baad63681090090e21b6935e5. Served for the owner on 127.0.0.1:5107 from a fresh snapshot copy, Insurance 2026 schedule and period created through the new flow (cleanup skipped). Waiting for the owner's notes; not landed.
 <!-- SECTION:NOTES:END -->
