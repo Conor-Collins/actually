@@ -1,10 +1,10 @@
 ---
 id: TASK-25
 title: 'Prototype: yearly periods shown on the main Budget page as a month snapshot'
-status: In Progress
+status: Review
 assignee: []
 created_date: '2026-11-20T19:28:00Z'
-updated_date: '2026-11-20T19:40:00Z'
+updated_date: '2026-11-20T19:46:00Z'
 labels:
   - prototype
 dependencies: []
@@ -33,4 +33,6 @@ Conor, 2026-11-20: "My understanding was that this actually version would be abl
 2026-11-20: owner chose to start these prototype tickets at rung 4 (Sol low), cloud, no GPU. Code thread on oak-paryl, worktree task-25-*, brief /var/lib/t3/actually-orch/briefs/task-25-brief.md. Prototype branch: not landed on main until the owner has given notes.
 
 2026-11-20 19:40Z: r1 candidate 3fb4ab341 (Sol low), gate passed. Astra high r1 REQUEST CHANGES: (1) blocking, snapshot allowance omits carryover, disagrees with Period Budget; (2) blocking, 3-line snapshot overflows the 32 px row. Round 2 sent.
+
+2026-11-20 19:47Z: r2 candidate 583dc9a78 (carryover in allowance, one-line snapshot), gate passed (/var/lib/t3/actually-orch/gate-task-25-r2.log). Astra high r2 APPROVE 583dc9a78f9f3469d85f8037ef71c663907c3ef8; note: tooltip omits amount when truncated. Not landed: goes into the prototype branch for the owner's notes; real-browser layout check pending.
 <!-- SECTION:NOTES:END -->
