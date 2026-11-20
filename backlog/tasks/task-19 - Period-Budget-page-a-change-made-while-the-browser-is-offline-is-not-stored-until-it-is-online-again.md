@@ -3,9 +3,10 @@ id: TASK-19
 title: >-
   Period Budget page: a change made while the browser is offline is not stored
   until it is online again
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-11-16T14:52:00Z'
+updated_date: '2026-11-20T02:18:00Z'
 labels:
   - bug
 dependencies: []
@@ -25,3 +26,9 @@ Found by TASK-13 on 2026-11-16 (docs/verification/period-budget.md, finding 13).
 - [ ] #2 A test fails on main before the fix and passes after it: a browser test that sets the context offline, or a page test that reports no network to TanStack Query
 - [ ] #3 The page's figures are also calculated again while the browser is offline, for example after the as-of day is changed
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-11-20T02:18Z Orchestrator: started on err-narel by the owner's instruction to send lingering tasks to max-ecru and err-narel (max-ecru's availability switch reads unavailable, so err-narel only). Rung 3 (Luna, low) by the owner's choice: the local rungs 1 and 2 cannot run there. Branch task-19-… on err-narel, candidate comes back as a bundle in /mnt/fm/projects/actually-transfer; review (Astra, high) and landing on oak-paryl.
+<!-- SECTION:NOTES:END -->
