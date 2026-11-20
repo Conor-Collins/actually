@@ -1,10 +1,10 @@
 ---
 id: TASK-22
 title: 'Period Budget page: a first visit while offline shows no category rows'
-status: In Progress
+status: Review
 assignee: []
 created_date: '2026-11-20T02:51:00Z'
-updated_date: '2026-11-20T06:05:00Z'
+updated_date: '2026-11-20T06:09:00Z'
 labels:
   - bug
 dependencies: []
@@ -20,8 +20,8 @@ Found by the independent review of TASK-19 on 2026-11-20. TASK-19 lets the page'
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 With the browser offline and an empty query cache, the Period Budget page shows its category rows, and a stored period can be opened and edited
-- [ ] #2 A page test starts offline with a fresh query client, holds the first criterion, and fails on main
+- [x] #1 With the browser offline and an empty query cache, the Period Budget page shows its category rows, and a stored period can be opened and edited
+- [x] #2 A page test starts offline with a fresh query client, holds the first criterion, and fails on main
 <!-- AC:END -->
 
 ## Implementation Notes
@@ -34,4 +34,6 @@ Found by the independent review of TASK-19 on 2026-11-20. TASK-19 lets the page'
 2026-11-20 05:58Z: round 1 candidate d89745628 (rung 4 Sol low). Astra high review: REQUEST CHANGES, one should-fix: CommandBar/sidebar mount default-mode useAccounts() above the route, so offline the page joins a paused accounts query and shows 'Deleted account'. Round 2 sent: page-only keys under the shared lists() prefix, test with an earlier subscriber.
 
 2026-11-20 06:05Z: round 2 candidate 8a6800b35 (page-only accounts key). Astra round 2: REQUEST CHANGES, blocking: PeriodBudgetForecast.test.tsx fixture seeds the old accounts key (26 failures in the oak-paryl gate); production key and invalidations verified correct. The round-1 gate failure (Food row missing) overlapped the reviewer's temporary mutant in the same worktree, so it says nothing about the candidate. Round 3 sent (test-only).
+
+2026-11-20 06:10Z: round 3 candidate f013a6724 (test-only: fixtures seed the page's accounts key). Full gate on oak-paryl passed on this SHA (/tmp/actually-orch/gate-task-22-r3.log). Astra high round 3: APPROVE f013a6724d7ed5f45596ff39736fcc461b92761d; both criteria met; the base hook fails the test at the Food row and the round-1 key fails it at Checking. Ledger: rung 3 Luna low 2 turns without candidate, rung 4 Sol low rounds 1-3.
 <!-- SECTION:NOTES:END -->
