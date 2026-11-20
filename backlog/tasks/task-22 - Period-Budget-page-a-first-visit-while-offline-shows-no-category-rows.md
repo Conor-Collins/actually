@@ -4,7 +4,7 @@ title: 'Period Budget page: a first visit while offline shows no category rows'
 status: In Progress
 assignee: []
 created_date: '2026-11-20T02:51:00Z'
-updated_date: '2026-11-20T05:54:00Z'
+updated_date: '2026-11-20T05:58:00Z'
 labels:
   - bug
 dependencies: []
@@ -30,4 +30,6 @@ Found by the independent review of TASK-19 on 2026-11-20. TASK-19 lets the page'
 2026-11-20T03:37Z Orchestrator: started on err-narel at rung 3 (gpt-6-luna, low), as the owner asked for lingering tasks; base is main d23f5523f (sent as a bundle). Review and landing on oak-paryl.
 
 2026-11-20 05:55Z: rung 3 (Luna low) ended two turns without a candidate (source change only, then a failing test). Moved to rung 4 (Sol low) on the same Code thread now, judging from the same stall on TASK-19/20/21 rather than waiting for six turns.
+
+2026-11-20 05:58Z: round 1 candidate d89745628 (rung 4 Sol low). Astra high review: REQUEST CHANGES, one should-fix: CommandBar/sidebar mount default-mode useAccounts() above the route, so offline the page joins a paused accounts query and shows 'Deleted account'. Round 2 sent: page-only keys under the shared lists() prefix, test with an earlier subscriber.
 <!-- SECTION:NOTES:END -->
