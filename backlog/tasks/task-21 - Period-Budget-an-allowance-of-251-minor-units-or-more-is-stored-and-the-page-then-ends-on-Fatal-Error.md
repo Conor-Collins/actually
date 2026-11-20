@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-16T15:00:00Z'
-updated_date: '2026-11-20T02:29:00Z'
+updated_date: '2026-11-20T02:51:00Z'
 labels:
   - bug
 dependencies: []
@@ -35,4 +35,6 @@ Found by the independent review of TASK-13 on 2026-11-16 with 2^52 and reproduce
 2026-11-20T02:18Z Orchestrator: started on err-narel by the owner's instruction to send lingering tasks to max-ecru and err-narel (max-ecru's availability switch reads unavailable, so err-narel only). Rung 3 (Luna, low) by the owner's choice: the local rungs 1 and 2 cannot run there. Branch task-21-… on err-narel, candidate comes back as a bundle in /mnt/fm/projects/actually-transfer; review (Astra, high) and landing on oak-paryl.
 
 2026-11-20T02:29Z Orchestrator: rung 3 (gpt-6-luna, low) ended six turns in a row without a candidate, each after one or two minutes and despite explicit instructions to finish; I count that as rung 3 failed (no candidate to review) and moved the same Code thread to rung 4 (gpt-6.2-sol, low). No review ran yet.
+
+2026-11-20T02:51Z Orchestrator: rung 4 round 1 candidate 9d9819d2d (gate exit 0 on oak-paryl 02:44Z and on err-narel). Review (gpt-6.2-astra, high) APPROVE at 02:46Z, with one should-fix in the page test fixture (it overlapped another period, so it was not what the server would set aside) and a note that one new loader test repeats an existing one; both test-only, sent back to the coder as round 2 without a new review round. Choice for criterion 1: the loader sets aside periods whose amounts are past Actual's display limit (2^51 - 1 minor units) and lists them under Needs attention, where they can be deleted; create and update still accept such amounts. The cash forecast uses the same limit.
 <!-- SECTION:NOTES:END -->
