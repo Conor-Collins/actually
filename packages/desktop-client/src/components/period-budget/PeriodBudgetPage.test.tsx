@@ -576,6 +576,8 @@ function startServer() {
     calculationError === null ? calculation(asOf) : { error: calculationError },
   );
   const handlers: Partial<Handlers> = {
+    'accounts-get': async () => [CHECKING, SAVINGS],
+    'payees-get': async () => PAYEES,
     'get-categories': async () => ({
       grouped: GROUPS,
       list: GROUPS.flatMap(group => group.categories ?? []),
@@ -1155,6 +1157,37 @@ describe('PeriodBudgetPage', () => {
   });
 
   describe('an opened period', () => {
+    it('loads and edits a stored period on its first offline visit', async () => {
+      isTidy = true;
+      onlineManager.setOnline(false);
+      const queryClient = createTestQueryClient();
+      const store = configureTestAppStore({ queryClient });
+      render(
+        <TestProviders store={store} queryClient={queryClient}>
+          <MemoryRouter initialEntries={['/period-budget']}>
+            <PeriodBudgetPage />
+          </MemoryRouter>
+        </TestProviders>,
+      );
+      fireEvent.change(await screen.findByLabelText('As of'), {
+        target: { value: '2017-06-15' },
+      });
+      expect(
+        await screen.findByRole('button', { name: 'Food' }),
+      ).toBeInTheDocument();
+      const panel = await openPeriod('Food', 'June 2017');
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Edit' }),
+      );
+      type(within(panel).getByRole('textbox', { name: 'Allowance' }), '450');
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Save' }),
+      );
+      await expectWrites([
+        'period-budget/update-period',
+        { id: 'food-june', budget: 45000 },
+      ]);
+    });
     it('saves an allowance change offline', async () => {
       isTidy = true;
       await renderPage();
