@@ -69,6 +69,8 @@ export function usePeriodBudgetMutation(onWritten?: (id: string) => void) {
   const { t } = useTranslation();
 
   return useMutation({
+    // The data is on the device, so a write does not wait for the network.
+    networkMode: 'always',
     mutationFn: async (steps: PeriodBudgetWriteStep[]) => {
       let id = '';
       for (const step of steps) {

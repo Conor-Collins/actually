@@ -56,6 +56,8 @@ export const periodBudgetQueries = {
   all: () => ['period-budget'],
   rows: () =>
     queryOptions<PeriodBudgetRows>({
+      // The data is on the device.
+      networkMode: 'always',
       queryKey: [...periodBudgetQueries.all(), 'rows'],
       queryFn: () => send('period-budget/get-rows'),
       // Manually invalidated when a source table changes
@@ -63,6 +65,8 @@ export const periodBudgetQueries = {
     }),
   calculation: ({ asOf, horizonEnd }: CalculationRange) =>
     queryOptions<PeriodBudgetCalculation>({
+      // The data is on the device.
+      networkMode: 'always',
       queryKey: [...periodBudgetQueries.all(), 'calculation', asOf, horizonEnd],
       queryFn: async () => {
         const result = await send('period-budget/calculate', {
@@ -80,6 +84,8 @@ export const periodBudgetQueries = {
     }),
   schedules: () =>
     queryOptions<ScheduleEntity[]>({
+      // The data is on the device.
+      networkMode: 'always',
       queryKey: [...periodBudgetQueries.all(), 'schedules'],
       queryFn: async () => {
         const { data }: { data: ScheduleEntity[] } = await aqlQuery(
@@ -94,6 +100,8 @@ export const periodBudgetQueries = {
   // that is named already stays in the list.
   nameablePayments: ({ start, end, keepId }: PaymentRange) =>
     queryOptions<TransactionEntity[]>({
+      // The data is on the device.
+      networkMode: 'always',
       queryKey: [
         ...periodBudgetQueries.all(),
         'nameable-payments',
@@ -118,6 +126,8 @@ export const periodBudgetQueries = {
     }),
   suggestedCategories: () =>
     queryOptions<SuggestedCategories>({
+      // The data is on the device.
+      networkMode: 'always',
       queryKey: [...periodBudgetQueries.all(), 'suggested-categories'],
       queryFn: async () => {
         const { data }: { data: ScheduleEntity[] } = await aqlQuery(
