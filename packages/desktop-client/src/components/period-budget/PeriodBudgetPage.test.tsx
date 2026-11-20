@@ -25,6 +25,7 @@ import userEvent from '@testing-library/user-event';
 
 import { accountQueries } from '#accounts';
 import { SidebarMenuRoute } from '#components/sidebar/SidebarMenuRoute';
+import { useAccounts } from '#hooks/useAccounts';
 import {
   configureTestAppStore,
   createTestQueryClient,
@@ -41,6 +42,9 @@ import {
 import { mergeSyncedPrefs } from '#prefs/prefsSlice';
 
 import { PeriodBudgetPage } from './PeriodBudgetPage';
+
+// The global test setup loads the shared queries before the connection mock.
+vi.hoisted(vi.resetModules);
 
 vi.mock(
   '@actual-app/core/platform/client/connection',
@@ -631,6 +635,11 @@ function startServer() {
   initServer(handlers);
 }
 
+function SharedAccountsSubscriber() {
+  useAccounts();
+  return null;
+}
+
 function Location() {
   const location = useLocation();
   return <div data-testid="location">{location.pathname}</div>;
@@ -1164,6 +1173,7 @@ describe('PeriodBudgetPage', () => {
       const store = configureTestAppStore({ queryClient });
       render(
         <TestProviders store={store} queryClient={queryClient}>
+          <SharedAccountsSubscriber />
           <MemoryRouter initialEntries={['/period-budget']}>
             <PeriodBudgetPage />
           </MemoryRouter>
@@ -1176,6 +1186,7 @@ describe('PeriodBudgetPage', () => {
         await screen.findByRole('button', { name: 'Food' }),
       ).toBeInTheDocument();
       const panel = await openPeriod('Food', 'June 2017');
+      expect((await within(panel).findAllByText('Checking'))[0]).toBeVisible();
       await userEvent.click(
         within(panel).getByRole('button', { name: 'Edit' }),
       );

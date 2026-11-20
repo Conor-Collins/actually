@@ -70,6 +70,8 @@ export function usePeriodBudgetData({
   });
   const { data: accounts = [] } = useQuery({
     ...accountQueries.list(),
+    // A shared accounts fetch may already be paused offline.
+    queryKey: [...accountQueries.lists(), 'period-budget'],
     networkMode: 'always',
   });
   const schedules = schedulesQuery.data ?? [];
