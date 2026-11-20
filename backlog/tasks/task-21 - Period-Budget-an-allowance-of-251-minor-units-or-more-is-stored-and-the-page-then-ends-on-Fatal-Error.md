@@ -3,10 +3,10 @@ id: TASK-21
 title: >-
   Period Budget: an allowance of 2^51 minor units or more is stored and the page
   then ends on Fatal Error
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-11-16T15:00:00Z'
-updated_date: '2026-11-16T15:00:00Z'
+updated_date: '2026-11-20T02:18:00Z'
 labels:
   - bug
 dependencies: []
@@ -31,4 +31,6 @@ Found by the independent review of TASK-13 on 2026-11-16 with 2^52 and reproduce
 
 <!-- SECTION:NOTES:BEGIN -->
 2026-11-16T15:00Z Orchestrator: description corrected minutes after creation. The first text said the page's form refuses such an amount; a probe showed that it does not. Priority raised to high for that reason.
+
+2026-11-20T02:18Z Orchestrator: started on err-narel by the owner's instruction to send lingering tasks to max-ecru and err-narel (max-ecru's availability switch reads unavailable, so err-narel only). Rung 3 (Luna, low) by the owner's choice: the local rungs 1 and 2 cannot run there. Branch task-21-… on err-narel, candidate comes back as a bundle in /mnt/fm/projects/actually-transfer; review (Astra, high) and landing on oak-paryl.
 <!-- SECTION:NOTES:END -->
