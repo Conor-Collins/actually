@@ -93,12 +93,15 @@ export function PeriodPanel({
 
   function save(values: PeriodFormValues) {
     if (view.isPlanned) {
-      storing.mutate([
-        {
-          name: 'period-budget/create-period',
-          args: { category: period.category, ...values },
-        },
-      ]);
+      storing.mutate(
+        [
+          {
+            name: 'period-budget/create-period',
+            args: { category: period.category, ...values },
+          },
+        ],
+        { onSuccess: () => setIsEditing(false) },
+      );
       return;
     }
     const changes: { start?: string; end?: string; budget?: number } = {};

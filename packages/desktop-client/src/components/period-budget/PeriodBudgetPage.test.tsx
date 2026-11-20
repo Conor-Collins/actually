@@ -1305,7 +1305,8 @@ describe('PeriodBudgetPage', () => {
       ]);
     });
 
-    it('stores a planned period when it is changed, and keeps it open', async () => {
+    it('closes the form after storing a planned period', async () => {
+      write.mockResolvedValueOnce({ id: FOOD_JULY.id });
       await renderPage();
       const panel = await openPeriod('Food', 'July 2017');
 
@@ -1318,7 +1319,6 @@ describe('PeriodBudgetPage', () => {
       await userEvent.click(
         within(panel).getByRole('button', { name: 'Edit' }),
       );
-      type(within(panel).getByLabelText('First day'), '2017-07-02');
       type(within(panel).getByRole('textbox', { name: 'Allowance' }), '420');
       await userEvent.click(
         within(panel).getByRole('button', { name: 'Save' }),
@@ -1328,23 +1328,54 @@ describe('PeriodBudgetPage', () => {
         'period-budget/create-period',
         {
           category: 'food',
-          start: '2017-07-02',
+          start: '2017-07-01',
           end: '2017-08-01',
           budget: 42000,
         },
       ]);
-      // It has another id and another first day now, and is still the opened
-      // row
-      const storedPanel = await screen.findByRole('region', {
-        name: 'Food, 07/02/2017 to 07/31/2017',
-      });
-      expect(section(storedPanel, 'Allowance')).toHaveTextContent('420.00');
       expect(
-        within(storedPanel).getByRole('button', { name: 'Delete' }),
+        await screen.findByRole('button', {
+          name: 'Food, July 2017, spent 0.00 of 420.00, remaining 420.00',
+        }),
       ).toBeInTheDocument();
+      expect(
+        within(panel).queryByRole('textbox', { name: 'Allowance' }),
+      ).not.toBeInTheDocument();
+      expect(
+        within(panel).getByRole('button', { name: 'Edit' }),
+      ).toBeInTheDocument();
+      expect(section(panel, 'Allowance')).toHaveTextContent('420.00');
       expect(
         screen.queryByRole('region', { name: 'Food' }),
       ).not.toBeInTheDocument();
+    });
+
+    it('keeps a planned period form open when the write is refused', async () => {
+      write.mockResolvedValueOnce({ error: 'the periods overlap' });
+      await renderPage();
+      const panel = await openPeriod('Food', 'July 2017');
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Edit' }),
+      );
+      const allowance = within(panel).getByRole('textbox', {
+        name: 'Allowance',
+      });
+      type(allowance, '420');
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Save' }),
+      );
+      await expectWrites([
+        'period-budget/create-period',
+        {
+          category: 'food',
+          start: '2017-07-01',
+          end: '2017-08-01',
+          budget: 42000,
+        },
+      ]);
+      expect(
+        within(panel).getByRole('textbox', { name: 'Allowance' }),
+      ).toHaveValue('420');
     });
 
     it('deletes a period and opens its category', async () => {
