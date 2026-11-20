@@ -4,7 +4,7 @@ title: 'Prototype: yearly periods shown on the main Budget page as a month snaps
 status: In Progress
 assignee: []
 created_date: '2026-11-20T19:28:00Z'
-updated_date: '2026-11-20T19:29:00Z'
+updated_date: '2026-11-20T19:40:00Z'
 labels:
   - prototype
 dependencies: []
@@ -31,4 +31,6 @@ Conor, 2026-11-20: "My understanding was that this actually version would be abl
 
 <!-- SECTION:NOTES:BEGIN -->
 2026-11-20: owner chose to start these prototype tickets at rung 4 (Sol low), cloud, no GPU. Code thread on oak-paryl, worktree task-25-*, brief /var/lib/t3/actually-orch/briefs/task-25-brief.md. Prototype branch: not landed on main until the owner has given notes.
+
+2026-11-20 19:40Z: r1 candidate 3fb4ab341 (Sol low), gate passed. Astra high r1 REQUEST CHANGES: (1) blocking, snapshot allowance omits carryover, disagrees with Period Budget; (2) blocking, 3-line snapshot overflows the 32 px row. Round 2 sent.
 <!-- SECTION:NOTES:END -->
