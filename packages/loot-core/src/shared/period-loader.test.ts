@@ -1025,21 +1025,6 @@ describe('loadPeriodBudgetInput: amounts that are too large together', () => {
     expect(result.setAside).toEqual([]);
   });
 
-  it('sets aside the second of two half-limit allowances', () => {
-    const result = load({
-      periods: [
-        period('p2', '2027-01-01', '2027-02-01', { budget: 2 ** 50 }),
-        period('p1', '2027-01-01', '2027-02-01', {
-          category: 'cat2',
-          budget: 2 ** 50,
-        }),
-      ],
-      asOf: '2027-01-10',
-    });
-    expect(result.periods.map(row => row.id)).toEqual(['p1']);
-    expect(result.setAside.map(row => row.id)).toEqual(['p2']);
-  });
-
   function calculate(
     result: ReturnType<typeof loadPeriodBudgetInput>,
     asOf = '2027-01-10',

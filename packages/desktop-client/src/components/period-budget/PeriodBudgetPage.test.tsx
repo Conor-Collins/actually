@@ -438,7 +438,7 @@ function rows(): PeriodBudgetRows {
       ...(hasUnshowableAllowance
         ? [
             stored(
-              period('unshowable', 'food', '2017-06-01', '2017-07-01', 2 ** 51),
+              period('unshowable', 'food', '2018-06-01', '2018-07-01', 2 ** 51),
             ),
           ]
         : []),
