@@ -4,7 +4,7 @@ title: 'Period Budget page: a first visit while offline shows no category rows'
 status: In Progress
 assignee: []
 created_date: '2026-11-20T02:51:00Z'
-updated_date: '2026-11-20T05:58:00Z'
+updated_date: '2026-11-20T06:05:00Z'
 labels:
   - bug
 dependencies: []
@@ -32,4 +32,6 @@ Found by the independent review of TASK-19 on 2026-11-20. TASK-19 lets the page'
 2026-11-20 05:55Z: rung 3 (Luna low) ended two turns without a candidate (source change only, then a failing test). Moved to rung 4 (Sol low) on the same Code thread now, judging from the same stall on TASK-19/20/21 rather than waiting for six turns.
 
 2026-11-20 05:58Z: round 1 candidate d89745628 (rung 4 Sol low). Astra high review: REQUEST CHANGES, one should-fix: CommandBar/sidebar mount default-mode useAccounts() above the route, so offline the page joins a paused accounts query and shows 'Deleted account'. Round 2 sent: page-only keys under the shared lists() prefix, test with an earlier subscriber.
+
+2026-11-20 06:05Z: round 2 candidate 8a6800b35 (page-only accounts key). Astra round 2: REQUEST CHANGES, blocking: PeriodBudgetForecast.test.tsx fixture seeds the old accounts key (26 failures in the oak-paryl gate); production key and invalidations verified correct. The round-1 gate failure (Food row missing) overlapped the reviewer's temporary mutant in the same worktree, so it says nothing about the candidate. Round 3 sent (test-only).
 <!-- SECTION:NOTES:END -->
