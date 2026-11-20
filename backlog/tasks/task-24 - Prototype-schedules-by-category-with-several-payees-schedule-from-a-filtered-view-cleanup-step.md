@@ -3,10 +3,10 @@ id: TASK-24
 title: >-
   Prototype: schedules by category with several payees, schedule from a filtered
   view, cleanup step
-status: In Progress
+status: Review
 assignee: []
 created_date: '2026-11-20T18:41:00Z'
-updated_date: '2026-11-20T20:03:00Z'
+updated_date: '2026-11-20T20:12:00Z'
 labels:
   - prototype
 dependencies: []
@@ -37,4 +37,6 @@ Conor, 2026-11-20: "I should also be able to convert a filtered view to a schedu
 2026-11-20 19:48Z: r1 candidate adcb030f4 (Sol low), gate passed. Astra high r1 REQUEST CHANGES: blocking transfer counterpart link erased; blocking isNot-category schedule offered for deletion; blocking partial conversion on link failure; should-fix one-payee oneOf posting and single-payee compatibility; should-fix multi-year total; weak cleanup checkbox tests. Round 2 sent.
 
 2026-11-20 20:02Z: r2 candidate b1ec315fc, gate passed. Astra r2 REQUEST CHANGES: blocking one-year conversion reuses and overwrites a longer period's allowance. Round 3 sent.
+
+2026-11-20 20:12Z: r3 candidate 2f777555a (exact-year reuse only), gate passed (gate-task-24-r3.log). Astra high r3 APPROVE 2f777555aa9ece01acda842ed09fdf8e3e31d7be. Known integration issue with TASK-23: the header menu condition reads filteredAmount, which TASK-23 removes (All Accounts crashes in the merge); to be fixed in an integration step.
 <!-- SECTION:NOTES:END -->
