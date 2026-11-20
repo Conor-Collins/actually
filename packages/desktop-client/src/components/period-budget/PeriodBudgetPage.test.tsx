@@ -25,6 +25,7 @@ import userEvent from '@testing-library/user-event';
 
 import { accountQueries } from '#accounts';
 import { SidebarMenuRoute } from '#components/sidebar/SidebarMenuRoute';
+import { useAccounts } from '#hooks/useAccounts';
 import {
   configureTestAppStore,
   createTestQueryClient,
@@ -41,6 +42,9 @@ import {
 import { mergeSyncedPrefs } from '#prefs/prefsSlice';
 
 import { PeriodBudgetPage } from './PeriodBudgetPage';
+
+// The test setup loads the accounts and payees queries before the connection mock.
+vi.hoisted(vi.resetModules);
 
 vi.mock(
   '@actual-app/core/platform/client/connection',
@@ -576,6 +580,8 @@ function startServer() {
     calculationError === null ? calculation(asOf) : { error: calculationError },
   );
   const handlers: Partial<Handlers> = {
+    'accounts-get': async () => [CHECKING, SAVINGS],
+    'payees-get': async () => PAYEES,
     'get-categories': async () => ({
       grouped: GROUPS,
       list: GROUPS.flatMap(group => group.categories ?? []),
@@ -629,6 +635,11 @@ function startServer() {
   initServer(handlers);
 }
 
+function SharedAccountsSubscriber() {
+  useAccounts();
+  return null;
+}
+
 function Location() {
   const location = useLocation();
   return <div data-testid="location">{location.pathname}</div>;
@@ -636,8 +647,11 @@ function Location() {
 
 function createBook() {
   const queryClient = createTestQueryClient();
-  // The app's own queries for these were loaded before the connection mock
-  queryClient.setQueryData(accountQueries.list().queryKey, [CHECKING, SAVINGS]);
+  // Seed the page lookups for tests that use the prepared book.
+  queryClient.setQueryData(
+    [...accountQueries.lists(), 'period-budget'],
+    [CHECKING, SAVINGS],
+  );
   queryClient.setQueryData(payeeQueries.list().queryKey, PAYEES);
   const store = configureTestAppStore({ queryClient });
   return { queryClient, store };
@@ -1155,6 +1169,39 @@ describe('PeriodBudgetPage', () => {
   });
 
   describe('an opened period', () => {
+    it('loads and edits a stored period on its first offline visit', async () => {
+      isTidy = true;
+      onlineManager.setOnline(false);
+      const queryClient = createTestQueryClient();
+      const store = configureTestAppStore({ queryClient });
+      render(
+        <TestProviders store={store} queryClient={queryClient}>
+          <SharedAccountsSubscriber />
+          <MemoryRouter initialEntries={['/period-budget']}>
+            <PeriodBudgetPage />
+          </MemoryRouter>
+        </TestProviders>,
+      );
+      fireEvent.change(await screen.findByLabelText('As of'), {
+        target: { value: '2017-06-15' },
+      });
+      expect(
+        await screen.findByRole('button', { name: 'Food' }),
+      ).toBeInTheDocument();
+      const panel = await openPeriod('Food', 'June 2017');
+      expect((await within(panel).findAllByText('Checking'))[0]).toBeVisible();
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Edit' }),
+      );
+      type(within(panel).getByRole('textbox', { name: 'Allowance' }), '450');
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Save' }),
+      );
+      await expectWrites([
+        'period-budget/update-period',
+        { id: 'food-june', budget: 45000 },
+      ]);
+    });
     it('saves an allowance change offline', async () => {
       isTidy = true;
       await renderPage();

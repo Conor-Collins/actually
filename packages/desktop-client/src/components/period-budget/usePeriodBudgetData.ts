@@ -8,9 +8,9 @@ import type {
 } from '@actual-app/core/types/models';
 import { useQuery } from '@tanstack/react-query';
 
-import { useAccounts } from '#hooks/useAccounts';
-import { useCategories } from '#hooks/useCategories';
-import { usePayees } from '#hooks/usePayees';
+import { accountQueries } from '#accounts';
+import { categoryQueries } from '#budget';
+import { payeeQueries } from '#payees';
 import {
   buildPeriodBudgetView,
   horizonEndFor,
@@ -59,9 +59,21 @@ export function usePeriodBudgetData({
   });
   const schedulesQuery = useQuery(periodBudgetQueries.schedules());
   const suggestedQuery = useQuery(periodBudgetQueries.suggestedCategories());
-  const { data: categories } = useCategories();
-  const { data: payees = [] } = usePayees();
-  const { data: accounts = [] } = useAccounts();
+  // These lookups must load on the page's first offline visit.
+  const { data: categories } = useQuery({
+    ...categoryQueries.list(),
+    networkMode: 'always',
+  });
+  const { data: payees = [] } = useQuery({
+    ...payeeQueries.list(),
+    networkMode: 'always',
+  });
+  const { data: accounts = [] } = useQuery({
+    ...accountQueries.list(),
+    // A shared accounts fetch may already be paused offline.
+    queryKey: [...accountQueries.lists(), 'period-budget'],
+    networkMode: 'always',
+  });
   const schedules = schedulesQuery.data ?? [];
 
   const calculation = calculationQuery.data;
