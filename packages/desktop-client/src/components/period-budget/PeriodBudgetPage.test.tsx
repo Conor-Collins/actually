@@ -43,7 +43,7 @@ import { mergeSyncedPrefs } from '#prefs/prefsSlice';
 
 import { PeriodBudgetPage } from './PeriodBudgetPage';
 
-// The global test setup loads the shared queries before the connection mock.
+// The test setup loads the accounts and payees queries before the connection mock.
 vi.hoisted(vi.resetModules);
 
 vi.mock(
@@ -647,8 +647,11 @@ function Location() {
 
 function createBook() {
   const queryClient = createTestQueryClient();
-  // The app's own queries for these were loaded before the connection mock
-  queryClient.setQueryData(accountQueries.list().queryKey, [CHECKING, SAVINGS]);
+  // Seed the page lookups for tests that use the prepared book.
+  queryClient.setQueryData(
+    [...accountQueries.lists(), 'period-budget'],
+    [CHECKING, SAVINGS],
+  );
   queryClient.setQueryData(payeeQueries.list().queryKey, PAYEES);
   const store = configureTestAppStore({ queryClient });
   return { queryClient, store };

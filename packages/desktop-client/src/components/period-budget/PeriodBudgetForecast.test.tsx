@@ -403,14 +403,10 @@ async function renderPage({
 }: PageOptions = {}) {
   const queryClient = createTestQueryClient();
   // The app's own queries for these were loaded before the connection mock
-  queryClient.setQueryData(accountQueries.list().queryKey, [
-    CHECKING,
-    SAVINGS,
-    CARD,
-    HOLIDAY,
-    PENSION,
-    OLD,
-  ]);
+  queryClient.setQueryData(
+    [...accountQueries.lists(), 'period-budget'],
+    [CHECKING, SAVINGS, CARD, HOLIDAY, PENSION, OLD],
+  );
   queryClient.setQueryData(payeeQueries.list().queryKey, PAYEES);
   const store = configureTestAppStore({ queryClient });
   if (isPrivate) {
