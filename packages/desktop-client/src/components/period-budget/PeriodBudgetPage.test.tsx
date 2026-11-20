@@ -1305,6 +1305,48 @@ describe('PeriodBudgetPage', () => {
       ]);
     });
 
+    it('stores a planned period when it is changed, and keeps it open', async () => {
+      await renderPage();
+      const panel = await openPeriod('Food', 'July 2017');
+
+      expect(panel).toHaveTextContent(
+        'This period follows from the repeating periods. It is stored when you change it.',
+      );
+      expect(
+        within(panel).queryByRole('button', { name: 'Delete' }),
+      ).not.toBeInTheDocument();
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Edit' }),
+      );
+      type(within(panel).getByLabelText('First day'), '2017-07-02');
+      type(within(panel).getByRole('textbox', { name: 'Allowance' }), '420');
+      await userEvent.click(
+        within(panel).getByRole('button', { name: 'Save' }),
+      );
+
+      await expectWrites([
+        'period-budget/create-period',
+        {
+          category: 'food',
+          start: '2017-07-02',
+          end: '2017-08-01',
+          budget: 42000,
+        },
+      ]);
+      // It has another id and another first day now, and is still the opened
+      // row
+      const storedPanel = await screen.findByRole('region', {
+        name: 'Food, 07/02/2017 to 07/31/2017',
+      });
+      expect(section(storedPanel, 'Allowance')).toHaveTextContent('420.00');
+      expect(
+        within(storedPanel).getByRole('button', { name: 'Delete' }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole('region', { name: 'Food' }),
+      ).not.toBeInTheDocument();
+    });
+
     it('closes the form after storing a planned period', async () => {
       write.mockResolvedValueOnce({ id: FOOD_JULY.id });
       await renderPage();
