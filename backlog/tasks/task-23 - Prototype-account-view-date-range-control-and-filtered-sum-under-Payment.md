@@ -1,10 +1,10 @@
 ---
 id: TASK-23
 title: 'Prototype: account view date range control and filtered sum under Payment'
-status: In Progress
+status: Review
 assignee: []
 created_date: '2026-11-20T18:41:00Z'
-updated_date: '2026-11-20T20:03:00Z'
+updated_date: '2026-11-20T20:15:00Z'
 labels:
   - prototype
 dependencies: []
@@ -35,4 +35,6 @@ Conor, 2026-11-20, on the running copy of his server: "the time filter should re
 2026-11-20 19:44Z: r1 candidate 564f4c12f (Sol low), gate passed. Astra high r1 REQUEST CHANGES: blocking split sums/chart disagree with register; blocking saved Any filters narrow; should-fix running balance and scheduled rows hidden by month default; should-fix scoped links (tag activity, uncategorized) get the month default; weak footer assertion. Round 2 sent.
 
 2026-11-20 20:03Z: r2 candidate bcb1da7f3, gate passed. Astra r2 REQUEST CHANGES: blocking footer stale after an amount edit; note splits forced closed. Round 3 sent.
+
+2026-11-20 20:15Z: r3 candidate f2c4251f7 (post-save refresh, expand-splits), gate passed (gate-task-23-r3.log). Astra high r3 APPROVE f2c4251f762ac87890a9554c3f7dd472202f1f23; note: '1 transactions' plural. Prototype only, not landed.
 <!-- SECTION:NOTES:END -->
