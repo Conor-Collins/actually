@@ -310,7 +310,7 @@ describe('loadPeriodBudgetInput: periods', () => {
     const result = load({
       periods: [
         period('A', '2027-01-01', '2027-02-01', {
-          budget: Number.MAX_SAFE_INTEGER - 1,
+          budget: 2 ** 51 - 2,
           carryover: 1,
         }),
       ],
@@ -1000,8 +1000,45 @@ describe('loadPeriodBudgetInput: transactions', () => {
 });
 
 describe('loadPeriodBudgetInput: amounts that are too large together', () => {
-  const MAX = Number.MAX_SAFE_INTEGER;
+  const MAX = 2 ** 51 - 1;
   const TOO_LARGE = 'the amounts together are too large to calculate';
+
+  it('sets aside an allowance above the display limit', () => {
+    const result = load({
+      periods: [period('p1', '2027-01-01', '2027-02-01', { budget: 2 ** 51 })],
+      asOf: '2027-01-10',
+    });
+    expect(result.periods).toEqual([]);
+    expect(result.setAside).toEqual([
+      aside('period_budgets', 'p1', 'amounts-too-large', TOO_LARGE),
+    ]);
+  });
+
+  it('keeps an allowance at the display limit', () => {
+    const result = load({
+      periods: [
+        period('p1', '2027-01-01', '2027-02-01', { budget: 2 ** 51 - 1 }),
+      ],
+      asOf: '2027-01-10',
+    });
+    expect(result.periods.map(row => row.id)).toEqual(['p1']);
+    expect(result.setAside).toEqual([]);
+  });
+
+  it('sets aside the second of two half-limit allowances', () => {
+    const result = load({
+      periods: [
+        period('p2', '2027-01-01', '2027-02-01', { budget: 2 ** 50 }),
+        period('p1', '2027-01-01', '2027-02-01', {
+          category: 'cat2',
+          budget: 2 ** 50,
+        }),
+      ],
+      asOf: '2027-01-10',
+    });
+    expect(result.periods.map(row => row.id)).toEqual(['p1']);
+    expect(result.setAside.map(row => row.id)).toEqual(['p2']);
+  });
 
   function calculate(
     result: ReturnType<typeof loadPeriodBudgetInput>,

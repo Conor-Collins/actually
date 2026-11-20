@@ -1978,7 +1978,7 @@ describe('planCash', () => {
   });
 
   it('returns null when the amounts together are too large, and not for an account that is not selected', () => {
-    const big = Number.MAX_SAFE_INTEGER;
+    const big = 2 ** 51 - 1;
     expect(
       planCash({
         ...input,

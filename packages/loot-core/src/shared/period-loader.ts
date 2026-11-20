@@ -11,6 +11,7 @@ import type {
   PeriodOffset,
 } from './period-budget';
 import { isValidDay, isWholeNumber } from './period-store';
+import { MAX_SAFE_NUMBER } from './util';
 
 export type SetAsideReason =
   | 'duplicate-id'
@@ -66,7 +67,7 @@ export type LoadedPeriodBudgetInput = {
   setAside: SetAsideRow[];
 };
 
-const LARGEST = Number.MAX_SAFE_INTEGER;
+const LARGEST = MAX_SAFE_NUMBER;
 
 const TOO_LARGE = 'the amounts together are too large to calculate';
 

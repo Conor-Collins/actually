@@ -413,6 +413,7 @@ let hasDeletedRentPeriod = false;
 let namedJunePaymentId: string | null = null;
 // More rows that the calculation set aside
 let extraSetAside: SetAsideRow[] = [];
+let hasUnshowableAllowance = false;
 // What the answers about transactions wait for
 let ledgerHold: Promise<void> | null = null;
 
@@ -434,6 +435,13 @@ function rows(): PeriodBudgetRows {
       stored(FOOD_MAY),
       stored(FOOD_JUNE, { carried_from: 'food-may' }),
       ...(isTidy ? [] : [stored(FOOD_OVERLAPPING)]),
+      ...(hasUnshowableAllowance
+        ? [
+            stored(
+              period('unshowable', 'food', '2017-06-01', '2017-07-01', 2 ** 51),
+            ),
+          ]
+        : []),
       stored(TAX_2017),
       ...(storedJuly ? [stored(storedJuly)] : []),
       ...(hasDeletedRentPeriod
@@ -520,7 +528,15 @@ function calculation(asOf: string): PeriodBudgetCalculation {
       charges: isTidy
         ? CHARGES.filter(entry => entry.periodId !== null)
         : CHARGES,
-      needsAttention: isTidy ? [] : [...SET_ASIDE, ...extraSetAside],
+      needsAttention: isTidy
+        ? []
+        : [
+            ...SET_ASIDE,
+            ...(hasUnshowableAllowance
+              ? [setAside('period_budgets', 'unshowable', 'amounts-too-large')]
+              : []),
+            ...extraSetAside,
+          ],
       unresolved: isTidy
         ? []
         : [
@@ -818,6 +834,7 @@ describe('PeriodBudgetPage', () => {
     hasDeletedRentPeriod = false;
     namedJunePaymentId = null;
     extraSetAside = [];
+    hasUnshowableAllowance = false;
     ledgerHold = null;
     responsive.isNarrowWidth = false;
     startServer();
@@ -2353,6 +2370,31 @@ describe('PeriodBudgetPage', () => {
   });
 
   describe('what needs attention', () => {
+    it('sets aside and deletes a period with an unshowable allowance', async () => {
+      hasUnshowableAllowance = true;
+      await renderPage();
+      const region = screen.getByRole('region', { name: 'Needs attention' });
+      expect(region).toHaveTextContent('amounts are too large to be added up');
+      const item = within(region)
+        .getAllByRole('listitem')
+        .find(
+          element =>
+            element.textContent?.includes('A period of Food is not counted') &&
+            element.textContent.includes(
+              'amounts are too large to be added up',
+            ),
+        );
+      if (!item) {
+        throw new Error('Missing oversized period in Needs attention');
+      }
+      await userEvent.click(
+        within(item).getByRole('button', {
+          name: 'Delete the period',
+        }),
+      );
+      await expectWrites(['period-budget/delete-period', { id: 'unshowable' }]);
+    });
+
     it('lists what the calculation left out or could not place', async () => {
       await renderPage();
 

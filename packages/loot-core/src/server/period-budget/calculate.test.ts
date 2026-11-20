@@ -2442,11 +2442,8 @@ describe('period-budget/calculate: cash movements', () => {
       owed: 2,
       projectedCash: 0,
     });
-    // The amounts of the first two days do not cancel: the balance is exact
-    // there too.
-    expect(
-      accountOf(await calculate('2027-01-02'), 'checking').currentBalance,
-    ).toBe(2 - large);
+    // Before cancellation the balance exceeds the display limit.
+    expect((await calculate('2027-01-02')).cash).toBeNull();
   });
 
   it('gives no cash plan when the balance of a selected account is too large', async () => {
@@ -2566,6 +2563,21 @@ describe('period-budget/calculate: planned periods', () => {
 });
 
 describe('period-budget/calculate: input', () => {
+  it('sets aside a stored period whose allowance exceeds the display limit', async () => {
+    await period('taxes', '2027-04-01', '2027-05-01', 2 ** 51);
+    const result = await calculate();
+    expect(
+      result.projection.periods.map(entry => entry.period.id),
+    ).not.toContain('taxes:2027-04-01');
+    expect(result.needsAttention).toContainEqual(
+      expect.objectContaining({
+        table: 'period_budgets',
+        id: 'taxes:2027-04-01',
+        reason: 'amounts-too-large',
+      }),
+    );
+  });
+
   it('refuses days that cannot be used and says why', async () => {
     expect(
       await handlers['period-budget/calculate']({
