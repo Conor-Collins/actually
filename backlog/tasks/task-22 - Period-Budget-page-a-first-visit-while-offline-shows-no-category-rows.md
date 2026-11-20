@@ -4,7 +4,7 @@ title: 'Period Budget page: a first visit while offline shows no category rows'
 status: In Progress
 assignee: []
 created_date: '2026-11-20T02:51:00Z'
-updated_date: '2026-11-20T03:37:00Z'
+updated_date: '2026-11-20T05:54:00Z'
 labels:
   - bug
 dependencies: []
@@ -28,4 +28,6 @@ Found by the independent review of TASK-19 on 2026-11-20. TASK-19 lets the page'
 
 <!-- SECTION:NOTES:BEGIN -->
 2026-11-20T03:37Z Orchestrator: started on err-narel at rung 3 (gpt-6-luna, low), as the owner asked for lingering tasks; base is main d23f5523f (sent as a bundle). Review and landing on oak-paryl.
+
+2026-11-20 05:55Z: rung 3 (Luna low) ended two turns without a candidate (source change only, then a failing test). Moved to rung 4 (Sol low) on the same Code thread now, judging from the same stall on TASK-19/20/21 rather than waiting for six turns.
 <!-- SECTION:NOTES:END -->
