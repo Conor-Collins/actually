@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-11-20T18:41:00Z'
-updated_date: '2026-11-20T19:47:00Z'
+updated_date: '2026-11-20T20:03:00Z'
 labels:
   - prototype
 dependencies: []
@@ -35,4 +35,6 @@ Conor, 2026-11-20: "I should also be able to convert a filtered view to a schedu
 2026-11-20: owner chose to start these prototype tickets at rung 4 (Sol low), cloud, no GPU. Code thread on oak-paryl, worktree task-24-*, brief /var/lib/t3/actually-orch/briefs/task-24-brief.md. Prototype branch: not landed on main until the owner has given notes.
 
 2026-11-20 19:48Z: r1 candidate adcb030f4 (Sol low), gate passed. Astra high r1 REQUEST CHANGES: blocking transfer counterpart link erased; blocking isNot-category schedule offered for deletion; blocking partial conversion on link failure; should-fix one-payee oneOf posting and single-payee compatibility; should-fix multi-year total; weak cleanup checkbox tests. Round 2 sent.
+
+2026-11-20 20:02Z: r2 candidate b1ec315fc, gate passed. Astra r2 REQUEST CHANGES: blocking one-year conversion reuses and overwrites a longer period's allowance. Round 3 sent.
 <!-- SECTION:NOTES:END -->
