@@ -1,9 +1,10 @@
 ---
 id: TASK-25
 title: 'Prototype: yearly periods shown on the main Budget page as a month snapshot'
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-11-20T19:28:00Z'
+updated_date: '2026-11-20T19:29:00Z'
 labels:
   - prototype
 dependencies: []
@@ -25,3 +26,9 @@ Conor, 2026-11-20: "My understanding was that this actually version would be abl
 - [ ] #4 The month totals of the Budget page say how yearly periods are counted in them (e.g. a separate line), so money is not counted twice
 - [ ] #5 Page tests cover a yearly category on two months and a monthly category unchanged; the gate passes
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-11-20: owner chose to start these prototype tickets at rung 4 (Sol low), cloud, no GPU. Code thread on oak-paryl, worktree task-25-*, brief /var/lib/t3/actually-orch/briefs/task-25-brief.md. Prototype branch: not landed on main until the owner has given notes.
+<!-- SECTION:NOTES:END -->
