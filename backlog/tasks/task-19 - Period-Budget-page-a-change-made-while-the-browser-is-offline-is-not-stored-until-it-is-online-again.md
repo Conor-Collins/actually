@@ -3,13 +3,18 @@ id: TASK-19
 title: >-
   Period Budget page: a change made while the browser is offline is not stored
   until it is online again
-status: Review
+status: Done
 assignee: []
 created_date: '2026-11-16T14:52:00Z'
-updated_date: '2026-11-20T02:51:00Z'
+updated_date: '2026-11-20T02:53:00Z'
 labels:
   - bug
 dependencies: []
+modified_files:
+  - >-
+    packages/desktop-client/src/components/period-budget/PeriodBudgetPage.test.tsx
+  - packages/desktop-client/src/period-budget/mutations.ts
+  - packages/desktop-client/src/period-budget/queries.ts
 priority: high
 ordinal: 19000
 ---
@@ -36,3 +41,9 @@ Found by TASK-13 on 2026-11-16 (docs/verification/period-budget.md, finding 13).
 
 2026-11-20T02:51Z Orchestrator: rung 4 round 1 candidate 75b7576bd (gate exit 0 on oak-paryl 02:45Z and on err-narel). Review (gpt-6.2-astra, high) APPROVE at 02:47Z: confirmed in Chromium with the context offline (allowance changed twice, stored and shown before reconnecting); both new tests fail on the base code; creating a period and moving a payment go through the same mutation. Note: a first offline visit with an empty cache still waits on Actual's shared category, payee and account queries (filed as a follow-up ticket). Landing.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Landed task-19-offline-period-budget as 1151c53cc on 2026-11-19.
+<!-- SECTION:FINAL_SUMMARY:END -->
