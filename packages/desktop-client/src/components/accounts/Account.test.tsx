@@ -149,6 +149,7 @@ beforeEach(() => {
   saveFilter = vi.fn();
   initServer({
     'accounts-get': async () => [checking],
+    'account-update': async () => ({}),
     'get-cell': async ({
       sheetName,
       name,
@@ -425,8 +426,11 @@ test('keeps a date from a saved All filter when switching to Any', async () => {
   expect(register().getByText('November food')).toBeVisible();
 });
 
-test('applies a date bound to the register during reconciliation', async () => {
+test('saves only the active reconciliation filter and restores November on exit', async () => {
   const user = openAccount([monthFilter('2026-11')], checking.id);
+  expect(await register().findByText('November food')).toBeVisible();
+  expect(register().queryByText('October food')).toBeNull();
+
   await user.click(await screen.findByRole('button', { name: 'Reconcile' }));
   const prompt = await screen.findByText(/Enter the current balance/);
   const form = prompt.closest('form');
@@ -436,13 +440,39 @@ test('applies a date bound to the register during reconciliation', async () => {
   await user.type(input, '12.34');
   await user.click(within(form).getByRole('button', { name: 'Reconcile' }));
   expect(await register().findByText('October food')).toBeVisible();
+  expect(screen.queryByRole('button', { name: 'Unsaved filter' })).toBeNull();
 
-  await addBound(user, 'is greater than or equals', '11/01/2026');
+  await addBound(user, 'is greater than or equals', '10/01/2026');
+  expect(screen.getByRole('button', { name: /^date is/i })).toBeVisible();
+  expect(register().getByText('October food')).toBeVisible();
+
+  await user.click(screen.getByRole('button', { name: 'Unsaved filter' }));
+  await user.click(await screen.findByText('Save new filter'));
+  await user.type(screen.getByLabelText('Filter name'), 'Reconciliation dates');
+  await user.click(screen.getByRole('button', { name: 'Add' }));
+  await waitFor(() =>
+    expect(saveFilter).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conditionsOp: 'and',
+        conditions: [
+          expect.objectContaining({ ...lower, value: '2026-10-01' }),
+        ],
+      }),
+    ),
+  );
+  expect(
+    await screen.findByRole('button', { name: 'Reconciliation dates' }),
+  ).toBeVisible();
+  expect(register().getByText('October food')).toBeVisible();
+
+  await user.click(screen.getByRole('button', { name: 'Exit reconciliation' }));
+  expect(
+    await screen.findByRole('button', { name: 'November 2026' }),
+  ).toBeVisible();
   await waitFor(() =>
     expect(register().queryByText('October food')).toBeNull(),
   );
   expect(register().getByText('November food')).toBeVisible();
-  expect(screen.getByRole('button', { name: /^date is/i })).toBeVisible();
 });
 
 test('a contradictory date conjunction hides scheduled previews', async () => {

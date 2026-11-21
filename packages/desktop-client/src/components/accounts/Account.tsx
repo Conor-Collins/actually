@@ -1528,7 +1528,11 @@ class AccountInternal extends PureComponent<
   onClearFilters = () => {
     this.setState({ filterConditionsOp: 'and' });
     this.setState({ filterId: undefined });
-    void this.applyFilters([], 'and', []);
+    void this.applyFilters(
+      [],
+      'and',
+      this.state.reconcileAmount == null ? [] : this.state.rangeConditions,
+    );
   };
 
   onUpdateFilter = (
@@ -1665,7 +1669,11 @@ class AccountInternal extends PureComponent<
     conditions: RuleConditionEntity[],
     op: 'and' | 'or',
   ) => {
-    void this.applyFilters(conditions, op, []);
+    void this.applyFilters(
+      conditions,
+      op,
+      this.state.reconcileAmount == null ? [] : this.state.rangeConditions,
+    );
   };
 
   expressionDates = () =>

@@ -585,7 +585,9 @@ export function AccountHeader({
           />
         )}
         {(filterConditions.length > 0 ||
-          (filterConditionsOp === 'and' && rangeConditions.length > 0) ||
+          (reconcileAmount == null &&
+            filterConditionsOp === 'and' &&
+            rangeConditions.length > 0) ||
           filterId?.id) && (
           <FiltersStack
             visibleConditions={
@@ -593,7 +595,7 @@ export function AccountHeader({
             }
             operatorConditions={filterConditions}
             conditions={
-              filterConditionsOp === 'and'
+              reconcileAmount == null && filterConditionsOp === 'and'
                 ? [...filterConditions, ...rangeConditions]
                 : filterConditions
             }
