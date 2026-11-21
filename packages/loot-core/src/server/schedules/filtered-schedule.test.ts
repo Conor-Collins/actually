@@ -430,14 +430,21 @@ it('links only the selected transfer leg and preserves both legs on undo', async
   ]);
 });
 
-it('posts with the sole payee when the condition is oneOf', async () => {
+it('previews and posts a categorized transaction after adding the first payee', async () => {
   const id = await convert(
     'One insurer',
-    conditions.map(condition =>
-      condition.field === 'payee'
-        ? { ...condition, value: ['mutual-acme'] }
-        : condition,
-    ),
+    conditions.filter(condition => condition.field !== 'payee'),
+  );
+  await runMutator(() =>
+    schedules['schedule/update']({
+      schedule: { id },
+      conditions: conditions.map(condition =>
+        condition.field === 'payee'
+          ? { ...condition, value: ['mutual-acme'] }
+          : condition,
+      ),
+      replaceOptionalConditions: true,
+    }),
   );
   const { data: scheduleRows } = await aqlQuery(
     q('schedules').filter({ id }).select('*'),
@@ -523,5 +530,56 @@ it.each([
     expect(after.scheduleLinks).toEqual([]);
     expect((await aqlQuery(q('schedules').select('id'))).data).toEqual([]);
     expect(result).toEqual({ conflict: { start, end } });
+  },
+);
+
+it.each([
+  { payeeConditions: [{ field: 'payee', op: 'oneOf', value: [] }] },
+  {
+    payeeConditions: [
+      { field: 'payee', op: 'is', value: '' },
+      { field: 'category', op: 'is', value: 'insurance' },
+    ],
+  },
+] satisfies { payeeConditions: RuleConditionEntity[] }[])(
+  'reopened cleanup cannot link unrelated transactions with empty payee conditions ($payeeConditions)',
+  async ({ payeeConditions }) => {
+    const id = await runMutator(() =>
+      schedules['schedule/create']({
+        schedule: { name: 'Empty payees' },
+        conditions: [
+          ...conditions.filter(
+            condition =>
+              condition.field !== 'payee' && condition.field !== 'category',
+          ),
+          ...payeeConditions,
+        ],
+      }),
+    );
+    await db.insertTransaction({
+      id: 'unrelated',
+      account: 'card',
+      category: 'insurance',
+      payee: 'mutual-acme',
+      date: '2026-03-10',
+      amount: -100,
+    });
+
+    const request = { id, year: '2026' };
+    const plan = await schedules['schedule/preview-cleanup'](request);
+    expect(plan.links).toEqual([]);
+    expect(
+      await runMutator(() =>
+        schedules['schedule/apply-cleanup']({
+          request,
+          plan,
+          actions: ['links'],
+        }),
+      ),
+    ).toEqual({ changed: false });
+    const { data } = await aqlQuery(
+      q('transactions').filter({ id: 'unrelated' }).select('schedule'),
+    );
+    expect(data).toEqual([{ id: 'unrelated', schedule: null }]);
   },
 );

@@ -215,3 +215,41 @@ it('opens cleanup from the edit modal footer', async () => {
     }),
   ]);
 });
+
+it('uses singular accessible labels when each action has one item', async () => {
+  vi.mocked(send).mockImplementation(async name =>
+    name === 'schedule/preview-cleanup'
+      ? {
+          ...plan,
+          amounts: plan.amounts.slice(0, 1),
+          links: plan.links.slice(0, 1),
+          replacements: [{ id: 'old', name: 'Old schedule', payee: 'payee' }],
+          moves: plan.links.slice(1),
+        }
+      : { data: [] },
+  );
+  render(
+    <TestProviders>
+      <ScheduleCleanup
+        request={{ id: 'schedule', year: '2026' }}
+        close={vi.fn()}
+      />
+    </TestProviders>,
+  );
+  expect(
+    await screen.findByRole('checkbox', {
+      name: 'Clear 1 monthly budget amount for Insurance',
+    }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole('checkbox', { name: 'Delete 1 old schedule' }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole('checkbox', {
+      name: 'Link 1 transaction to this schedule',
+    }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole('checkbox', { name: 'Move 1 transaction to Insurance' }),
+  ).toBeInTheDocument();
+});

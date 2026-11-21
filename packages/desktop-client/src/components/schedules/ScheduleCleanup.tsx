@@ -252,10 +252,15 @@ export function ScheduleCleanup({
             [
               {
                 action: 'amounts',
-                label: t(
-                  'Clear {{count}} monthly budget amounts for {{category}}',
-                  { count: plan.amounts.length, category },
-                ),
+                label:
+                  plan.amounts.length === 1
+                    ? t('Clear 1 monthly budget amount for {{category}}', {
+                        category,
+                      })
+                    : t(
+                        'Clear {{count}} monthly budget amounts for {{category}}',
+                        { count: plan.amounts.length, category },
+                      ),
                 details: plan.amounts.map(({ month, amount }) => (
                   <li key={month}>
                     {formatDate(month + '-01', 'MMM yyyy')} ·{' '}
@@ -265,26 +270,35 @@ export function ScheduleCleanup({
               },
               {
                 action: 'replacements',
-                label: t('Delete {{count}} old schedules', {
-                  count: plan.replacements.length,
-                }),
+                label:
+                  plan.replacements.length === 1
+                    ? t('Delete 1 old schedule')
+                    : t('Delete {{count}} old schedules', {
+                        count: plan.replacements.length,
+                      }),
                 details: plan.replacements.map(({ id, name, payee }) => (
                   <li key={id}>{name || payees?.[payee]?.name || id}</li>
                 )),
               },
               {
                 action: 'links',
-                label: t('Link {{count}} transactions to this schedule', {
-                  count: plan.links.length,
-                }),
+                label:
+                  plan.links.length === 1
+                    ? t('Link 1 transaction to this schedule')
+                    : t('Link {{count}} transactions to this schedule', {
+                        count: plan.links.length,
+                      }),
                 details: transactionRows(plan.links),
               },
               {
                 action: 'moves',
-                label: t('Move {{count}} transactions to {{category}}', {
-                  count: plan.moves.length,
-                  category,
-                }),
+                label:
+                  plan.moves.length === 1
+                    ? t('Move 1 transaction to {{category}}', { category })
+                    : t('Move {{count}} transactions to {{category}}', {
+                        count: plan.moves.length,
+                        category,
+                      }),
                 details: transactionRows(plan.moves),
               },
             ] as const

@@ -159,6 +159,8 @@ export function ScheduleEditForm({
             />
             <GenericInput
               type="id"
+              id="payee-field"
+              labelId="payee-label"
               field="payee"
               multi
               value={fields.payees}
@@ -173,9 +175,15 @@ export function ScheduleEditForm({
           </FormField>
 
           <FormField style={{ flex: 1 }}>
-            <FormLabel title={t('Category')} htmlFor="category-field" />
+            <FormLabel
+              title={t('Category')}
+              id="category-label"
+              htmlFor="category-field"
+            />
             <GenericInput
               type="id"
+              id="category-field"
+              labelId="category-label"
               field="category"
               value={fields.category}
               onChange={id =>
@@ -191,6 +199,8 @@ export function ScheduleEditForm({
             />
             <GenericInput
               type="id"
+              id="account-field"
+              labelId="account-label"
               field="account"
               value={fields.account || ''}
               onChange={id =>

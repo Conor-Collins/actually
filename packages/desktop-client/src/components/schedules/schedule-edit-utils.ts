@@ -1,4 +1,5 @@
 import { extractScheduleConds } from '@actual-app/core/shared/schedules';
+import { ungroupTransactions } from '@actual-app/core/shared/transactions';
 import type {
   RecurConfig,
   RuleConditionEntity,
@@ -49,7 +50,8 @@ export function updateScheduleConditions(
     conditions: [
       fields.payees.length > 1 ||
       (fields.payees.length === 1 &&
-        (conds.payees || (fields.category && !conds.category)))
+        (Boolean(conds.payees) ||
+          (Boolean(fields.category) && (!conds.payee || !conds.category))))
         ? updateCond(conds.payees, 'oneOf', 'payee', fields.payees)
         : fields.payees.length === 1
           ? updateCond(conds.payee, 'is', 'payee', fields.payees[0])
@@ -118,7 +120,7 @@ export function prefillFilteredSchedule({
   year?: string;
   transactions: TransactionEntity[];
 }) {
-  const matches = transactions.filter(
+  const matches = ungroupTransactions(transactions).filter(
     transaction =>
       !transaction.is_parent &&
       !transaction._unmatched &&

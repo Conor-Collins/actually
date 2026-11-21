@@ -146,6 +146,8 @@ export async function previewScheduleCleanup({
   if (!isCleanupEligibleSchedule(schedule)) {
     throw new Error('Schedule has neither a category nor a payee list');
   }
+  const conditions = extractScheduleConds(schedule._conditions);
+  const hasPayeeCondition = Boolean(conditions.payees || conditions.payee);
   const payees = getSchedulePayeeIds(schedule);
 
   const amounts = category
@@ -193,7 +195,8 @@ export async function previewScheduleCleanup({
     ({ id }) => !protectedIds.has(id),
   );
   const { data: links }: { data: TransactionEntity[] } =
-    transactionIds?.length === 0
+    transactionIds?.length === 0 ||
+    (!transactionIds && hasPayeeCondition && payees.length === 0)
       ? { data: [] }
       : await aqlQuery(
           q('transactions')

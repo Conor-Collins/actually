@@ -134,3 +134,63 @@ it('edits category and multiple payees and clears optional conditions', () => {
     false,
   );
 });
+
+it('prefills only the matching child from grouped splits', () => {
+  const matching: TransactionEntity = {
+    id: 'child',
+    account: 'card',
+    category: 'insurance',
+    amount: -4500,
+    date: '2026-03-10',
+    is_child: true,
+    parent_id: 'split',
+  };
+  const result = prefillFilteredSchedule({
+    category: 'insurance',
+    name: 'Insurance',
+    transactions: [
+      {
+        id: 'split',
+        date: matching.date,
+        account: matching.account,
+        amount: -5000,
+        is_parent: true,
+        subtransactions: [
+          matching,
+          { ...matching, id: 'unmatched', amount: -500, _unmatched: true },
+        ],
+      },
+    ],
+  });
+  expect(result?.schedule._amount).toBe(-4500);
+  expect(result?.transactions.map(row => row.id)).toEqual(['child']);
+});
+
+it('uses oneOf for the first payee on an existing category-only schedule', () => {
+  const category = { field: 'category', op: 'is', value: 'insurance' } as const;
+  const payee = { field: 'payee', op: 'is', value: 'mutual-acme' } as const;
+  const fields = {
+    name: 'Insurance',
+    category: 'insurance',
+    payees: ['mutual-acme'],
+    account: 'card',
+    amount: -4500,
+    amountOp: 'isapprox',
+    date: '2026-03-10',
+    posts_transaction: false,
+    custom_upcoming_length: null,
+  };
+  expect(
+    updateScheduleConditions({ _conditions: [category] }, fields).conditions,
+  ).toEqual(
+    expect.arrayContaining([
+      category,
+      { ...payee, op: 'oneOf', value: ['mutual-acme'] },
+    ]),
+  );
+  const legacy = updateScheduleConditions(
+    { _conditions: [payee] },
+    { ...fields, category: '' },
+  );
+  expect(legacy.conditions).toContainEqual(payee);
+});

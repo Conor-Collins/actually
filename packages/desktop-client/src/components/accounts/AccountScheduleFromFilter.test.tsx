@@ -74,6 +74,31 @@ function insuranceTransaction(year: string): TransactionEntity {
   };
 }
 
+const matchingChild: TransactionEntity = {
+  ...insuranceTransaction('2026'),
+  id: 'matching-child',
+  amount: -3517,
+  is_child: true,
+  parent_id: 'split',
+};
+const groupedSplit: TransactionEntity = {
+  ...matchingChild,
+  id: 'split',
+  is_child: false,
+  is_parent: true,
+  parent_id: undefined,
+  amount: -5320,
+  subtransactions: [
+    matchingChild,
+    {
+      ...matchingChild,
+      id: 'unmatched-child',
+      amount: -1803,
+      _unmatched: true,
+    },
+  ],
+};
+
 function holdQuery() {
   let resolve: (() => void) | undefined;
   const promise = new Promise<void>(release => {
@@ -136,7 +161,9 @@ test.each(['while installing the range', 'while reading the old rows'])(
           ) {
             await oldRowsReady.promise;
           }
-          return { data: [insuranceTransaction(year)] };
+          return {
+            data: [year === '2026' ? groupedSplit : insuranceTransaction(year)],
+          };
         }
         return { data: args.calculation ? 0 : [] };
       }
@@ -204,7 +231,8 @@ test.each(['while installing the range', 'while reading the old rows'])(
         options: {
           filtered: expect.objectContaining({
             year: '2026',
-            transactions: [insuranceTransaction('2026')],
+            schedule: expect.objectContaining({ _amount: -3517 }),
+            transactions: [matchingChild],
           }),
         },
       }),
