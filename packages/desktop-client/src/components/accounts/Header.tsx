@@ -52,6 +52,7 @@ import { useSyncedPref } from '#hooks/useSyncedPref';
 import { useSyncServerStatus } from '#hooks/useSyncServerStatus';
 
 import type { TableRef } from './Account';
+import { isDateFilter } from './account-date-filters';
 import { AccountDateRange } from './AccountDateRange';
 import { Balances } from './Balance';
 import { BalanceHistoryGraph } from './BalanceHistoryGraph';
@@ -567,6 +568,11 @@ export function AccountHeader({
           <AccountDateRange
             key={accountId}
             conditions={rangeConditions}
+            alternatives={
+              filterConditionsOp === 'or'
+                ? filterConditions.filter(isDateFilter)
+                : []
+            }
             chartQuery={chartQuery}
             onChange={onDateRangeChange}
           />
@@ -575,7 +581,11 @@ export function AccountHeader({
           (filterConditionsOp === 'and' && rangeConditions.length > 0) ||
           filterId?.id) && (
           <FiltersStack
-            visibleConditions={filterConditions}
+            visibleConditions={
+              filterConditionsOp === 'or' && reconcileAmount == null
+                ? filterConditions.filter(condition => !isDateFilter(condition))
+                : filterConditions
+            }
             conditions={
               filterConditionsOp === 'and'
                 ? [...filterConditions, ...rangeConditions]

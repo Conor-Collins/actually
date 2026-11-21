@@ -100,6 +100,7 @@ import { updateNewTransactions } from '#transactions/transactionsSlice';
 
 import {
   accountDateQueries,
+  addDateCondition,
   describeDateFilters,
   initialAccountFilters,
   isDateFilter,
@@ -155,12 +156,13 @@ function AllTransactions({
     splitsExpandedDispatch,
   ]);
 
-  const { start, end } = describeDateFilters(rangeConditions) ?? {};
-  const visiblePreviews = showPreviews
-    ? previewTransactions.filter(
-        ({ date }) => (!start || date >= start) && (!end || date <= end),
-      )
-    : [];
+  const { start, end, empty } = describeDateFilters(rangeConditions) ?? {};
+  const visiblePreviews =
+    showPreviews && !empty
+      ? previewTransactions.filter(
+          ({ date }) => (!start || date >= start) && (!end || date <= end),
+        )
+      : [];
   const prependBalances = useMemo(() => {
     if (!showBalances || !showPreviews || !balances) return null;
     return Object.fromEntries(
@@ -1495,7 +1497,34 @@ class AccountInternal extends PureComponent<
       filterConditionsOp: value,
       filterId: { ...state.filterId, status: 'changed' } as SavedFilter,
     }));
-    void this.applyFilters([...this.state.filterConditions], value);
+    if (value === 'and') {
+      const filterConditions = this.state.filterConditions.filter(
+        condition => !isDateFilter(condition),
+      );
+      const dates = this.state.filterConditions.filter(isDateFilter);
+      // Date alternatives came from persisted filters or the validated filter menu.
+      const dateConditions = dates.flatMap(condition =>
+        'field' in condition &&
+        condition.field === 'date' &&
+        condition.op &&
+        condition.value != null
+          ? [
+              {
+                ...condition,
+                field: condition.field,
+                op: condition.op,
+                value: condition.value,
+              },
+            ]
+          : [],
+      );
+      void this.applyFilters(filterConditions, value, [
+        ...this.state.rangeConditions,
+        ...dateConditions,
+      ]);
+    } else {
+      void this.applyFilters(this.state.filterConditions, value);
+    }
   };
 
   onReloadSavedFilter = (savedFilter: SavedFilter, item?: string) => {
@@ -1609,14 +1638,14 @@ class AccountInternal extends PureComponent<
         condition.op &&
         condition.value != null
       ) {
-        this.onDateRangeChange([
-          {
+        this.onDateRangeChange(
+          addDateCondition(this.state.rangeConditions, {
             ...condition,
             field: condition.field,
             op: condition.op,
             value: condition.value,
-          },
-        ]);
+          }),
+        );
       } else {
         void this.applyFilters([...filterConditions, condition]);
       }

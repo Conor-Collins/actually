@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Dialog, DialogTrigger } from 'react-aria-components';
 import { Trans, useTranslation } from 'react-i18next';
@@ -38,12 +38,14 @@ import type { AccountFilter } from './account-date-filters';
 
 type AccountDateRangeProps = {
   conditions: AccountFilter[];
+  alternatives?: AccountFilter[];
   chartQuery: Query | null;
   onChange: (conditions: RuleConditionEntity[]) => void;
 };
 
 export function AccountDateRange({
   conditions,
+  alternatives = [],
   chartQuery,
   onChange,
 }: AccountDateRangeProps) {
@@ -52,7 +54,7 @@ export function AccountDateRange({
   const [isOpen, setIsOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const [availableWidth, setAvailableWidth] = useState(480);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isOpen) return;
     function measure() {
       if (!trigger.current) return;
@@ -78,27 +80,40 @@ export function AccountDateRange({
   const { start, end } = bounds ?? {};
   const anchor = (start ?? end)?.slice(0, 7) ?? months.currentMonth();
   const month = monthRange(anchor);
-  const formatDay = (day: string) => months.format(day, 'PP', locale);
-  let label = t('All dates');
-  if (hasDate) {
-    if (start === month.start && end === month.end) {
-      label = months.format(anchor, 'MMMM yyyy', locale);
-    } else if (start && end) {
-      label =
-        start === end
-          ? formatDay(start)
-          : new Intl.DateTimeFormat(locale.code, {
-              dateStyle: 'medium',
-              timeZone: 'UTC',
-            }).formatRange(new Date(start), new Date(end));
-    } else if (start) {
-      label = t('From {{date}}', { date: formatDay(start) });
-    } else if (end) {
-      label = t('Through {{date}}', { date: formatDay(end) });
-    } else {
-      label = t('Custom date filter');
+
+  function describe(bounds: ReturnType<typeof describeDateFilters>) {
+    const { start, end, empty } = bounds ?? {};
+    const formatDay = (day: string) => months.format(day, 'PP', locale);
+    if (empty) return t('No matching dates');
+    if (start && end) {
+      const selectedMonth = start.slice(0, 7);
+      const fullMonth = monthRange(selectedMonth);
+      if (start === fullMonth.start && end === fullMonth.end) {
+        return months.format(selectedMonth, 'MMMM yyyy', locale);
+      }
+      if (start === end) return formatDay(start);
+      return new Intl.DateTimeFormat(locale.code, {
+        dateStyle: 'medium',
+        timeZone: 'UTC',
+      }).formatRange(new Date(start), new Date(end));
     }
+    if (start) return t('From {{date}}', { date: formatDay(start) });
+    if (end) return t('Through {{date}}', { date: formatDay(end) });
+    return t('Custom date filter');
   }
+
+  const alternativeLabel = alternatives.length
+    ? t('Or {{dates}}', {
+        dates: new Intl.ListFormat(locale.code, { type: 'disjunction' }).format(
+          alternatives.map(condition =>
+            describe(describeDateFilters([condition])),
+          ),
+        ),
+      })
+    : null;
+  const label = hasDate
+    ? describe(bounds)
+    : (alternativeLabel ?? t('All dates'));
 
   function selectMonth(month: string) {
     onChange([monthFilter(month)]);
@@ -173,11 +188,18 @@ export function AccountDateRange({
               maxHeight: 'inherit',
             }}
           >
+            {alternativeLabel && (
+              <View style={{ marginBottom: 8 }}>
+                <Trans>
+                  Choose an additional date range to narrow the Any filter.
+                </Trans>
+              </View>
+            )}
             <MonthChart
               query={chartQuery}
               startMonth={start?.slice(0, 7) ?? anchor}
               endMonth={end?.slice(0, 7) ?? anchor}
-              hasDate={hasDate}
+              hasDate={hasDate && !bounds?.empty}
               onSelect={(first, last) =>
                 first === last
                   ? selectMonth(first)
@@ -241,6 +263,7 @@ export function AccountDateRange({
           </Dialog>
         </Popover>
       </DialogTrigger>
+      {hasDate && alternativeLabel && <span>{alternativeLabel}</span>}
       {hasDate && (
         <Button style={{ borderRadius: 999 }} onPress={() => onChange([])}>
           <Trans>All dates</Trans>
@@ -284,8 +307,8 @@ function MonthChart({
     }
   }, [data]);
 
+  if (query && error) return <Trans>Could not load transactions.</Trans>;
   if (!query || isLoading) return <Trans>Loading transactions…</Trans>;
-  if (error) return <Trans>Could not load transactions.</Trans>;
 
   const activity = new Map<string, { count: number; net: number }>();
   let peak = 0;

@@ -49,7 +49,25 @@ test('puts filtered payment and deposit sums in visible column order', async () 
   const paymentCell = screen.getByLabelText('Total payments');
   expect(depositCell.textContent).toBe('100.00');
   expect(paymentCell.textContent).toBe('24.50');
-  expect(screen.getByLabelText('Net total')).toHaveTextContent('75.50');
+  const net = screen.getByLabelText('Net total');
+  expect(net).toHaveTextContent('75.50');
+  const summary = screen.getByText(
+    'Sum of shown posted transactions',
+  ).parentElement;
+  expect(summary).toContainElement(net);
+  expect(summary).toHaveStyle({
+    gridColumn: 'var(--totals-summary-column, 1 / -1)',
+    gridRow: '1',
+  });
+  expect(summary?.style.overflowX).toBe('');
+  expect(depositCell.parentElement).toHaveStyle({
+    gridRow: 'var(--totals-amount-row, 2)',
+    gridColumn: '2',
+  });
+  expect(paymentCell.parentElement).toHaveStyle({
+    gridRow: 'var(--totals-amount-row, 2)',
+    gridColumn: '4',
+  });
   expect(
     screen.getByRole('group', { name: 'Sum of shown posted transactions' }),
   ).toHaveStyle({ whiteSpace: 'nowrap' });

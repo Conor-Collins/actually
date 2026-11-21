@@ -28,6 +28,22 @@ export function rangeFilters({ start, end }: DateRange): RuleConditionEntity[] {
   ];
 }
 
+export function addDateCondition(
+  current: RuleConditionEntity[],
+  condition: RuleConditionEntity,
+) {
+  const lower = condition.op === 'gte' || condition.op === 'gt';
+  const upper = condition.op === 'lte' || condition.op === 'lt';
+  return [
+    ...current.filter(
+      ({ op }) =>
+        (lower && (op === 'lte' || op === 'lt')) ||
+        (upper && (op === 'gte' || op === 'gt')),
+    ),
+    condition,
+  ];
+}
+
 export function monthRange(start: string, end = start): DateRange {
   return {
     start: months.firstDayOfMonth(start),
@@ -119,7 +135,7 @@ export function describeDateFilters(conditions: AccountFilter[]) {
     if (bounds.start && (!start || bounds.start > start)) start = bounds.start;
     if (bounds.end && (!end || bounds.end < end)) end = bounds.end;
   }
-  if (start && end && start > end) return;
+  if (start && end && start > end) return { start, end, empty: true };
   return { start, end };
 }
 

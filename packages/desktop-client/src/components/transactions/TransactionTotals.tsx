@@ -4,6 +4,7 @@ import { styles } from '@actual-app/components/styles';
 import { theme } from '@actual-app/components/theme';
 import type { Query } from '@actual-app/core/shared/query';
 import type { TransactionEntity } from '@actual-app/core/types/models';
+import { css } from '@emotion/css';
 
 import { FinancialText } from '#components/FinancialText';
 import { PrivacyFilter } from '#components/PrivacyFilter';
@@ -122,14 +123,37 @@ export function TransactionTotalsRow({
     }
   }
 
+  const tracks = columns.map(column => columnWidths[column]);
+  const minimumSummaryWidth = 320;
+  const summaryNeedsOwnRow = summaryWidth < minimumSummaryWidth;
+  const fixedColumns = tracks.every(track => track.endsWith('px'));
+  const fixedWidth =
+    20 + tracks.reduce((width, track) => width + (parseInt(track, 10) || 0), 0);
+  if (fixedColumns) tracks.push('minmax(0, 1fr)');
+
+  // Fixed columns leave the remaining register width available for the summary.
+  const wideSparseLayout =
+    summaryNeedsOwnRow && fixedColumns
+      ? css({
+          containerType: 'inline-size',
+          [`@container (min-width: ${fixedWidth + minimumSummaryWidth}px)`]: {
+            '& > [data-totals-summary]': {
+              '--totals-summary-column': '-2 / -1',
+            },
+            '& > [data-totals-amount]': { '--totals-amount-row': 1 },
+          },
+        })
+      : undefined;
+
   return (
     <div
       aria-label={t('Sum of shown posted transactions')}
       role="group"
+      className={wideSparseLayout}
       style={{
         ...styles.smallText,
         display: 'grid',
-        gridTemplateColumns: `20px ${columns.map(column => columnWidths[column]).join(' ')}`,
+        gridTemplateColumns: `20px ${tracks.join(' ')}`,
         alignItems: 'center',
         flexShrink: 0,
         minHeight: 36,
@@ -141,14 +165,17 @@ export function TransactionTotalsRow({
       }}
     >
       <div
-        tabIndex={0}
+        data-totals-summary=""
         style={{
           gridRow: 1,
-          gridColumn: `${summaryStart + 2} / ${summaryEnd + 2}`,
+          gridColumn: wideSparseLayout
+            ? 'var(--totals-summary-column, 1 / -1)'
+            : summaryNeedsOwnRow
+              ? '1 / -1'
+              : `${summaryStart + 2} / ${summaryEnd + 2}`,
           display: 'flex',
           alignItems: 'center',
           gap: 12,
-          overflowX: 'auto',
           padding: '6px 5px',
         }}
       >
@@ -188,11 +215,16 @@ export function TransactionTotalsRow({
           (column === 'payment' || column === 'deposit') && (
             <div
               key={column}
+              data-totals-amount=""
               style={{
-                gridRow: 1,
+                gridRow: wideSparseLayout
+                  ? 'var(--totals-amount-row, 2)'
+                  : summaryNeedsOwnRow
+                    ? 2
+                    : 1,
                 gridColumn: index + 2,
                 textAlign: 'right',
-                paddingInline: 5,
+                padding: '4px 5px',
               }}
             >
               <PrivacyFilter>

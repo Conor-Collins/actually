@@ -365,3 +365,84 @@ test('defaults only plain register entries to the current month', () => {
     rangeConditions: [november],
   });
 });
+
+test('shows the initial histogram failure even while the query reports loading', async () => {
+  vi.mocked(useQuery).mockReturnValue({
+    isLoading: true,
+    data: null,
+    error: new Error('Query failed'),
+  });
+  render(
+    <TestProviders>
+      <AccountDateRange
+        conditions={[november]}
+        chartQuery={root}
+        onChange={vi.fn()}
+      />
+    </TestProviders>,
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'November 2026' }));
+  expect(await screen.findByText('Could not load transactions.')).toBeVisible();
+  expect(screen.queryByText('Loading transactions…')).toBeNull();
+});
+
+test('keeps both popover edges inside the main pane when the viewport narrows', async () => {
+  vi.mocked(useQuery).mockReturnValue({ isLoading: false, data: [] });
+  const viewport = vi.spyOn(window, 'innerWidth', 'get');
+  const clientWidth = vi.spyOn(document.documentElement, 'clientWidth', 'get');
+  viewport.mockReturnValue(670);
+  clientWidth.mockImplementation(() => window.innerWidth);
+  const sidebarRight = 240;
+  const triggerLeft = 390;
+  const originalRect = HTMLElement.prototype.getBoundingClientRect;
+  const getRect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect');
+  getRect.mockImplementation(function (this: HTMLElement) {
+    if (this.textContent === 'November 2026' && this.tagName === 'BUTTON') {
+      return new DOMRect(triggerLeft, 100, 140, 30);
+    }
+    if (this.hasAttribute('data-popover')) {
+      const { width, maxWidth } = getComputedStyle(this);
+      return new DOMRect(
+        parseFloat(this.style.left) || 0,
+        parseFloat(this.style.top) || 0,
+        Math.min(parseFloat(width), parseFloat(maxWidth)),
+        200,
+      );
+    }
+    return originalRect.call(this);
+  });
+
+  try {
+    render(
+      <TestProviders>
+        <AccountDateRange
+          conditions={[november]}
+          chartQuery={root}
+          onChange={vi.fn()}
+        />
+      </TestProviders>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'November 2026' }));
+    const dialog = await screen.findByRole('dialog', {
+      name: 'Transaction date range',
+    });
+    const popover = dialog.closest<HTMLElement>('[data-popover]');
+    if (!popover) throw new Error('Missing date range popover');
+    function expectPaneBounds(popover: HTMLElement, width: number) {
+      expect(popover).toHaveAttribute('data-placement', 'bottom');
+      const rect = popover.getBoundingClientRect();
+      expect(rect.left).toBe(triggerLeft);
+      expect(rect.left).toBeGreaterThanOrEqual(sidebarRight);
+      expect(rect.right).toBeLessThanOrEqual(window.innerWidth);
+      expect(rect.width).toBe(width - triggerLeft - 12);
+    }
+    expectPaneBounds(popover, 670);
+    viewport.mockReturnValue(580);
+    fireEvent(window, new Event('resize'));
+    expectPaneBounds(popover, 580);
+  } finally {
+    getRect.mockRestore();
+    clientWidth.mockRestore();
+    viewport.mockRestore();
+  }
+});

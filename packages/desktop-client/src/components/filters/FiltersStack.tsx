@@ -48,6 +48,9 @@ export function FiltersStack({
       >
         <AppliedFilters
           conditions={visibleConditions}
+          operatorConditions={
+            conditionsOp === 'or' ? conditions : visibleConditions
+          }
           conditionsOp={conditionsOp}
           onConditionsOpChange={onConditionsOpChange}
           onUpdate={onUpdateFilter}
