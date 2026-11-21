@@ -1,12 +1,14 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '@actual-app/components/button';
-import { Menu } from '@actual-app/components/menu';
 import { Popover } from '@actual-app/components/popover';
 import type { CSSProperties } from '@actual-app/components/styles';
 import { Text } from '@actual-app/components/text';
 import { theme } from '@actual-app/components/theme';
+import { View } from '@actual-app/components/view';
+import { css } from '@emotion/css';
 
 import { useResizeObserver } from '#hooks/useResizeObserver';
 
@@ -121,15 +123,17 @@ function ClusterMarker({
     );
   }
 
+  const menuLabel = t('Timeline markers ({{count}})', {
+    count: cluster.length,
+  });
+
   return (
     <>
       <Button
         ref={triggerRef}
         variant="bare"
         bounce={false}
-        aria-label={t('Timeline markers ({{count}})', {
-          count: cluster.length,
-        })}
+        aria-label={menuLabel}
         aria-haspopup="menu"
         aria-expanded={isOpen}
         onPress={() => setIsOpen(!isOpen)}
@@ -144,18 +148,116 @@ function ClusterMarker({
         </Text>
       </Button>
       <Popover triggerRef={triggerRef} isOpen={isOpen} onOpenChange={setIsOpen}>
-        <Menu
-          items={cluster.map(marker => ({
-            name: marker.id,
-            text: marker.label,
-            disabled: marker.onClick === undefined,
-          }))}
-          onMenuSelect={id => {
-            setIsOpen(false);
-            cluster.find(marker => marker.id === id)?.onClick?.();
-          }}
-        />
+        {isOpen && (
+          <ClusterMenu
+            cluster={cluster}
+            label={menuLabel}
+            onClose={() => setIsOpen(false)}
+          />
+        )}
       </Popover>
     </>
   );
 }
+
+function ClusterMenu({
+  cluster,
+  label,
+  onClose,
+}: {
+  cluster: TimelineMarker[];
+  label: string;
+  onClose: () => void;
+}) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    menuRef.current
+      ?.querySelector<HTMLButtonElement>('button:not(:disabled)')
+      ?.focus();
+  }, []);
+
+  return (
+    <View
+      innerRef={menuRef}
+      role="menu"
+      aria-label={label}
+      onKeyDown={moveMenuFocus}
+      style={{
+        padding: 4,
+        maxWidth: 'min(420px, 85vw)',
+        maxHeight: '50vh',
+        overflowY: 'auto',
+      }}
+    >
+      {cluster.map(marker => (
+        <button
+          key={marker.id}
+          type="button"
+          role="menuitem"
+          tabIndex={-1}
+          disabled={marker.onClick === undefined}
+          className={menuItemStyle}
+          onClick={() => {
+            onClose();
+            marker.onClick?.();
+          }}
+        >
+          {marker.label}
+        </button>
+      ))}
+    </View>
+  );
+}
+
+function moveMenuFocus(event: KeyboardEvent<HTMLDivElement>) {
+  const { key, currentTarget, target } = event;
+  if (
+    key !== 'ArrowDown' &&
+    key !== 'ArrowUp' &&
+    key !== 'Home' &&
+    key !== 'End'
+  ) {
+    return;
+  }
+
+  const items = Array.from(
+    currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'),
+  );
+  if (items.length === 0) {
+    return;
+  }
+
+  event.preventDefault();
+  const current = items.findIndex(item => item === target);
+  switch (key) {
+    case 'Home':
+      items[0]?.focus();
+      break;
+    case 'End':
+      items.at(-1)?.focus();
+      break;
+    case 'ArrowDown':
+      items[(current + 1) % items.length]?.focus();
+      break;
+    case 'ArrowUp':
+      items[(current - 1 + items.length) % items.length]?.focus();
+      break;
+    default:
+      break;
+  }
+}
+
+const menuItemStyle = css({
+  border: 0,
+  borderRadius: 4,
+  padding: '6px 8px',
+  backgroundColor: 'transparent',
+  color: theme.menuItemText,
+  textAlign: 'left',
+  overflowWrap: 'anywhere',
+  '&:disabled': { color: theme.buttonBareDisabledText },
+  '&:enabled:hover, &:focus-visible': {
+    backgroundColor: theme.menuItemBackgroundHover,
+    color: theme.menuItemTextHover,
+  },
+});

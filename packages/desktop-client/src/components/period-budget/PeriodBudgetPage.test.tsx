@@ -17,6 +17,7 @@ import type {
 } from '@actual-app/core/types/models';
 import { onlineManager } from '@tanstack/react-query';
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -732,7 +733,7 @@ function bar(category: string, periodName: string) {
 }
 
 function dot(name: string) {
-  return screen.getByRole('img', { name });
+  return screen.getByTitle(name);
 }
 
 function rowOf(category: string) {
@@ -1126,13 +1127,13 @@ describe('PeriodBudgetPage', () => {
             {
               id: 'may',
               position: 0.41,
-              label: 'May 31 payment',
+              label: 'May 31 payment, 10.00',
               onClick: openMay,
             },
             {
               id: 'june',
               position: 0.413,
-              label: 'June 1 payment',
+              label: 'June 1 payment, 25.00',
               onClick: openJune,
             },
           ]}
@@ -1141,13 +1142,30 @@ describe('PeriodBudgetPage', () => {
       const cluster = screen.getByRole('button', {
         name: 'Timeline markers (2)',
       });
-      cluster.focus();
-      await userEvent.keyboard('{Enter}{ArrowDown}{ArrowDown}{Enter}');
+      await userEvent.tab();
+      await userEvent.keyboard('{Enter}');
+      const may = screen.getByRole('menuitem', {
+        name: 'May 31 payment, 10.00',
+      });
+      const june = screen.getByRole('menuitem', {
+        name: 'June 1 payment, 25.00',
+      });
+      expect(may).toHaveFocus();
+      await userEvent.keyboard('{ArrowDown}');
+      expect(june).toHaveFocus();
+      await userEvent.keyboard('{Home}');
+      expect(may).toHaveFocus();
+      await userEvent.keyboard('{End}');
+      expect(june).toHaveFocus();
+      await userEvent.keyboard('{ArrowUp}');
+      expect(may).toHaveFocus();
+      await userEvent.keyboard('{ArrowDown}{Enter}');
       expect(openJune).toHaveBeenCalledOnce();
       expect(openMay).not.toHaveBeenCalled();
-      cluster.focus();
-      await userEvent.keyboard('{Enter}{ArrowDown}{Enter}');
-      expect(openMay).toHaveBeenCalledOnce();
+      await waitFor(() => expect(cluster).toHaveFocus());
+      await userEvent.keyboard('{Enter}{Escape}');
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+      await waitFor(() => expect(cluster).toHaveFocus());
     });
 
     it('opens an assigned period from a cluster that starts with an unassigned payment', async () => {
@@ -1166,12 +1184,15 @@ describe('PeriodBudgetPage', () => {
           ]}
         />,
       );
-      screen.getByRole('button', { name: 'Timeline markers (2)' }).focus();
+      await userEvent.tab();
       await userEvent.keyboard('{Enter}');
       expect(
-        within(screen.getByRole('menu')).getByText('Unassigned payment'),
-      ).toBeVisible();
-      await userEvent.keyboard('{ArrowDown}{ArrowDown}{Enter}');
+        screen.getByRole('menuitem', { name: 'Unassigned payment' }),
+      ).toBeDisabled();
+      expect(
+        screen.getByRole('menuitem', { name: 'Assigned payment' }),
+      ).toHaveFocus();
+      await userEvent.keyboard(' ');
       expect(openAssigned).toHaveBeenCalledOnce();
     });
 
@@ -1474,7 +1495,12 @@ describe('PeriodBudgetPage', () => {
       }
       // The charge that is paid and the one that is skipped have no dot, and
       // the one of March 2018 is not in this year
-      expect(screen.getAllByRole('img')).toHaveLength(names.length);
+      expect(screen.getAllByRole('img')).toHaveLength(1);
+      expect(
+        screen.getAllByRole('button', {
+          name: /^(Payment on|Overdue charge|Expected charge)/,
+        }),
+      ).toHaveLength(names.length - 1);
 
       // The middle of the 10th of May, the 130th of the 365 days
       expect(
@@ -1496,16 +1522,25 @@ describe('PeriodBudgetPage', () => {
       ).not.toBeInTheDocument();
     });
 
-    it('opens a period from its payment marker and shows the full amount on hover', async () => {
+    it('tabs to a single payment marker and activates it with Enter or Space', async () => {
       await renderPage();
 
-      const mark = dot('Payment on 03/20/2017: Tax office, -300.00');
+      const mark = screen.getByRole('button', {
+        name: 'Payment on 03/20/2017: Tax office, -300.00',
+      });
       expect(mark).toHaveAttribute(
         'title',
         'Payment on 03/20/2017: Tax office, -300.00',
       );
-      await userEvent.click(mark);
+      act(() => bar('Tax', '2017').focus());
+      await userEvent.tab();
+      expect(mark).toHaveFocus();
+      await userEvent.keyboard('{Enter}');
       expect(screen.getByRole('region', { name: 'Tax, 2017' })).toBeVisible();
+      await userEvent.keyboard(' ');
+      expect(
+        screen.queryByRole('region', { name: 'Tax, 2017' }),
+      ).not.toBeInTheDocument();
     });
 
     it('moves and zooms the months it shows', async () => {

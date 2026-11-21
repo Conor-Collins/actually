@@ -1,3 +1,5 @@
+import type { CSSProperties } from 'react';
+
 import { Text } from '@actual-app/components/text';
 import { theme } from '@actual-app/components/theme';
 
@@ -21,31 +23,36 @@ export function TimelineDot({
   color = theme.pageTextDark,
   onClick,
 }: TimelineDotProps) {
-  return (
-    <Text
-      role="img"
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      style={{
-        position: 'absolute',
-        left: percent(position),
-        width: DOT_SIZE,
-        height: DOT_SIZE,
-        boxSizing: 'border-box',
-        borderRadius: DOT_SIZE,
-        // Its middle is on its day
-        marginLeft: -DOT_SIZE / 2,
-        // The parent remains clickable when its markers receive pointer events.
-        pointerEvents: 'auto',
+  const style: CSSProperties = {
+    position: 'absolute',
+    left: percent(position),
+    width: DOT_SIZE,
+    height: DOT_SIZE,
+    boxSizing: 'border-box',
+    borderRadius: DOT_SIZE,
+    // Its middle is on its day
+    marginLeft: -DOT_SIZE / 2,
+    pointerEvents: 'auto',
 
-        top: center - DOT_SIZE / 2,
-        // The ring keeps a solid dot visible on the filled part of a bar
-        border: isHollow
-          ? `2px solid ${color}`
-          : `1px solid ${theme.tableBackground}`,
-        backgroundColor: isHollow ? theme.tableBackground : color,
-      }}
-    />
-  );
+    top: center - DOT_SIZE / 2,
+    // The ring keeps a solid dot visible on the filled part of a bar
+    border: isHollow
+      ? `2px solid ${color}`
+      : `1px solid ${theme.tableBackground}`,
+    backgroundColor: isHollow ? theme.tableBackground : color,
+  };
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        aria-label={label}
+        title={label}
+        onClick={onClick}
+        style={{ ...style, padding: 0, cursor: 'pointer' }}
+      />
+    );
+  }
+
+  return <Text role="img" aria-label={label} title={label} style={style} />;
 }
