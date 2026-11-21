@@ -1,15 +1,63 @@
 import { useRef } from 'react';
-import { createMemoryRouter, Outlet, RouterProvider } from 'react-router';
+import { createMemoryRouter, RouterProvider } from 'react-router';
 
+import type { AccountEntity } from '@actual-app/core/types/models';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import { MobilePageHeader } from '#components/Page';
+import { accountQueries } from '#accounts';
+import type * as AppSlice from '#app/appSlice';
+import { FinancesApp } from '#components/FinancesApp';
+import type * as ServerContext from '#components/ServerContext';
 import { ScrollProvider } from '#hooks/useScrollListener';
+import { createTestQueryClient, TestProviders } from '#mocks';
 
 import { MobileNavTabs } from './MobileNavTabs';
-import { MobileSettingsButton } from './MobileSettingsButton';
-import { AddTransactionButton } from './transactions/AddTransactionButton';
+
+vi.mock('#hooks/useAutomaticBankSync', () => ({
+  useAutomaticBankSync: vi.fn(),
+}));
+vi.mock('#hooks/useNewsNotification', () => ({ useNewsNotification: vi.fn() }));
+vi.mock('#components/ServerContext', async importOriginal => ({
+  ...(await importOriginal<typeof ServerContext>()),
+  useMultiuserEnabled: () => false,
+}));
+vi.mock('#app/appSlice', async importOriginal => ({
+  ...(await importOriginal<typeof AppSlice>()),
+  sync: () => ({ type: 'test/sync' }),
+  getLatestAppVersion: () => ({ type: 'test/getLatestAppVersion' }),
+}));
+vi.mock('#components/CommandBar', () => ({ CommandBar: () => null }));
+vi.mock('#components/GlobalKeys', () => ({ GlobalKeys: () => null }));
+vi.mock('../sidebar/index', () => ({ FloatableSidebar: () => null }));
+vi.mock('#components/Titlebar', () => ({ Titlebar: () => null }));
+vi.mock('#components/tour/TourAutoOffer', () => ({
+  TourAutoOffer: () => null,
+}));
+vi.mock('#components/tour/Tour', () => ({ Tour: () => null }));
+vi.mock('#components/BankSyncStatus', () => ({ BankSyncStatus: () => null }));
+vi.mock('#components/Notifications', () => ({ Notifications: () => null }));
+vi.mock('../settings/index', () => ({
+  Settings: () => null,
+  SettingsIndex: () => null,
+  GeneralSettings: () => null,
+  AdvancedSettings: () => null,
+  ExperimentalSettings: () => null,
+}));
+vi.mock('#components/mobile/transactions/TransactionEdit', () => ({
+  TransactionEdit: () => null,
+}));
+vi.mock('#components/mobile/accounts/AccountTransactions', () => ({
+  AccountTransactions: () => null,
+}));
+vi.mock('#components/mobile/accounts/AllAccountTransactions', () => ({
+  AllAccountTransactions: () => null,
+}));
+vi.mock('../responsive/narrow', async () => ({
+  Account: (await import('#components/mobile/accounts/AccountPage'))
+    .AccountPage,
+  Budget: () => null,
+}));
 
 const destinations = [
   ['Accounts', '/accounts'],
@@ -23,36 +71,16 @@ function TestLayout() {
   const scrollableRef = useRef<HTMLDivElement>(null);
   return (
     <ScrollProvider scrollableRef={scrollableRef} delayMs={0}>
-      <div ref={scrollableRef} data-testid="page-content">
-        <Outlet />
-      </div>
+      <div ref={scrollableRef} data-testid="page-content" />
       <MobileNavTabs />
     </ScrollProvider>
   );
 }
 
 function renderNavigation(initialPath: string) {
-  const router = createMemoryRouter(
-    [
-      {
-        element: <TestLayout />,
-        children: [
-          {
-            path: '/accounts/all',
-            element: (
-              <MobilePageHeader
-                title="Transactions"
-                leftContent={<MobileSettingsButton />}
-                rightContent={<AddTransactionButton />}
-              />
-            ),
-          },
-          { path: '*', element: <div /> },
-        ],
-      },
-    ],
-    { initialEntries: [initialPath] },
-  );
+  const router = createMemoryRouter([{ path: '*', element: <TestLayout /> }], {
+    initialEntries: [initialPath],
+  });
 
   render(<RouterProvider router={router} />);
   return router;
@@ -125,15 +153,95 @@ test('keeps the same navigation mounted across sub-routes and scrolling', async 
   expect(navigation).toHaveAttribute('data-navbar-state', 'default');
 });
 
-test('top header opens Settings and Transactions retains Add transaction', async () => {
-  const router = renderNavigation('/accounts/all');
-  const user = userEvent.setup();
+async function renderFinancesApp(initialPath: string) {
+  // Load the lazy route module before asserting against its rendered header.
+  await import('../responsive/narrow');
+  const queryClient = createTestQueryClient();
+  const { queryKey } = accountQueries.list();
+  queryClient.setQueryDefaults(queryKey, { staleTime: Infinity });
+  queryClient.setQueryData<AccountEntity[]>(queryKey, [
+    {
+      id: 'acc-1',
+      name: 'Checking',
+      offbudget: 0,
+      closed: 0,
+      sort_order: 0,
+      last_reconciled: null,
+      tombstone: 0,
+      account_group_id: null,
+      account_id: null,
+      bank: null,
+      bankName: null,
+      bankId: null,
+      mask: null,
+      official_name: null,
+      balance_current: null,
+      balance_available: null,
+      balance_limit: null,
+      account_sync_source: null,
+      last_sync: null,
+      bank_sync_status: null,
+    },
+  ]);
+  vi.stubGlobal('Actual', {
+    ...global.Actual,
+    waitForUpdateReadyForDownload: () => new Promise(vi.fn()),
+  });
 
-  await user.click(screen.getByRole('button', { name: 'Settings' }));
+  const router = createMemoryRouter([{ path: '*', element: <FinancesApp /> }], {
+    initialEntries: [initialPath],
+  });
+  render(
+    <TestProviders queryClient={queryClient}>
+      <RouterProvider router={router} />
+    </TestProviders>,
+  );
+  return router;
+}
+
+test.each(['/accounts/acc-1', '/accounts/all', '/transactions/new'])(
+  'FinancesApp keeps the same mobile navigation mounted at %s',
+  async path => {
+    const router = await renderFinancesApp('/budget');
+    const navigation = screen.getByRole('navigation', {
+      name: 'Main navigation',
+    });
+
+    await act(() => router.navigate(path));
+    expect(router.state.location.pathname).toBe(path);
+    expect(screen.queryByRole('navigation', { name: 'Main navigation' })).toBe(
+      navigation,
+    );
+  },
+);
+
+test('the real account headers expose Settings, Back, and Add transaction on the appropriate routes', async () => {
+  const router = await renderFinancesApp('/accounts/acc-1');
+  const user = userEvent.setup();
+  const navigation = screen.getByRole('navigation', {
+    name: 'Main navigation',
+  });
+
+  expect(
+    await screen.findByRole('heading', { name: 'Checking' }),
+  ).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Back' })).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Add transaction' })).toBeVisible();
+
+  await user.click(
+    within(navigation).getByRole('link', { name: 'Transactions' }),
+  );
+  expect(router.state.location.pathname).toBe('/accounts/all');
+  await user.click(await screen.findByRole('button', { name: 'Settings' }));
   expect(router.state.location.pathname).toBe('/settings');
 
-  await user.click(screen.getByRole('link', { name: 'Transactions' }));
-  await user.click(screen.getByRole('button', { name: 'Add transaction' }));
+  await user.click(
+    within(navigation).getByRole('link', { name: 'Transactions' }),
+  );
+  expect(router.state.location.pathname).toBe('/accounts/all');
+  await user.click(
+    await screen.findByRole('button', { name: 'Add transaction' }),
+  );
   expect(router.state.location.pathname).toBe('/transactions/new');
 });
 

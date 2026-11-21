@@ -26,7 +26,7 @@ test.describe('Mobile Transactions', () => {
     await page?.close();
   });
 
-  test('creates a transaction via footer button', async () => {
+  test('creates a transaction via header button', async () => {
     const transactionEntryPage = await navigation.goToTransactionEntryPage();
     await expect(page).toMatchThemeScreenshots();
 

@@ -247,7 +247,10 @@ export function FinancesApp() {
                     overflow: 'auto',
                     position: 'relative',
                     // Keep fixed mobile editors and selection controls above the tabs.
-                    contain: isNarrowWidth ? 'paint' : undefined,
+                    ...(isNarrowWidth && {
+                      contain: 'paint',
+                      '--fixed-content-safe-area-bottom': '0px',
+                    }),
                   }}
                 >
                   <Titlebar
