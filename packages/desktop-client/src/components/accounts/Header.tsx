@@ -52,6 +52,7 @@ import { useSyncedPref } from '#hooks/useSyncedPref';
 import { useSyncServerStatus } from '#hooks/useSyncServerStatus';
 
 import type { TableRef } from './Account';
+import { AccountDateRange } from './AccountDateRange';
 import { Balances } from './Balance';
 import { BalanceHistoryGraph } from './BalanceHistoryGraph';
 import { ReconcileMenu, ReconcilingMessage } from './Reconcile';
@@ -73,12 +74,13 @@ type AccountHeaderProps = {
   showEmptyMessage: boolean;
   balanceQuery: ComponentProps<typeof ReconcilingMessage>['balanceQuery'];
   reconcileAmount?: number | null;
-  isFiltered: boolean;
-  filteredAmount?: number | null;
   isSorted: boolean;
   search: string;
   filterConditions: RuleConditionEntity[];
   filterConditionsOp: 'and' | 'or';
+  rangeConditions: RuleConditionEntity[];
+  chartQuery: ComponentProps<typeof AccountDateRange>['chartQuery'];
+  onDateRangeChange: ComponentProps<typeof AccountDateRange>['onChange'];
   onSearch: (newSearch: string) => void;
   onAddTransaction: () => void;
   onShowTransactions: ComponentProps<
@@ -145,12 +147,13 @@ export function AccountHeader({
   showEmptyMessage,
   balanceQuery,
   reconcileAmount,
-  isFiltered,
-  filteredAmount,
   isSorted,
   search,
   filterConditions,
   filterConditionsOp,
+  rangeConditions,
+  chartQuery,
+  onDateRangeChange,
   onSearch,
   onAddTransaction,
   onShowTransactions,
@@ -315,8 +318,6 @@ export function AccountHeader({
               showExtraBalances={showExtraBalances}
               onToggleExtraBalances={onToggleExtraBalances}
               account={account}
-              isFiltered={isFiltered}
-              filteredAmount={filteredAmount}
             />
           </View>
 
@@ -562,9 +563,24 @@ export function AccountHeader({
             </View>
           )}
         </SpaceBetween>
-        {filterConditions?.length > 0 && (
+        {reconcileAmount == null && (
+          <AccountDateRange
+            key={accountId}
+            conditions={rangeConditions}
+            chartQuery={chartQuery}
+            onChange={onDateRangeChange}
+          />
+        )}
+        {(filterConditions.length > 0 ||
+          (filterConditionsOp === 'and' && rangeConditions.length > 0) ||
+          filterId?.id) && (
           <FiltersStack
-            conditions={filterConditions}
+            visibleConditions={filterConditions}
+            conditions={
+              filterConditionsOp === 'and'
+                ? [...filterConditions, ...rangeConditions]
+                : filterConditions
+            }
             conditionsOp={filterConditionsOp}
             onUpdateFilter={onUpdateFilter}
             onDeleteFilter={onDeleteFilter}
