@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 
 import { styles } from '@actual-app/components/styles';
@@ -86,6 +87,23 @@ export function TransactionTotalsRow({
   scrollWidth: number;
   totals: TransactionTotals;
 }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [paneWidth, setPaneWidth] = useState(0);
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element) return;
+    setPaneWidth(element.getBoundingClientRect().width);
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) {
+        setPaneWidth(
+          entry.borderBoxSize?.[0]?.inlineSize ?? entry.contentRect.width,
+        );
+      }
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
   const format = useFormat();
   const { t } = useTranslation();
   const columnWidths = {
@@ -165,115 +183,145 @@ export function TransactionTotalsRow({
   const alwaysCompact = compact.width === totalFixedWidth;
   function placement(column: string) {
     return {
-      '& > [data-totals-summary]': { '--totals-summary-column': column },
-      '& > [data-totals-amount]': { '--totals-amount-row': 1 },
+      '& > [data-totals-grid] > [data-totals-summary]': {
+        '--totals-summary-column': column,
+      },
+      '& > [data-totals-grid] > [data-totals-amount]': {
+        '--totals-amount-row': 1,
+      },
     };
   }
-  const responsiveLayout = alwaysFull
-    ? undefined
-    : css({
-        containerType: 'inline-size',
-        '& [data-totals-label]': { display: 'none' },
-        [`@container (min-width: ${compact.width}px)`]: placement(
-          compact.column,
-        ),
-        [`@container (min-width: ${full.width}px)`]: {
-          ...placement(full.column),
-          '& [data-totals-label]': { display: 'inline' },
-        },
-      });
+  const hasMeasuredWidth = paneWidth > 0;
+  const isFull = alwaysFull || paneWidth >= full.width;
+  const isCompact = alwaysCompact || paneWidth >= compact.width;
+  const responsiveLayout =
+    hasMeasuredWidth || alwaysFull
+      ? undefined
+      : css({
+          containerType: 'inline-size',
+          '& [data-totals-label]': { display: 'none' },
+          [`@container (min-width: ${compact.width}px)`]: placement(
+            compact.column,
+          ),
+          [`@container (min-width: ${full.width}px)`]: {
+            ...placement(full.column),
+            '& [data-totals-label]': { display: 'inline' },
+          },
+        });
 
   return (
     <div
+      ref={containerRef}
       aria-label={t('Sum of shown posted transactions')}
       role="group"
       className={responsiveLayout}
       style={{
-        ...styles.smallText,
-        display: 'grid',
-        gridTemplateColumns: `20px ${tracks.join(' ')}`,
-        alignItems: 'center',
         flexShrink: 0,
-        minHeight: 36,
-        whiteSpace: 'nowrap',
         backgroundColor: theme.tableHeaderBackground,
         color: theme.tableHeaderText,
         borderTop: '1px solid ' + theme.tableBorder,
-        paddingRight: 5 + scrollWidth,
       }}
     >
       <div
-        data-totals-summary=""
+        data-totals-grid=""
         style={{
-          gridRow: 1,
-          gridColumn: alwaysFull
-            ? full.column
-            : `var(--totals-summary-column, ${alwaysCompact ? compact.column : '1 / -1'})`,
-          display: 'flex',
+          ...styles.smallText,
+          display: 'grid',
+          gridTemplateColumns: `20px ${tracks.join(' ')}`,
           alignItems: 'center',
-          gap: 12,
-          padding: '6px 5px',
+          minHeight: 36,
+          whiteSpace: 'nowrap',
+          paddingRight: 5 + scrollWidth,
         }}
       >
-        <span data-totals-label="">
-          <Trans>Sum of shown posted transactions</Trans>
-        </span>
-        <span>
-          <Trans>Net</Trans>{' '}
-          <PrivacyFilter>
-            <FinancialText
-              aria-label={t('Net total')}
-              style={{ fontWeight: 600 }}
-            >
-              {format(totals.deposit - totals.payment, 'financial')}
-            </FinancialText>
-          </PrivacyFilter>
-        </span>
-        {hiddenAmounts.map(column => (
-          <span key={column}>
-            {column === 'payment' ? (
-              <Trans>Payment</Trans>
-            ) : (
-              <Trans>Deposit</Trans>
-            )}{' '}
+        <div
+          data-totals-summary=""
+          style={{
+            gridRow: 1,
+            gridColumn: isFull
+              ? full.column
+              : hasMeasuredWidth
+                ? isCompact
+                  ? compact.column
+                  : '1 / -1'
+                : `var(--totals-summary-column, ${alwaysCompact ? compact.column : '1 / -1'})`,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            padding: '6px 5px',
+          }}
+        >
+          <span
+            data-totals-label=""
+            style={
+              hasMeasuredWidth
+                ? { display: isFull ? 'inline' : 'none' }
+                : undefined
+            }
+          >
+            <Trans>Sum of shown posted transactions</Trans>
+          </span>
+          <span>
+            <Trans>Net</Trans>{' '}
             <PrivacyFilter>
-              <FinancialText>
-                {format(totals[column], 'financial')}
+              <FinancialText
+                aria-label={t('Net total')}
+                style={{ fontWeight: 600 }}
+              >
+                {format(totals.deposit - totals.payment, 'financial')}
               </FinancialText>
             </PrivacyFilter>
           </span>
-        ))}
-      </div>
-      {columns.map(
-        (column, index) =>
-          (column === 'payment' || column === 'deposit') && (
-            <div
-              key={column}
-              data-totals-amount=""
-              style={{
-                gridRow: alwaysFull
-                  ? 1
-                  : `var(--totals-amount-row, ${alwaysCompact ? 1 : 2})`,
-                gridColumn: index + 2,
-                textAlign: 'right',
-                padding: '4px 5px',
-              }}
-            >
+          {hiddenAmounts.map(column => (
+            <span key={column}>
+              {column === 'payment' ? (
+                <Trans>Payment</Trans>
+              ) : (
+                <Trans>Deposit</Trans>
+              )}{' '}
               <PrivacyFilter>
-                <FinancialText
-                  aria-label={
-                    column === 'payment'
-                      ? t('Total payments')
-                      : t('Total deposits')
-                  }
-                  style={{ fontWeight: 600 }}
-                >
+                <FinancialText>
                   {format(totals[column], 'financial')}
                 </FinancialText>
               </PrivacyFilter>
-            </div>
-          ),
-      )}
+            </span>
+          ))}
+        </div>
+        {columns.map(
+          (column, index) =>
+            (column === 'payment' || column === 'deposit') && (
+              <div
+                key={column}
+                data-totals-amount=""
+                style={{
+                  gridRow: alwaysFull
+                    ? 1
+                    : hasMeasuredWidth
+                      ? isCompact
+                        ? 1
+                        : 2
+                      : `var(--totals-amount-row, ${alwaysCompact ? 1 : 2})`,
+                  gridColumn: index + 2,
+                  textAlign: 'right',
+                  padding: '4px 5px',
+                }}
+              >
+                <PrivacyFilter>
+                  <FinancialText
+                    aria-label={
+                      column === 'payment'
+                        ? t('Total payments')
+                        : t('Total deposits')
+                    }
+                    style={{ fontWeight: 600 }}
+                  >
+                    {format(totals[column], 'financial')}
+                  </FinancialText>
+                </PrivacyFilter>
+              </div>
+            ),
+        )}
+      </div>
     </div>
   );
 }
