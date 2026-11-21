@@ -81,6 +81,7 @@ type AccountHeaderProps = {
   filterConditionsOp: 'and' | 'or';
   rangeConditions: RuleConditionEntity[];
   chartQuery: ComponentProps<typeof AccountDateRange>['chartQuery'];
+  onClearDateAlternatives: () => void;
   onDateRangeChange: ComponentProps<typeof AccountDateRange>['onChange'];
   onSearch: (newSearch: string) => void;
   onAddTransaction: () => void;
@@ -155,6 +156,7 @@ export function AccountHeader({
   rangeConditions,
   chartQuery,
   onDateRangeChange,
+  onClearDateAlternatives,
   onSearch,
   onAddTransaction,
   onShowTransactions,
@@ -188,6 +190,10 @@ export function AccountHeader({
 }: AccountHeaderProps) {
   const { t } = useTranslation();
 
+  const expressionDates = filterConditions.filter(isDateFilter);
+  const nonDateConditions = filterConditions.filter(
+    condition => !isDateFilter(condition),
+  );
   const [reconcileOpen, setReconcileOpen] = useState(false);
   const searchInput = useRef<HTMLInputElement>(null);
   const reconcileRef = useRef(null);
@@ -567,12 +573,13 @@ export function AccountHeader({
         {reconcileAmount == null && (
           <AccountDateRange
             key={accountId}
-            conditions={rangeConditions}
-            alternatives={
-              filterConditionsOp === 'or'
-                ? filterConditions.filter(isDateFilter)
-                : []
+            conditions={
+              filterConditionsOp === 'and'
+                ? [...rangeConditions, ...expressionDates]
+                : rangeConditions
             }
+            alternatives={filterConditionsOp === 'or' ? expressionDates : []}
+            onClearAlternatives={onClearDateAlternatives}
             chartQuery={chartQuery}
             onChange={onDateRangeChange}
           />
@@ -582,10 +589,9 @@ export function AccountHeader({
           filterId?.id) && (
           <FiltersStack
             visibleConditions={
-              filterConditionsOp === 'or' && reconcileAmount == null
-                ? filterConditions.filter(condition => !isDateFilter(condition))
-                : filterConditions
+              reconcileAmount == null ? nonDateConditions : filterConditions
             }
+            operatorConditions={filterConditions}
             conditions={
               filterConditionsOp === 'and'
                 ? [...filterConditions, ...rangeConditions]

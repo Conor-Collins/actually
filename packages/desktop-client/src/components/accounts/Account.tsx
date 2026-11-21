@@ -104,7 +104,6 @@ import {
   describeDateFilters,
   initialAccountFilters,
   isDateFilter,
-  splitAccountFilters,
 } from './account-date-filters';
 import type { AccountFilter as ConditionEntity } from './account-date-filters';
 import { AccountEmptyMessage } from './AccountEmptyMessage';
@@ -1493,38 +1492,11 @@ class AccountInternal extends PureComponent<
   };
 
   onConditionsOpChange = (value: 'and' | 'or') => {
-    this.setState(state => ({
+    this.setState(({ filterId }) => ({
       filterConditionsOp: value,
-      filterId: { ...state.filterId, status: 'changed' } as SavedFilter,
+      filterId: filterId?.id ? { ...filterId, status: 'changed' } : filterId,
     }));
-    if (value === 'and') {
-      const filterConditions = this.state.filterConditions.filter(
-        condition => !isDateFilter(condition),
-      );
-      const dates = this.state.filterConditions.filter(isDateFilter);
-      // Date alternatives came from persisted filters or the validated filter menu.
-      const dateConditions = dates.flatMap(condition =>
-        'field' in condition &&
-        condition.field === 'date' &&
-        condition.op &&
-        condition.value != null
-          ? [
-              {
-                ...condition,
-                field: condition.field,
-                op: condition.op,
-                value: condition.value,
-              },
-            ]
-          : [],
-      );
-      void this.applyFilters(filterConditions, value, [
-        ...this.state.rangeConditions,
-        ...dateConditions,
-      ]);
-    } else {
-      void this.applyFilters(this.state.filterConditions, value);
-    }
+    void this.applyFilters(this.state.filterConditions, value);
   };
 
   onReloadSavedFilter = (savedFilter: SavedFilter, item?: string) => {
@@ -1633,18 +1605,22 @@ class AccountInternal extends PureComponent<
         } as SavedFilter,
       }));
       if (
+        this.state.reconcileAmount == null &&
         this.state.filterConditionsOp === 'and' &&
         condition.field === 'date' &&
         condition.op &&
         condition.value != null
       ) {
         this.onDateRangeChange(
-          addDateCondition(this.state.rangeConditions, {
-            ...condition,
-            field: condition.field,
-            op: condition.op,
-            value: condition.value,
-          }),
+          addDateCondition(
+            [...this.state.rangeConditions, ...this.expressionDates()],
+            {
+              ...condition,
+              field: condition.field,
+              op: condition.op,
+              value: condition.value,
+            },
+          ),
         );
       } else {
         void this.applyFilters([...filterConditions, condition]);
@@ -1689,23 +1665,62 @@ class AccountInternal extends PureComponent<
     conditions: RuleConditionEntity[],
     op: 'and' | 'or',
   ) => {
-    const { filterConditions, rangeConditions } = splitAccountFilters(
-      conditions,
-      op,
+    void this.applyFilters(conditions, op, []);
+  };
+
+  expressionDates = () =>
+    this.state.filterConditions.flatMap(condition =>
+      'field' in condition &&
+      condition.field === 'date' &&
+      condition.op &&
+      condition.value != null
+        ? [
+            {
+              ...condition,
+              field: condition.field,
+              op: condition.op,
+              value: condition.value,
+            },
+          ]
+        : [],
     );
-    void this.applyFilters(filterConditions, op, rangeConditions);
+
+  onClearDateAlternatives = () => {
+    const conditions = this.state.filterConditions.filter(
+      condition => !isDateFilter(condition),
+    );
+    const conditionsOp =
+      conditions.length <= 1 ? 'and' : this.state.filterConditionsOp;
+    this.setState(({ filterId }) => ({
+      filterConditionsOp: conditionsOp,
+      filterId: filterId?.id ? { ...filterId, status: 'changed' } : filterId,
+    }));
+    void this.applyFilters(conditions, conditionsOp, []);
   };
 
   onDateRangeChange = (dates: RuleConditionEntity[]) => {
-    if (this.state.filterConditionsOp === 'and') {
+    const { filterConditions, filterConditionsOp } = this.state;
+    const editsExpression =
+      filterConditionsOp === 'and' && filterConditions.some(isDateFilter);
+    if (editsExpression && dates.length === 0) {
+      this.onClearDateAlternatives();
+      return;
+    }
+    if (filterConditionsOp === 'and') {
       this.setState(({ filterId }) => ({
-        filterId: filterId && { ...filterId, status: 'changed' },
+        filterId: filterId?.id ? { ...filterId, status: 'changed' } : filterId,
       }));
     }
+    const conditions = editsExpression
+      ? [
+          ...filterConditions.filter(condition => !isDateFilter(condition)),
+          ...dates,
+        ]
+      : filterConditions;
     void this.applyFilters(
-      this.state.filterConditions,
-      this.state.filterConditionsOp,
-      dates,
+      conditions,
+      filterConditionsOp,
+      editsExpression ? [] : dates,
     );
   };
 
@@ -1811,11 +1826,20 @@ class AccountInternal extends PureComponent<
         showBalances={showBalances}
         showPreviews={
           !this.state.search &&
-          this.state.filterConditions.length === 0 &&
+          (reconcileAmount == null && this.state.filterConditionsOp === 'and'
+            ? this.state.filterConditions.every(isDateFilter)
+            : this.state.filterConditions.length === 0) &&
           (!accountId || !!account)
         }
         rangeConditions={
-          reconcileAmount == null ? this.state.rangeConditions : []
+          reconcileAmount == null
+            ? [
+                ...this.state.rangeConditions,
+                ...(this.state.filterConditionsOp === 'and'
+                  ? this.expressionDates()
+                  : []),
+              ]
+            : []
         }
       >
         {(allTransactions, allBalances) => (
@@ -1866,6 +1890,7 @@ class AccountInternal extends PureComponent<
                   )
                 }
                 onDateRangeChange={this.onDateRangeChange}
+                onClearDateAlternatives={this.onClearDateAlternatives}
                 onSearch={this.onSearch}
                 onShowTransactions={this.onShowTransactions}
                 onMenuSelect={this.onMenuSelect}

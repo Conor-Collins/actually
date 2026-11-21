@@ -22,10 +22,12 @@ export function FiltersStack({
   savedFilters,
   onConditionsOpChange,
   visibleConditions = conditions,
+  operatorConditions = visibleConditions,
   rightActions,
 }: {
   conditions: RuleConditionEntity[];
   rightActions?: ReactNode;
+  operatorConditions?: RuleConditionEntity[];
   visibleConditions?: RuleConditionEntity[];
   conditionsOp: 'and' | 'or';
   onUpdateFilter: (
@@ -48,9 +50,7 @@ export function FiltersStack({
       >
         <AppliedFilters
           conditions={visibleConditions}
-          operatorConditions={
-            conditionsOp === 'or' ? conditions : visibleConditions
-          }
+          operatorConditions={operatorConditions}
           conditionsOp={conditionsOp}
           onConditionsOpChange={onConditionsOpChange}
           onUpdate={onUpdateFilter}

@@ -101,55 +101,73 @@ export function TransactionTotalsRow({
     group: 'minmax(0, 1fr)',
   } satisfies Record<TransactionTableColumnId, string>;
 
-  // Use the widest run of non-amount columns even when the user reorders them.
-  let summaryStart = 0;
-  let summaryEnd = 0;
-  let summaryWidth = 0;
-  let runStart = 0;
-  let runWidth = 0;
+  const flexTrack = 'minmax(0, 1fr)';
+  const tracks = columns.map(column => columnWidths[column]);
+  const totalFixedWidth =
+    20 + tracks.reduce((width, track) => width + (parseInt(track, 10) || 0), 0);
+  const totalFlexCount = tracks.filter(track => track === flexTrack).length;
+  const minimumSummaryWidth = 320;
+  let bestRun = { start: 0, end: 0, fixedWidth: 0, flexCount: 0 };
+  let run = bestRun;
+  function minimumWidth({ fixedWidth, flexCount }: typeof bestRun) {
+    if (fixedWidth >= minimumSummaryWidth) return totalFixedWidth;
+    if (flexCount === 0) return Infinity;
+    return (
+      totalFixedWidth +
+      Math.ceil(
+        ((minimumSummaryWidth - fixedWidth) * totalFlexCount) / flexCount,
+      )
+    );
+  }
   for (const [index, column] of columns.entries()) {
     if (column === 'payment' || column === 'deposit') {
-      runStart = index + 1;
-      runWidth = 0;
-    } else {
-      runWidth += columnWidths[column].endsWith('px')
-        ? parseInt(columnWidths[column], 10)
-        : 128;
-      if (runWidth > summaryWidth) {
-        summaryStart = runStart;
-        summaryEnd = index + 1;
-        summaryWidth = runWidth;
-      }
+      run = { start: index + 1, end: index + 1, fixedWidth: 0, flexCount: 0 };
+      continue;
+    }
+    const track = columnWidths[column];
+    run = {
+      ...run,
+      end: index + 1,
+      fixedWidth: run.fixedWidth + (parseInt(track, 10) || 0),
+      flexCount: run.flexCount + Number(track === flexTrack),
+    };
+    if (minimumWidth(run) < minimumWidth(bestRun)) {
+      bestRun = run;
     }
   }
 
-  const tracks = columns.map(column => columnWidths[column]);
-  const minimumSummaryWidth = 320;
-  const summaryNeedsOwnRow = summaryWidth < minimumSummaryWidth;
-  const fixedColumns = tracks.every(track => track.endsWith('px'));
-  const fixedWidth =
-    20 + tracks.reduce((width, track) => width + (parseInt(track, 10) || 0), 0);
-  if (fixedColumns) tracks.push('minmax(0, 1fr)');
-
-  // Fixed columns leave the remaining register width available for the summary.
-  const wideSparseLayout =
-    summaryNeedsOwnRow && fixedColumns
-      ? css({
-          containerType: 'inline-size',
-          [`@container (min-width: ${fixedWidth + minimumSummaryWidth}px)`]: {
-            '& > [data-totals-summary]': {
-              '--totals-summary-column': '-2 / -1',
-            },
-            '& > [data-totals-amount]': { '--totals-amount-row': 1 },
-          },
-        })
-      : undefined;
+  const runColumn = `${bestRun.start + 2} / ${bestRun.end + 2}`;
+  const summaryNeedsOwnRow = bestRun.fixedWidth < minimumSummaryWidth;
+  let singleRow: { width: number; column: string } | undefined;
+  if (summaryNeedsOwnRow && bestRun.flexCount > 0) {
+    singleRow = {
+      width: minimumWidth(bestRun),
+      column: runColumn,
+    };
+  } else if (summaryNeedsOwnRow && totalFlexCount === 0) {
+    tracks.push(flexTrack);
+    singleRow = {
+      width: totalFixedWidth + minimumSummaryWidth,
+      column: '-2 / -1',
+    };
+  }
+  const responsiveLayout =
+    singleRow &&
+    css({
+      containerType: 'inline-size',
+      [`@container (min-width: ${singleRow.width}px)`]: {
+        '& > [data-totals-summary]': {
+          '--totals-summary-column': singleRow.column,
+        },
+        '& > [data-totals-amount]': { '--totals-amount-row': 1 },
+      },
+    });
 
   return (
     <div
       aria-label={t('Sum of shown posted transactions')}
       role="group"
-      className={wideSparseLayout}
+      className={responsiveLayout}
       style={{
         ...styles.smallText,
         display: 'grid',
@@ -168,11 +186,11 @@ export function TransactionTotalsRow({
         data-totals-summary=""
         style={{
           gridRow: 1,
-          gridColumn: wideSparseLayout
+          gridColumn: responsiveLayout
             ? 'var(--totals-summary-column, 1 / -1)'
             : summaryNeedsOwnRow
               ? '1 / -1'
-              : `${summaryStart + 2} / ${summaryEnd + 2}`,
+              : runColumn,
           display: 'flex',
           alignItems: 'center',
           gap: 12,
@@ -217,7 +235,7 @@ export function TransactionTotalsRow({
               key={column}
               data-totals-amount=""
               style={{
-                gridRow: wideSparseLayout
+                gridRow: responsiveLayout
                   ? 'var(--totals-amount-row, 2)'
                   : summaryNeedsOwnRow
                     ? 2

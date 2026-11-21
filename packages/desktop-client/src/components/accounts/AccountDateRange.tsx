@@ -38,6 +38,7 @@ import type { AccountFilter } from './account-date-filters';
 
 type AccountDateRangeProps = {
   conditions: AccountFilter[];
+  onClearAlternatives?: () => void;
   alternatives?: AccountFilter[];
   chartQuery: Query | null;
   onChange: (conditions: RuleConditionEntity[]) => void;
@@ -46,6 +47,7 @@ type AccountDateRangeProps = {
 export function AccountDateRange({
   conditions,
   alternatives = [],
+  onClearAlternatives,
   chartQuery,
   onChange,
 }: AccountDateRangeProps) {
@@ -264,8 +266,14 @@ export function AccountDateRange({
         </Popover>
       </DialogTrigger>
       {hasDate && alternativeLabel && <span>{alternativeLabel}</span>}
-      {hasDate && (
-        <Button style={{ borderRadius: 999 }} onPress={() => onChange([])}>
+      {(hasDate || alternatives.length > 0) && (
+        <Button
+          style={{ borderRadius: 999 }}
+          onPress={() => {
+            if (hasDate) onChange([]);
+            if (alternatives.length > 0) onClearAlternatives?.();
+          }}
+        >
           <Trans>All dates</Trans>
         </Button>
       )}

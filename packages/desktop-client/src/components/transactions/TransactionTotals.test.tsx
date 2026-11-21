@@ -124,3 +124,39 @@ const split = {
     { id: 'deposit', amount: 2000 },
   ],
 };
+
+test('shares row one once a flexible payee track gives the summary enough space', () => {
+  render(
+    <TestProviders>
+      <div style={{ width: 700 }}>
+        <TransactionTotalsRow
+          columns={['date', 'payee', 'payment', 'deposit']}
+          amountColumnWidths={{ amount: 100, balance: 103 }}
+          scrollWidth={0}
+          totals={{ payment: 100, deposit: 200 }}
+        />
+      </div>
+    </TestProviders>,
+  );
+  const footer = screen.getByRole('group', {
+    name: 'Sum of shown posted transactions',
+  });
+  const summary = screen
+    .getByLabelText('Net total')
+    .closest('[data-totals-summary]');
+  expect(summary).toHaveStyle({
+    gridRow: '1',
+    gridColumn: 'var(--totals-summary-column, 1 / -1)',
+  });
+  for (const label of ['Total payments', 'Total deposits']) {
+    expect(screen.getByLabelText(label).parentElement).toHaveStyle({
+      gridRow: 'var(--totals-amount-row, 2)',
+    });
+  }
+  const rules = Array.from(document.styleSheets)
+    .flatMap(sheet => Array.from(sheet.cssRules, rule => rule.cssText))
+    .join('\n');
+  expect(rules.replaceAll(/\s/g, '')).toContain(
+    `@container(min-width:540px){.${footer.className}>[data-totals-summary]{--totals-summary-column:2/4;}.${footer.className}>[data-totals-amount]{--totals-amount-row:1;}}`,
+  );
+});

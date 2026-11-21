@@ -1,5 +1,6 @@
 import { MemoryRouter, Route, Routes } from 'react-router';
 
+import { generateAccount } from '@actual-app/core/mocks';
 import { initServer } from '@actual-app/core/platform/client/connection';
 import type {
   ObjectExpression,
@@ -12,9 +13,14 @@ import type {
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
+import { accountQueries } from '#accounts';
 import type { SavedFilter } from '#components/filters/SavedFilterMenuButton';
 import { SpreadsheetProvider } from '#hooks/useSpreadsheet';
-import { resetTestProviders, TestProviders } from '#mocks';
+import {
+  createTestQueryClient,
+  resetTestProviders,
+  TestProviders,
+} from '#mocks';
 import { serverPush } from '#mocks/connection';
 
 import { Account } from './Account';
@@ -57,8 +63,20 @@ const category = {
   value: 'childcare',
 } satisfies RuleConditionEntity;
 
+const payee = {
+  field: 'payee',
+  op: 'is',
+  value: 'merchant',
+} satisfies RuleConditionEntity;
+const checking = generateAccount('Checking');
+
 const posted = [
-  { id: 'October food', date: '2026-10-31', category: 'food' },
+  {
+    id: 'October food',
+    date: '2026-10-31',
+    category: 'food',
+    payee: 'merchant',
+  },
   { id: 'October childcare', date: '2026-10-30', category: 'childcare' },
   { id: 'November food', date: '2026-11-10', category: 'food' },
   { id: 'Late November food', date: '2026-11-25', category: 'food' },
@@ -96,6 +114,9 @@ function matches(
   if (typeof expression.category === 'string') {
     return row.category === expression.category;
   }
+  if (typeof expression.payee === 'string') {
+    return row.payee === expression.payee;
+  }
   const bounds = expression.date;
   if (bounds && typeof bounds === 'object') {
     return (
@@ -127,6 +148,7 @@ beforeEach(() => {
   ];
   saveFilter = vi.fn();
   initServer({
+    'accounts-get': async () => [checking],
     'get-cell': async ({
       sheetName,
       name,
@@ -174,6 +196,9 @@ beforeEach(() => {
           if (condition.field === 'category') {
             return { category: condition.value };
           }
+          if (condition.field === 'payee') {
+            return { payee: condition.value };
+          }
           const { start, end } = describeDateFilters([condition]) ?? {};
           return { date: { $gte: start, $lte: end } };
         }),
@@ -191,20 +216,25 @@ beforeEach(() => {
   });
 });
 
-function openAccount(filterConditions?: RuleConditionEntity[]) {
+function openAccount(
+  filterConditions?: RuleConditionEntity[],
+  accountId?: string,
+) {
+  const queryClient = createTestQueryClient();
+  queryClient.setQueryData(accountQueries.list().queryKey, [checking]);
   render(
-    <TestProviders>
+    <TestProviders queryClient={queryClient}>
       <SpreadsheetProvider>
         <MemoryRouter
           initialEntries={[
             {
-              pathname: '/accounts',
+              pathname: accountId ? `/accounts/${accountId}` : '/accounts',
               state: filterConditions ? { filterConditions } : undefined,
             },
           ]}
         >
           <Routes>
-            <Route path="/accounts" element={<Account />} />
+            <Route path="/accounts/:id?" element={<Account />} />
           </Routes>
         </MemoryRouter>
       </SpreadsheetProvider>
@@ -289,8 +319,7 @@ test('adds both date bounds from the Filter menu and reloads the saved conjuncti
   expect(register().queryByText('Late November food')).toBeNull();
 });
 
-test('shows a saved Any date as a range alternative without dropping the category branch', async () => {
-  const user = openAccount();
+async function loadAnyFilter(user: ReturnType<typeof userEvent.setup>) {
   await openFilter(user, 'Saved');
   await user.click(
     await screen.findByTestId('Childcare or November-filter-item'),
@@ -299,33 +328,121 @@ test('shows a saved Any date as a range alternative without dropping the categor
   expect(
     await screen.findByRole('button', { name: 'Or November 2026' }),
   ).toBeVisible();
-  expect(screen.queryByRole('button', { name: 'All dates' })).toBeNull();
-  expect(await register().findByText('October childcare')).toBeVisible();
-  expect(register().getByText('November food')).toBeVisible();
-  expect(register().queryByText('October food')).toBeNull();
-  expect(screen.queryByRole('button', { name: /^date is/i })).toBeNull();
+}
 
-  await addBound(user, 'is greater than or equals', '11/01/2026');
+async function saveModifiedFilter(user: ReturnType<typeof userEvent.setup>) {
   await user.click(
     screen.getByRole('button', { name: /Childcare or November.*modified/i }),
   );
   await user.click(await screen.findByText('Save new filter'));
   const input = screen.getByLabelText('Filter name');
   await user.clear(input);
-  await user.type(input, 'Expanded Any filter');
+  await user.type(input, 'Edited filter');
   await user.click(screen.getByRole('button', { name: 'Add' }));
+}
+
+test('All dates removes a saved Any date alternative and saves the remaining category', async () => {
+  const user = openAccount();
+  await loadAnyFilter(user);
+  expect(await register().findByText('October childcare')).toBeVisible();
+  expect(register().getByText('November food')).toBeVisible();
+  expect(register().queryByText('October food')).toBeNull();
+  expect(screen.queryByRole('button', { name: /^date is/i })).toBeNull();
+
+  await user.click(screen.getByRole('button', { name: 'All dates' }));
+  await waitFor(() =>
+    expect(register().queryByText('November food')).toBeNull(),
+  );
+  expect(register().getByText('October childcare')).toBeVisible();
+  await saveModifiedFilter(user);
   await waitFor(() =>
     expect(saveFilter).toHaveBeenCalledWith(
       expect.objectContaining({
-        conditionsOp: 'or',
-        conditions: [
-          category,
-          monthFilter('2026-11'),
-          expect.objectContaining(lower),
-        ],
+        conditionsOp: 'and',
+        conditions: [category],
       }),
     ),
   );
+});
+
+test.each([false, true])(
+  'keeps the saved date inside Any after an All round-trip (payee branch: %s)',
+  async withPayee => {
+    const conditions = [
+      category,
+      ...(withPayee ? [payee] : []),
+      monthFilter('2026-11'),
+    ];
+    saved = saved.map(filter => ({ ...filter, conditions }));
+    const user = openAccount();
+    await loadAnyFilter(user);
+
+    await user.click(screen.getByRole('button', { name: 'any' }));
+    await user.click(await screen.findByText('all', { exact: true }));
+    expect(
+      await screen.findByRole('button', { name: 'November 2026' }),
+    ).toBeVisible();
+    await waitFor(() =>
+      expect(register().queryByText('October childcare')).toBeNull(),
+    );
+    expect(register().queryByText('November food')).toBeNull();
+    expect(screen.queryByRole('button', { name: /^date is/i })).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'all' }));
+    await user.click(await screen.findByText('any', { exact: true }));
+    expect(
+      await screen.findByRole('button', { name: 'Or November 2026' }),
+    ).toBeVisible();
+    expect(await register().findByText('October childcare')).toBeVisible();
+    expect(register().getByText('November food')).toBeVisible();
+    expect(Boolean(register().queryByText('October food'))).toBe(withPayee);
+    await saveModifiedFilter(user);
+    await waitFor(() =>
+      expect(saveFilter).toHaveBeenCalledWith(
+        expect.objectContaining({
+          conditionsOp: 'or',
+          conditions,
+        }),
+      ),
+    );
+  },
+);
+
+test('keeps a date from a saved All filter when switching to Any', async () => {
+  saved = saved.map(filter => ({ ...filter, conditionsOp: 'and' }));
+  const user = openAccount();
+  await openFilter(user, 'Saved');
+  await user.click(
+    await screen.findByTestId('Childcare or November-filter-item'),
+  );
+  await user.click(screen.getByRole('button', { name: 'Apply' }));
+  await user.click(await screen.findByRole('button', { name: 'all' }));
+  await user.click(await screen.findByText('any', { exact: true }));
+  expect(
+    await screen.findByRole('button', { name: 'Or November 2026' }),
+  ).toBeVisible();
+  expect(await register().findByText('October childcare')).toBeVisible();
+  expect(register().getByText('November food')).toBeVisible();
+});
+
+test('applies a date bound to the register during reconciliation', async () => {
+  const user = openAccount([monthFilter('2026-11')], checking.id);
+  await user.click(await screen.findByRole('button', { name: 'Reconcile' }));
+  const prompt = await screen.findByText(/Enter the current balance/);
+  const form = prompt.closest('form');
+  if (!form) throw new Error('Missing reconcile form');
+  const input = await within(form).findByRole('textbox');
+  await user.clear(input);
+  await user.type(input, '12.34');
+  await user.click(within(form).getByRole('button', { name: 'Reconcile' }));
+  expect(await register().findByText('October food')).toBeVisible();
+
+  await addBound(user, 'is greater than or equals', '11/01/2026');
+  await waitFor(() =>
+    expect(register().queryByText('October food')).toBeNull(),
+  );
+  expect(register().getByText('November food')).toBeVisible();
+  expect(screen.getByRole('button', { name: /^date is/i })).toBeVisible();
 });
 
 test('a contradictory date conjunction hides scheduled previews', async () => {
