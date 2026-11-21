@@ -3,9 +3,10 @@ id: TASK-30
 title: >-
   v1.0.0: Category and multi-payee schedules, direct filter conversion, and
   polished reopenable cleanup UX
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-11-21T21:16:00Z'
+updated_date: '2026-11-21T22:32:00Z'
 labels:
   - v1.0.0
   - ui
