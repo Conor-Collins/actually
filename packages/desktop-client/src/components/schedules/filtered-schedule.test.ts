@@ -290,3 +290,19 @@ it.each([
     );
   },
 );
+
+it('clears a populated single payee when the schedule only has conditions', () => {
+  const payee = {
+    field: 'payee',
+    op: 'is',
+    value: 'mutual-acme',
+  } satisfies RuleConditionEntity;
+  const edited = updateScheduleConditions(
+    { _conditions: [payee] },
+    renameFields,
+  );
+  expect(edited.conditions?.map(condition => condition.field)).toEqual([
+    'date',
+    'amount',
+  ]);
+});

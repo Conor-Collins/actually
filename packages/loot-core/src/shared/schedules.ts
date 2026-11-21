@@ -293,18 +293,21 @@ export function extractScheduleConds(conditions) {
 export function getSchedulePayeeIds(
   schedule: Pick<Partial<ScheduleEntity>, '_conditions' | '_payee'>,
 ): string[] {
-  const value: unknown = extractScheduleConds(schedule._conditions).payees
-    ?.value;
-  if (Array.isArray(value)) {
+  const { payee, payees } = extractScheduleConds(schedule._conditions);
+  const values: unknown = payees?.value;
+  if (Array.isArray(values)) {
     return [
       ...new Set(
-        value.filter(
-          (id): id is string => typeof id === 'string' && id.length > 0,
+        values.filter(
+          (id): id is string => typeof id === 'string' && id.trim().length > 0,
         ),
       ),
     ];
   }
-  return schedule._payee ? [schedule._payee] : [];
+  const singleValue: unknown = payee ? payee.value : schedule._payee;
+  return typeof singleValue === 'string' && singleValue.trim().length > 0
+    ? [singleValue]
+    : [];
 }
 
 export function getScheduleCategoryId(

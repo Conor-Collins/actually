@@ -8,7 +8,11 @@ import { runMutator } from '#server/mutators';
 import * as prefs from '#server/prefs';
 import { loadRules, updateRule } from '#server/transactions/transaction-rules';
 import { q } from '#shared/query';
-import { getNextDate } from '#shared/schedules';
+import {
+  extractScheduleConds,
+  getNextDate,
+  getSchedulePayeeIds,
+} from '#shared/schedules';
 
 import {
   advanceSchedulesService,
@@ -118,6 +122,83 @@ describe('schedule app', () => {
       ]);
       expect(updateConditions(existing, [payee], true)).toEqual([date, payee]);
       expect(updateConditions(existing, [date], true)).toEqual([date]);
+    });
+
+    it('clears a populated single payee when optional conditions are replaced', () => {
+      const date = { field: 'date', op: 'is', value: '2026-03-10' };
+      const payee = { field: 'payee', op: 'is', value: 'mutual-acme' };
+      expect(updateConditions([payee, date], [date], true)).toEqual([date]);
+    });
+
+    it('clears a populated single payee through schedule/update', async () => {
+      await db.insertPayee({ id: 'mutual-acme', name: 'Acme Mutual' });
+      const handlers = schedulesApp.handlers;
+      const date = { field: 'date', op: 'is', value: '2026-03-10' } as const;
+      const id = await runMutator(() =>
+        handlers['schedule/create']({
+          schedule: { name: 'Insurance' },
+          conditions: [
+            date,
+            { field: 'payee', op: 'is', value: 'mutual-acme' },
+          ],
+        }),
+      );
+      const query = q('schedules').filter({ id }).select('*');
+      const {
+        data: [before],
+      } = await aqlQuery(query);
+      expect(extractScheduleConds(before._conditions).payee?.value).toBe(
+        'mutual-acme',
+      );
+
+      await runMutator(() =>
+        handlers['schedule/update']({
+          schedule: { id },
+          conditions: [date],
+          replaceOptionalConditions: true,
+        }),
+      );
+
+      const {
+        data: [after],
+      } = await aqlQuery(query);
+      expect(after._payee).toBeNull();
+      expect(extractScheduleConds(after._conditions).payee).toBeNull();
+    });
+
+    it('reads a populated single payee from conditions alone', () => {
+      expect(
+        getSchedulePayeeIds({
+          _conditions: [{ field: 'payee', op: 'is', value: 'mutual-acme' }],
+        }),
+      ).toEqual(['mutual-acme']);
+    });
+
+    it.each(['', '  '])(
+      'ignores an empty single-payee condition (%j), even with a stale cached payee',
+      value => {
+        const schedule = {
+          _conditions: [{ field: 'payee', op: 'is', value }],
+        } satisfies Parameters<typeof getSchedulePayeeIds>[0];
+        expect(getSchedulePayeeIds(schedule)).toEqual([]);
+        expect(
+          getSchedulePayeeIds({ ...schedule, _payee: 'mutual-acme' }),
+        ).toEqual([]);
+      },
+    );
+
+    it('deduplicates payee lists and excludes blank IDs', () => {
+      expect(
+        getSchedulePayeeIds({
+          _conditions: [
+            {
+              field: 'payee',
+              op: 'oneOf',
+              value: ['', '  ', 'mutual-acme', 'mutual-acme'],
+            },
+          ],
+        }),
+      ).toEqual(['mutual-acme']);
     });
 
     it('preserves empty optional conditions and replaces them with selected values', () => {
