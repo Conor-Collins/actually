@@ -46,8 +46,9 @@ export async function createFilteredSchedule(
     conditions: RuleConditionEntity[];
   }) => Promise<string>,
 ) {
-  const { category, date, amount } = extractScheduleConds(conditions);
-  if (!category?.value || date?.value?.frequency !== 'yearly' || !amount) {
+  const { date, amount } = extractScheduleConds(conditions);
+  const categoryId = getScheduleCategoryId({ _conditions: conditions });
+  if (!categoryId || date?.value?.frequency !== 'yearly' || !amount) {
     throw new Error('A category, yearly repeat and amount are required');
   }
 
@@ -60,7 +61,7 @@ export async function createFilteredSchedule(
     const existing = rows.periods.find(
       period =>
         !period.tombstone &&
-        period.category === category.value &&
+        period.category === categoryId &&
         period.start_date === start &&
         period.end_date === end,
     );
@@ -71,7 +72,7 @@ export async function createFilteredSchedule(
           budget,
         })
       : await periods['period-budget/create-period']({
-          category: category.value,
+          category: categoryId,
           start,
           end,
           budget,
@@ -80,7 +81,7 @@ export async function createFilteredSchedule(
       const overlap = findOverlappingPeriod(
         {
           id: existing?.id,
-          category: category.value,
+          category: categoryId,
           start_date: start,
           end_date: end,
         },
@@ -93,7 +94,7 @@ export async function createFilteredSchedule(
       return;
     }
     const cadence = rows.cadences.find(
-      row => row.id === category.value && !row.tombstone,
+      row => row.id === categoryId && !row.tombstone,
     );
     if (
       !(
@@ -103,7 +104,7 @@ export async function createFilteredSchedule(
       )
     ) {
       const result = await periods['period-budget/set-cadence']({
-        category: category.value,
+        category: categoryId,
         anchorDate: start,
         months: 12,
       });
@@ -114,7 +115,7 @@ export async function createFilteredSchedule(
     scheduleId = await createSchedule({ schedule, conditions });
     const link = await writeScheduleLink({
       scheduleId,
-      category: category.value,
+      category: categoryId,
     });
     if ('error' in link) {
       throw new Error(link.error);
@@ -142,11 +143,15 @@ export async function previewScheduleCleanup({
   if (!schedule) {
     throw new Error('Schedule no longer exists');
   }
+  const conditions = extractScheduleConds(schedule._conditions);
   const category = getScheduleCategoryId(schedule);
+  const hasCategoryCondition = Boolean(conditions.category);
+  if (hasCategoryCondition && !category) {
+    throw new Error('Schedule has an empty category condition');
+  }
   if (!isCleanupEligibleSchedule(schedule)) {
     throw new Error('Schedule has neither a category nor a payee list');
   }
-  const conditions = extractScheduleConds(schedule._conditions);
   const hasPayeeCondition = Boolean(conditions.payees || conditions.payee);
   const payees = getSchedulePayeeIds(schedule);
 
@@ -194,9 +199,12 @@ export async function previewScheduleCleanup({
   const replacements = replacementCandidates.filter(
     ({ id }) => !protectedIds.has(id),
   );
+  const hasAccountCondition = Boolean(conditions.account);
   const { data: links }: { data: TransactionEntity[] } =
     transactionIds?.length === 0 ||
-    (!transactionIds && hasPayeeCondition && payees.length === 0)
+    (hasCategoryCondition && !category) ||
+    (hasPayeeCondition && payees.length === 0) ||
+    (!transactionIds && hasAccountCondition && !schedule._account)
       ? { data: [] }
       : await aqlQuery(
           q('transactions')

@@ -312,15 +312,22 @@ export function getScheduleCategoryId(
 ): string | null {
   const category: unknown = extractScheduleConds(schedule._conditions).category
     ?.value;
-  return typeof category === 'string' && category ? category : null;
+  return typeof category === 'string' && category.trim().length > 0
+    ? category
+    : null;
 }
 
 export function isCleanupEligibleSchedule(
   schedule: Pick<Partial<ScheduleEntity>, '_conditions' | '_payee'>,
 ): boolean {
   const { category, payees } = extractScheduleConds(schedule._conditions);
+  const categoryId = getScheduleCategoryId(schedule);
+  if (category && !categoryId) {
+    return false;
+  }
+  const payeeIds = getSchedulePayeeIds(schedule);
   return Boolean(
-    category || payees || getSchedulePayeeIds(schedule).length > 1,
+    categoryId || (payees && payeeIds.length > 0) || payeeIds.length > 1,
   );
 }
 

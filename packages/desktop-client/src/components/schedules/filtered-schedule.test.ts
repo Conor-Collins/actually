@@ -1,5 +1,8 @@
 import { isCleanupEligibleSchedule } from '@actual-app/core/shared/schedules';
-import type { TransactionEntity } from '@actual-app/core/types/models';
+import type {
+  RuleConditionEntity,
+  TransactionEntity,
+} from '@actual-app/core/types/models';
 
 import {
   getScheduleFilter,
@@ -194,3 +197,26 @@ it('uses oneOf for the first payee on an existing category-only schedule', () =>
   );
   expect(legacy.conditions).toContainEqual(payee);
 });
+
+it.each([
+  {
+    name: 'empty category',
+    conditions: [{ field: 'category', op: 'is', value: '' }],
+  },
+  {
+    name: 'empty category with payees',
+    conditions: [
+      { field: 'category', op: 'is', value: '' },
+      { field: 'payee', op: 'oneOf', value: ['first'] },
+    ],
+  },
+  {
+    name: 'empty payee list',
+    conditions: [{ field: 'payee', op: 'oneOf', value: [] }],
+  },
+] satisfies { name: string; conditions: RuleConditionEntity[] }[])(
+  'hides cleanup for $name',
+  ({ conditions }) => {
+    expect(isCleanupEligibleSchedule({ _conditions: conditions })).toBe(false);
+  },
+);

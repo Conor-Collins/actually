@@ -13,7 +13,10 @@ import {
 } from '#server/transactions/transaction-rules';
 import { clearUndo, undo } from '#server/undo';
 import { q } from '#shared/query';
-import { computeSchedulePreviewTransactions } from '#shared/schedules';
+import {
+  computeSchedulePreviewTransactions,
+  isCleanupEligibleSchedule,
+} from '#shared/schedules';
 import type { RuleConditionEntity, TransactionEntity } from '#types/models';
 
 import { app, getRuleForSchedule } from './app';
@@ -533,53 +536,124 @@ it.each([
   },
 );
 
+const emptyCategory = {
+  field: 'category',
+  op: 'is',
+  value: '',
+} satisfies RuleConditionEntity;
+const insuranceCategory = { ...emptyCategory, value: 'insurance' };
+const emptyPayeeList = {
+  field: 'payee',
+  op: 'oneOf',
+  value: [],
+} satisfies RuleConditionEntity;
+
 it.each([
-  { payeeConditions: [{ field: 'payee', op: 'oneOf', value: [] }] },
   {
-    payeeConditions: [
-      { field: 'payee', op: 'is', value: '' },
-      { field: 'category', op: 'is', value: 'insurance' },
-    ],
+    name: 'empty category alone',
+    filters: [emptyCategory],
+    error: 'Schedule has an empty category condition',
   },
-] satisfies { payeeConditions: RuleConditionEntity[] }[])(
-  'reopened cleanup cannot link unrelated transactions with empty payee conditions ($payeeConditions)',
-  async ({ payeeConditions }) => {
+  {
+    name: 'empty category with payees',
+    filters: [emptyCategory, { ...emptyPayeeList, value: ['mutual-acme'] }],
+    error: 'Schedule has an empty category condition',
+  },
+  {
+    name: 'whitespace category',
+    filters: [{ ...emptyCategory, value: '  ' }],
+    error: 'Schedule has an empty category condition',
+  },
+  {
+    name: 'empty payee list without category',
+    filters: [emptyPayeeList],
+    error: 'Schedule has neither a category nor a payee list',
+  },
+  {
+    name: 'category with empty single payee',
+    filters: [insuranceCategory, { field: 'payee', op: 'is', value: '' }],
+  },
+  {
+    name: 'category with empty payee list',
+    filters: [insuranceCategory, emptyPayeeList],
+  },
+  {
+    name: 'category with empty account',
+    filters: [insuranceCategory, { field: 'account', op: 'is', value: '' }],
+  },
+] satisfies { name: string; filters: RuleConditionEntity[]; error?: string }[])(
+  'keeps unrelated transactions unlinked in cleanup with $name',
+  async ({ name, filters, error }) => {
     const id = await runMutator(() =>
       schedules['schedule/create']({
-        schedule: { name: 'Empty payees' },
+        schedule: { name },
         conditions: [
           ...conditions.filter(
             condition =>
-              condition.field !== 'payee' && condition.field !== 'category',
+              condition.field === 'date' || condition.field === 'amount',
           ),
-          ...payeeConditions,
+          ...filters,
         ],
       }),
     );
-    await db.insertTransaction({
+    const unrelated = {
       id: 'unrelated',
       account: 'card',
       category: 'insurance',
       payee: 'mutual-acme',
       date: '2026-03-10',
       amount: -100,
-    });
+    } satisfies TransactionEntity;
+    await db.insertTransaction(unrelated);
 
     const request = { id, year: '2026' };
-    const plan = await schedules['schedule/preview-cleanup'](request);
-    expect(plan.links).toEqual([]);
-    expect(
-      await runMutator(() =>
-        schedules['schedule/apply-cleanup']({
-          request,
-          plan,
-          actions: ['links'],
-        }),
-      ),
-    ).toEqual({ changed: false });
+    const {
+      data: [schedule],
+    } = await aqlQuery(q('schedules').filter({ id }).select('*'));
+    if (error) {
+      await expect(
+        schedules['schedule/preview-cleanup'](request),
+      ).rejects.toThrow(error);
+      expect(isCleanupEligibleSchedule(schedule)).toBe(false);
+      await expect(
+        runMutator(() =>
+          schedules['schedule/apply-cleanup']({
+            request,
+            plan: {
+              category: null,
+              amounts: [],
+              replacements: [],
+              links: [unrelated],
+              moves: [],
+            },
+            actions: ['links'],
+          }),
+        ),
+      ).rejects.toThrow(error);
+    } else {
+      expect(isCleanupEligibleSchedule(schedule)).toBe(true);
+      const plan = await schedules['schedule/preview-cleanup'](request);
+      expect(plan.links).toEqual([]);
+      expect(
+        await runMutator(() =>
+          schedules['schedule/apply-cleanup']({
+            request,
+            plan,
+            actions: ['links'],
+          }),
+        ),
+      ).toEqual({ changed: false });
+
+      if (filters.some(condition => condition.field === 'payee')) {
+        const explicitRequest = { ...request, transactionIds: [unrelated.id] };
+        const explicit =
+          await schedules['schedule/preview-cleanup'](explicitRequest);
+        expect(explicit.links).toEqual([]);
+      }
+    }
     const { data } = await aqlQuery(
-      q('transactions').filter({ id: 'unrelated' }).select('schedule'),
+      q('transactions').filter({ id: unrelated.id }).select('schedule'),
     );
-    expect(data).toEqual([{ id: 'unrelated', schedule: null }]);
+    expect(data).toEqual([{ id: unrelated.id, schedule: null }]);
   },
 );
