@@ -246,6 +246,8 @@ export function FinancesApp() {
                     flex: 1,
                     overflow: 'auto',
                     position: 'relative',
+                    // Keep fixed mobile editors and selection controls above the tabs.
+                    contain: isNarrowWidth ? 'paint' : undefined,
                   }}
                 >
                   <Titlebar
@@ -575,19 +577,7 @@ export function FinancesApp() {
                   </Routes>
                 </View>
 
-                <Routes>
-                  <Route path="/budget" element={<MobileNavTabs />} />
-                  <Route path="/accounts" element={<MobileNavTabs />} />
-                  <Route path="/settings/*" element={<MobileNavTabs />} />
-                  <Route path="/notifications" element={<MobileNavTabs />} />
-                  <Route path="/reports" element={<MobileNavTabs />} />
-                  <Route
-                    path="/reports/:dashboardId"
-                    element={<MobileNavTabs />}
-                  />
-                  <Route path="/schedules" element={<MobileNavTabs />} />
-                  <Route path="*" element={null} />
-                </Routes>
+                <MobileNavTabs />
               </MobilePageHeaderProvider>
             </ScrollProvider>
           </View>

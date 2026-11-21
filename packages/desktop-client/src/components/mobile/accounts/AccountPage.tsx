@@ -14,6 +14,7 @@ import type { AccountEntity } from '@actual-app/core/types/models';
 import { useReopenAccountMutation, useUpdateAccountMutation } from '#accounts';
 import { isAccountFailedSync } from '#accounts/syncStatus';
 import { MobileBackButton } from '#components/mobile/MobileBackButton';
+import { MobileSettingsButton } from '#components/mobile/MobileSettingsButton';
 import { AddTransactionButton } from '#components/mobile/transactions/AddTransactionButton';
 import { MobilePageHeader, Page } from '#components/Page';
 import { useAccount } from '#hooks/useAccount';
@@ -71,7 +72,13 @@ export function AccountPage() {
               <NameOnlyHeader name={nameFromId(accountIdParam)} />
             )
           }
-          leftContent={<MobileBackButton />}
+          leftContent={
+            accountIdParam === 'all' ? (
+              <MobileSettingsButton />
+            ) : (
+              <MobileBackButton />
+            )
+          }
           rightContent={<AddTransactionButton accountId={account?.id} />}
         />
       }
