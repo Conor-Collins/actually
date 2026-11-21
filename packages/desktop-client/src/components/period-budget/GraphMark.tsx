@@ -53,6 +53,7 @@ export function GraphMark({
     >
       <View
         aria-hidden
+        title={label}
         style={{
           width: MARK_SIZE,
           height: MARK_SIZE,

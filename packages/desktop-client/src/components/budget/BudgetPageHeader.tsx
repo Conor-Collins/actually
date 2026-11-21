@@ -1,5 +1,3 @@
-// @ts-strict-ignore
-import React, { memo } from 'react';
 import type { ComponentProps } from 'react';
 
 import { View } from '@actual-app/components/view';
@@ -7,7 +5,6 @@ import { View } from '@actual-app/components/view';
 import { useGlobalPref } from '#hooks/useGlobalPref';
 
 import { MonthPicker } from './MonthPicker';
-import { getScrollbarWidth } from './util';
 
 type BudgetPageHeaderProps = {
   startMonth: string;
@@ -16,36 +13,30 @@ type BudgetPageHeaderProps = {
   monthBounds: ComponentProps<typeof MonthPicker>['monthBounds'];
 };
 
-export const BudgetPageHeader = memo<BudgetPageHeaderProps>(
-  ({ startMonth, onMonthSelect, numMonths, monthBounds }) => {
-    const [categoryExpandedStatePref] = useGlobalPref('categoryExpandedState');
-    const categoryExpandedState = categoryExpandedStatePref ?? 0;
-    const offsetMultipleMonths = numMonths === 1 ? 4 : 0;
+export function BudgetPageHeader({
+  startMonth,
+  onMonthSelect,
+  numMonths,
+  monthBounds,
+}: BudgetPageHeaderProps) {
+  const [expanded] = useGlobalPref('categoryExpandedState');
+  const categoryColumn = 205 + 100 * (expanded ?? 0);
 
-    return (
-      <View
-        style={{
-          marginLeft:
-            200 + 100 * categoryExpandedState + 5 - offsetMultipleMonths,
-          flexShrink: 0,
-        }}
-      >
-        <View
-          style={{
-            marginRight: 5 + getScrollbarWidth() - offsetMultipleMonths,
-          }}
-        >
-          <MonthPicker
-            startMonth={startMonth}
-            numDisplayed={numMonths}
-            monthBounds={monthBounds}
-            style={{ paddingTop: 5 }}
-            onSelect={month => onMonthSelect(month)}
-          />
-        </View>
-      </View>
-    );
-  },
-);
-
-BudgetPageHeader.displayName = 'BudgetPageHeader';
+  return (
+    <View
+      style={{
+        marginLeft: `clamp(5px, calc(100% - 360px), ${categoryColumn}px)`,
+        marginRight: 5,
+        flexShrink: 0,
+      }}
+    >
+      <MonthPicker
+        startMonth={startMonth}
+        numDisplayed={numMonths}
+        monthBounds={monthBounds}
+        style={{ paddingBlock: 5 }}
+        onSelect={onMonthSelect}
+      />
+    </View>
+  );
+}

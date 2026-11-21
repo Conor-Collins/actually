@@ -21,6 +21,9 @@ import { AutoTextSize } from 'auto-text-size';
 
 import { MOBILE_NAV_HEIGHT } from '#components/mobile/MobileNavTabs';
 import { PullToRefresh } from '#components/mobile/PullToRefresh';
+import { BudgetCashStrip } from '#components/period-budget/BudgetCashStrip';
+import { BudgetPeriodsProvider } from '#components/period-budget/BudgetPeriods';
+import { BudgetPeriodTotals } from '#components/period-budget/BudgetPeriodTotals';
 import { PrivacyFilter } from '#components/PrivacyFilter';
 import { CellValue } from '#components/spreadsheet/CellValue';
 import { SchedulesProvider } from '#hooks/useCachedSchedules';
@@ -367,7 +370,7 @@ export function BudgetTable({
   const schedulesQuery = useMemo(() => q('schedules').select('*'), []);
 
   return (
-    <>
+    <BudgetPeriodsProvider visibleMonths={[month]}>
       <BudgetTableHeader
         month={month}
         show3Columns={show3Columns}
@@ -384,6 +387,8 @@ export function BudgetTable({
             paddingBottom: MOBILE_NAV_HEIGHT,
           }}
         >
+          <BudgetCashStrip month={month} />
+          <BudgetPeriodTotals month={month} />
           <SchedulesProvider query={schedulesQuery}>
             <BudgetGroups
               type={budgetType}
@@ -399,7 +404,7 @@ export function BudgetTable({
           </SchedulesProvider>
         </View>
       </PullToRefresh>
-    </>
+    </BudgetPeriodsProvider>
   );
 }
 

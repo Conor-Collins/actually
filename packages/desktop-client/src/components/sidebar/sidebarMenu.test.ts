@@ -18,7 +18,7 @@ describe('parseSidebarMenuItems', () => {
       { id: 'tags', hidden: true },
       { id: 'rules', hidden: true },
       { id: 'bank-sync', hidden: true },
-      { id: 'period-budget', hidden: true },
+      { id: 'period-budget', hidden: false },
     ]);
   });
 
@@ -79,7 +79,7 @@ describe('parseSidebarMenuItems', () => {
     ]);
     expect(items.find(item => item.id === 'reports')?.hidden).toBe(false);
     expect(items.find(item => item.id === 'payees')?.hidden).toBe(true);
-    expect(items.find(item => item.id === 'period-budget')?.hidden).toBe(true);
+    expect(items.find(item => item.id === 'period-budget')?.hidden).toBe(false);
   });
 
   it('always keeps budget and reports in the sidebar', () => {

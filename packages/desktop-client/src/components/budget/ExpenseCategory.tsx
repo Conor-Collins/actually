@@ -1,5 +1,5 @@
 // @ts-strict-ignore
-import React from 'react';
+import React, { useContext } from 'react';
 import type { ComponentProps } from 'react';
 
 import { theme } from '@actual-app/components/theme';
@@ -9,15 +9,18 @@ import type {
   CategoryGroupEntity,
 } from '@actual-app/core/types/models';
 
+import { useBudgetPeriodMonths } from '#components/period-budget/BudgetPeriods';
 import { DropHighlight, useDraggable, useDroppable } from '#components/sort';
 import type {
   DragState,
   OnDragChangeCallback,
   OnDropCallback,
 } from '#components/sort';
-import { Row } from '#components/table';
+import { Row, ROW_HEIGHT } from '#components/table';
 import { useDragRef } from '#hooks/useDragRef';
 
+import { BudgetPeriodRow } from './BudgetPeriodRow';
+import { MonthsContext } from './MonthsContext';
 import { RenderMonths } from './RenderMonths';
 import { SidebarCategory } from './SidebarCategory';
 
@@ -74,18 +77,35 @@ export function ExpenseCategory({
 
   const { ExpenseCategoryComponent: MonthComponent } = useBudgetComponents();
 
+  const { months } = useContext(MonthsContext);
+  const periodMonths = useBudgetPeriodMonths();
+  const hasSnapshot = months.some(month =>
+    periodMonths.get(month)?.periods.has(cat.id),
+  );
+
   return (
     <Row
       innerRef={dropRef}
       collapsed
       style={{
+        ...(hasSnapshot && {
+          height: 'auto',
+          flex: '0 0 auto',
+          flexDirection: 'column',
+        }),
         backgroundColor: theme.budgetCurrentMonth,
         opacity: cat.hidden || categoryGroup?.hidden ? 0.5 : undefined,
       }}
     >
       <DropHighlight pos={dropPos} offset={{ top: 1 }} />
 
-      <View style={{ flex: 1, flexDirection: 'row' }}>
+      <View
+        style={{
+          flex: hasSnapshot ? undefined : 1,
+          height: hasSnapshot ? ROW_HEIGHT : undefined,
+          flexDirection: 'row',
+        }}
+      >
         <SidebarCategory
           innerRef={handleDragRef}
           category={cat}
@@ -119,6 +139,7 @@ export function ExpenseCategory({
           )}
         </RenderMonths>
       </View>
+      {hasSnapshot && <BudgetPeriodRow categoryId={cat.id} />}
     </Row>
   );
 }

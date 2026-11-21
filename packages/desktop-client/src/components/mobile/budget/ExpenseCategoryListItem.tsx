@@ -28,6 +28,7 @@ import { envelopeBudget, trackingBudget } from '#spreadsheet/bindings';
 import { BalanceCell } from './BalanceCell';
 import { BudgetCell } from './BudgetCell';
 import { getColumnWidth, ROW_HEIGHT } from './BudgetTable';
+import { MobileBudgetPeriod } from './MobileBudgetPeriod';
 import { SpentCell } from './SpentCell';
 
 type ExpenseCategoryNameProps = {
@@ -485,6 +486,7 @@ export function ExpenseCategoryListItem({
           onShowActivity={onShowActivity}
         />
       </View>
+      <MobileBudgetPeriod key={month} month={month} categoryId={category.id} />
     </GridListItem>
   );
 }

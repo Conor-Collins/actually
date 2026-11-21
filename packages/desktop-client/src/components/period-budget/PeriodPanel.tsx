@@ -257,7 +257,7 @@ export function PeriodPanel({
             </Button>
           )}
           <Button onPress={onOpenCategory}>
-            <Trans>Link schedules</Trans>
+            <Trans>Cadence and schedules</Trans>
           </Button>
           {!view.isPlanned && (
             <Button

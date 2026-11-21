@@ -1,5 +1,11 @@
-import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { KeyboardEvent } from 'react';
+import React, {
+  useContext,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import type { KeyboardEvent, ReactNode } from 'react';
 
 import { styles } from '@actual-app/components/styles';
 import { theme } from '@actual-app/components/theme';
@@ -10,6 +16,11 @@ import type {
   CategoryGroupEntity,
 } from '@actual-app/core/types/models';
 
+import { BudgetCashStrip } from '#components/period-budget/BudgetCashStrip';
+import {
+  BudgetPeriodsProvider,
+  cashMonthFor,
+} from '#components/period-budget/BudgetPeriods';
 import type { DropPosition } from '#components/sort';
 import { SchedulesProvider } from '#hooks/useCachedSchedules';
 import { useCategories } from '#hooks/useCategories';
@@ -19,7 +30,7 @@ import { useLocalPref } from '#hooks/useLocalPref';
 import { BudgetCategories } from './BudgetCategories';
 import { BudgetSummaries } from './BudgetSummaries';
 import { BudgetTotals } from './BudgetTotals';
-import { MonthsProvider } from './MonthsContext';
+import { MonthsContext, MonthsProvider } from './MonthsContext';
 import type { MonthBounds } from './MonthsContext';
 import {
   findSortDown,
@@ -289,50 +300,63 @@ export function BudgetTable(props: BudgetTableProps) {
         monthBounds={monthBounds}
         type={type}
       >
-        <BudgetTotals
-          toggleHiddenCategories={toggleHiddenCategories}
-          expandAllCategories={expandAllCategories}
-          collapseAllCategories={collapseAllCategories}
-        />
-        <View
-          ref={scrollContainerRef}
-          data-testid="budget-table-scroll-container"
-          style={{
-            overflowY: 'scroll',
-            overflowAnchor: 'none',
-            flex: 1,
-            paddingLeft: 5,
-            paddingRight: 5,
-          }}
-        >
+        <DesktopBudgetPeriods>
+          <BudgetTotals
+            toggleHiddenCategories={toggleHiddenCategories}
+            expandAllCategories={expandAllCategories}
+            collapseAllCategories={collapseAllCategories}
+          />
           <View
+            ref={scrollContainerRef}
+            data-testid="budget-table-scroll-container"
             style={{
-              flexShrink: 0,
+              overflowY: 'scroll',
+              overflowAnchor: 'none',
+              flex: 1,
+              paddingLeft: 5,
+              paddingRight: 5,
             }}
-            onKeyDown={onKeyDown}
           >
-            <SchedulesProvider query={schedulesQuery}>
-              <BudgetCategories
-                categoryGroups={categoryGroups}
-                editingCell={editing}
-                onEditMonth={onEditMonth}
-                onEditName={onEditName}
-                onSaveCategory={onSaveCategory}
-                onSaveGroup={onSaveGroup}
-                onDeleteCategory={onDeleteCategory}
-                onDeleteGroup={onDeleteGroup}
-                onReorderCategory={_onReorderCategory}
-                onReorderGroup={_onReorderGroup}
-                onBudgetAction={onBudgetAction}
-                onShowActivity={_onShowActivity}
-                onApplyBudgetTemplatesInGroup={onApplyBudgetTemplatesInGroup}
-                onSortCategories={onSortCategories}
-              />
-            </SchedulesProvider>
+            <View
+              style={{
+                flexShrink: 0,
+              }}
+              onKeyDown={onKeyDown}
+            >
+              <SchedulesProvider query={schedulesQuery}>
+                <BudgetCategories
+                  categoryGroups={categoryGroups}
+                  editingCell={editing}
+                  onEditMonth={onEditMonth}
+                  onEditName={onEditName}
+                  onSaveCategory={onSaveCategory}
+                  onSaveGroup={onSaveGroup}
+                  onDeleteCategory={onDeleteCategory}
+                  onDeleteGroup={onDeleteGroup}
+                  onReorderCategory={_onReorderCategory}
+                  onReorderGroup={_onReorderGroup}
+                  onBudgetAction={onBudgetAction}
+                  onShowActivity={_onShowActivity}
+                  onApplyBudgetTemplatesInGroup={onApplyBudgetTemplatesInGroup}
+                  onSortCategories={onSortCategories}
+                />
+              </SchedulesProvider>
+            </View>
           </View>
-        </View>
+        </DesktopBudgetPeriods>
       </MonthsProvider>
     </View>
+  );
+}
+
+function DesktopBudgetPeriods({ children }: { children: ReactNode }) {
+  const { months } = useContext(MonthsContext);
+  const cashMonth = cashMonthFor(months);
+  return (
+    <BudgetPeriodsProvider visibleMonths={months}>
+      {cashMonth && <BudgetCashStrip month={cashMonth} />}
+      {children}
+    </BudgetPeriodsProvider>
   );
 }
 

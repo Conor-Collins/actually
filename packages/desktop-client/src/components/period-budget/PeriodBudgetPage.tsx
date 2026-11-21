@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
+import { useLocation } from 'react-router';
 
 import { useResponsive } from '@actual-app/components/hooks/useResponsive';
 import { Text } from '@actual-app/components/text';
@@ -12,6 +13,7 @@ import { SettingsBackButton } from '#components/settings/SettingsBackButton';
 import {
   axisAround,
   axisMonthCount,
+  isDay,
   isOnAxis,
   monthOf,
   yearAxis,
@@ -30,14 +32,30 @@ import { usePeriodBudgetLabels } from './usePeriodBudgetLabels';
 // that is active on the as-of day, next to the cash in the accounts. The
 // budget page and its months are not changed by anything here.
 export function PeriodBudgetPage() {
+  const { search } = useLocation();
+  return <PeriodBudgetContent key={search} search={search} />;
+}
+
+function PeriodBudgetContent({ search }: { search: string }) {
+  const params = new URLSearchParams(search);
+  const date = params.get('asOf');
+  const categoryId = params.get('category');
+  const id = params.get('period');
+  const start = params.get('start');
   const { t } = useTranslation();
   const { isNarrowWidth } = useResponsive();
-  const [asOf, setAsOf] = useState(() => monthUtils.currentDay());
+  const [asOf, setAsOf] = useState(() =>
+    isDay(date) ? date : monthUtils.currentDay(),
+  );
   // The calendar year of the month that is looked at
   const [axis, setAxis] = useState(() =>
-    yearAxis(monthOf(monthUtils.currentDay())),
+    yearAxis(monthOf(isDay(start) ? start : asOf)),
   );
-  const [selection, setSelection] = useState<Selection | null>(null);
+  const [selection, setSelection] = useState<Selection | null>(() =>
+    categoryId
+      ? { categoryId, period: id && isDay(start) ? { id, start } : null }
+      : null,
+  );
   const data = usePeriodBudgetData({ asOf, axis });
   const labels = usePeriodBudgetLabels();
   const { view, error } = data;
@@ -116,6 +134,7 @@ export function PeriodBudgetPage() {
               data={data}
               labels={labels}
               selection={selection}
+              focusCategoryId={categoryId ?? undefined}
               onSelect={setSelection}
             />
           </>
