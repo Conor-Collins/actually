@@ -133,6 +133,7 @@ function matches(
 
 let saved: SavedFilter[];
 let saveFilter: ReturnType<typeof vi.fn<(state: SavedFilter) => void>>;
+let updateFilter: typeof saveFilter;
 let validated: RuleConditionEntity[];
 
 beforeEach(() => {
@@ -147,6 +148,7 @@ beforeEach(() => {
     },
   ];
   saveFilter = vi.fn();
+  updateFilter = vi.fn();
   initServer({
     'accounts-get': async () => [checking],
     'account-update': async () => ({}),
@@ -204,6 +206,14 @@ beforeEach(() => {
           return { date: { $gte: start, $lte: end } };
         }),
       };
+    },
+    'filter-update': async ({ state }: { state: SavedFilter }) => {
+      updateFilter(state);
+      saved = saved.map(filter => (filter.id === state.id ? state : filter));
+      serverPush('sync-event', {
+        type: 'applied',
+        tables: ['transaction_filters'],
+      });
     },
     'filter-create': async ({ state }: { state: SavedFilter }) => {
       saveFilter(state);
@@ -473,6 +483,31 @@ test('saves only the active reconciliation filter and restores November on exit'
     expect(register().queryByText('October food')).toBeNull(),
   );
   expect(register().getByText('November food')).toBeVisible();
+
+  const modifiedFilter = { name: /Reconciliation dates.*modified/ };
+  await user.click(screen.getByRole('button', modifiedFilter));
+  expect(await screen.findByText('Update conditions')).toBeVisible();
+  await user.click(screen.getByText('Revert changes'));
+  expect(await register().findByText('October food')).toBeVisible();
+  expect(
+    screen.getByRole('button', { name: 'Reconciliation dates' }),
+  ).toBeVisible();
+
+  await addBound(user, 'is greater than or equals', '11/01/2026');
+  await user.click(screen.getByRole('button', modifiedFilter));
+  await user.click(await screen.findByText('Update conditions'));
+  await waitFor(() =>
+    expect(updateFilter).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'new-filter',
+        conditions: [expect.objectContaining(lower)],
+      }),
+    ),
+  );
+  expect(
+    await screen.findByRole('button', { name: 'Reconciliation dates' }),
+  ).toBeVisible();
+  expect(register().queryByText('October food')).toBeNull();
 });
 
 test('a contradictory date conjunction hides scheduled previews', async () => {

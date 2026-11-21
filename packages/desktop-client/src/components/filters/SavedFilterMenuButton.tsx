@@ -47,7 +47,6 @@ export function SavedFilterMenuButton({
   const [menuItem, setMenuItem] = useState('');
   const [name, setName] = useState(filterId?.name ?? '');
   const id = filterId?.id;
-  const originalSavedFilter = useRef<SavedFilter | null>(null);
 
   const onFilterMenuSelect = async (item: string) => {
     setMenuItem(item);
@@ -63,11 +62,11 @@ export function SavedFilterMenuButton({
         await send('filter-delete', id);
         onClearFilters();
         break;
-      case 'update-filter':
+      case 'update-filter': {
         setErr(null);
         setAdding(false);
         setMenuOpen(false);
-        originalSavedFilter.current = {
+        const updatedFilter: SavedFilter = {
           conditions,
           conditionsOp,
           id: filterId?.id,
@@ -75,7 +74,7 @@ export function SavedFilterMenuButton({
           status: 'saved',
         };
         const response = await sendCatch('filter-update', {
-          state: originalSavedFilter.current,
+          state: updatedFilter,
           filters: [...savedFilters],
         });
 
@@ -85,24 +84,23 @@ export function SavedFilterMenuButton({
           return;
         }
 
-        onReloadSavedFilter(originalSavedFilter.current, 'update');
+        onReloadSavedFilter(updatedFilter);
         break;
+      }
       case 'save-filter':
         setErr(null);
         setAdding(true);
         setMenuOpen(false);
         setNameOpen(true);
         break;
-      case 'reload-filter':
+      case 'reload-filter': {
         setMenuOpen(false);
-        if (originalSavedFilter.current) {
-          originalSavedFilter.current = {
-            ...originalSavedFilter.current,
-            status: 'saved',
-          };
-          onReloadSavedFilter(originalSavedFilter.current, 'reload');
+        const savedFilter = savedFilters.find(filter => filter.id === id);
+        if (savedFilter) {
+          onReloadSavedFilter({ ...savedFilter, status: 'saved' });
         }
         break;
+      }
       case 'clear-filter':
         setMenuOpen(false);
         onClearFilters();

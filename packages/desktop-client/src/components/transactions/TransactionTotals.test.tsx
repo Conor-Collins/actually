@@ -60,6 +60,10 @@ test('puts filtered payment and deposit sums in visible column order', async () 
     gridRow: '1',
   });
   expect(summary?.style.overflowX).toBe('');
+  const footer = screen.getByRole('group', {
+    name: 'Sum of shown posted transactions',
+  });
+  expectResponsiveRules(footer.className, 460, 650, '-2/-1');
   expect(depositCell.parentElement).toHaveStyle({
     gridRow: 'var(--totals-amount-row, 2)',
     gridColumn: '2',
@@ -125,10 +129,10 @@ const split = {
   ],
 };
 
-test('shares row one once a flexible payee track gives the summary enough space', () => {
+test('keeps totals on row one at the compact breakpoint and reveals the label at the full breakpoint', () => {
   render(
     <TestProviders>
-      <div style={{ width: 700 }}>
+      <div style={{ width: 539 }}>
         <TransactionTotalsRow
           columns={['date', 'payee', 'payment', 'deposit']}
           amountColumnWidths={{ amount: 100, balance: 103 }}
@@ -153,10 +157,26 @@ test('shares row one once a flexible payee track gives the summary enough space'
       gridRow: 'var(--totals-amount-row, 2)',
     });
   }
+  expect(summary?.querySelector('[data-totals-label]')).toHaveTextContent(
+    'Sum of shown posted transactions',
+  );
+  expectResponsiveRules(footer.className, 350, 540, '2/4');
+});
+
+function expectResponsiveRules(
+  className: string,
+  compact: number,
+  full: number,
+  column: string,
+) {
   const rules = Array.from(document.styleSheets)
     .flatMap(sheet => Array.from(sheet.cssRules, rule => rule.cssText))
-    .join('\n');
-  expect(rules.replaceAll(/\s/g, '')).toContain(
-    `@container(min-width:540px){.${footer.className}>[data-totals-summary]{--totals-summary-column:2/4;}.${footer.className}>[data-totals-amount]{--totals-amount-row:1;}}`,
+    .join('')
+    .replaceAll(/\s/g, '');
+  const placement = `.${className}>[data-totals-summary]{--totals-summary-column:${column};}.${className}>[data-totals-amount]{--totals-amount-row:1;}`;
+  expect(rules).toContain(`.${className}[data-totals-label]{display:none;}`);
+  expect(rules).toContain(`@container(min-width:${compact}px){${placement}}`);
+  expect(rules).toContain(
+    `@container(min-width:${full}px){${placement}.${className}[data-totals-label]{display:inline;}}`,
   );
-});
+}

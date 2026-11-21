@@ -106,19 +106,18 @@ export function TransactionTotalsRow({
   const totalFixedWidth =
     20 + tracks.reduce((width, track) => width + (parseInt(track, 10) || 0), 0);
   const totalFlexCount = tracks.filter(track => track === flexTrack).length;
-  const minimumSummaryWidth = 320;
-  let bestRun = { start: 0, end: 0, fixedWidth: 0, flexCount: 0 };
-  let run = bestRun;
-  function minimumWidth({ fixedWidth, flexCount }: typeof bestRun) {
-    if (fixedWidth >= minimumSummaryWidth) return totalFixedWidth;
-    if (flexCount === 0) return Infinity;
-    return (
-      totalFixedWidth +
-      Math.ceil(
-        ((minimumSummaryWidth - fixedWidth) * totalFlexCount) / flexCount,
-      )
-    );
-  }
+  const hiddenAmounts = (
+    ['payment', 'deposit'] satisfies Array<keyof TransactionTotals>
+  ).filter(column => !columns.includes(column));
+  const minimumCompactWidth = 130 + hiddenAmounts.length * 110;
+  const minimumFullWidth = 320 + hiddenAmounts.length * 110;
+  const runs: {
+    start: number;
+    end: number;
+    fixedWidth: number;
+    flexCount: number;
+  }[] = [];
+  let run = { start: 0, end: 0, fixedWidth: 0, flexCount: 0 };
   for (const [index, column] of columns.entries()) {
     if (column === 'payment' || column === 'deposit') {
       run = { start: index + 1, end: index + 1, fixedWidth: 0, flexCount: 0 };
@@ -131,37 +130,58 @@ export function TransactionTotalsRow({
       fixedWidth: run.fixedWidth + (parseInt(track, 10) || 0),
       flexCount: run.flexCount + Number(track === flexTrack),
     };
-    if (minimumWidth(run) < minimumWidth(bestRun)) {
-      bestRun = run;
-    }
+    runs.push(run);
   }
 
-  const runColumn = `${bestRun.start + 2} / ${bestRun.end + 2}`;
-  const summaryNeedsOwnRow = bestRun.fixedWidth < minimumSummaryWidth;
-  let singleRow: { width: number; column: string } | undefined;
-  if (summaryNeedsOwnRow && bestRun.flexCount > 0) {
-    singleRow = {
-      width: minimumWidth(bestRun),
-      column: runColumn,
-    };
-  } else if (summaryNeedsOwnRow && totalFlexCount === 0) {
-    tracks.push(flexTrack);
-    singleRow = {
-      width: totalFixedWidth + minimumSummaryWidth,
+  const hasTrailingTrack =
+    totalFlexCount === 0 &&
+    !runs.some(run => run.fixedWidth >= minimumFullWidth);
+  if (hasTrailingTrack) tracks.push(flexTrack);
+
+  function singleRowLayout(minimumWidth: number) {
+    let layout = {
+      width: hasTrailingTrack ? totalFixedWidth + minimumWidth : Infinity,
       column: '-2 / -1',
     };
+    for (const { start, end, fixedWidth, flexCount } of runs) {
+      if (fixedWidth < minimumWidth && flexCount === 0) continue;
+      const width =
+        fixedWidth >= minimumWidth
+          ? totalFixedWidth
+          : totalFixedWidth +
+            Math.ceil(
+              ((minimumWidth - fixedWidth) * totalFlexCount) / flexCount,
+            );
+      if (width < layout.width) {
+        layout = { width, column: `${start + 2} / ${end + 2}` };
+      }
+    }
+    return layout;
   }
-  const responsiveLayout =
-    singleRow &&
-    css({
-      containerType: 'inline-size',
-      [`@container (min-width: ${singleRow.width}px)`]: {
-        '& > [data-totals-summary]': {
-          '--totals-summary-column': singleRow.column,
+
+  const compact = singleRowLayout(minimumCompactWidth);
+  const full = singleRowLayout(minimumFullWidth);
+  const alwaysFull = full.width === totalFixedWidth;
+  const alwaysCompact = compact.width === totalFixedWidth;
+  function placement(column: string) {
+    return {
+      '& > [data-totals-summary]': { '--totals-summary-column': column },
+      '& > [data-totals-amount]': { '--totals-amount-row': 1 },
+    };
+  }
+  const responsiveLayout = alwaysFull
+    ? undefined
+    : css({
+        containerType: 'inline-size',
+        '& [data-totals-label]': { display: 'none' },
+        [`@container (min-width: ${compact.width}px)`]: placement(
+          compact.column,
+        ),
+        [`@container (min-width: ${full.width}px)`]: {
+          ...placement(full.column),
+          '& [data-totals-label]': { display: 'inline' },
         },
-        '& > [data-totals-amount]': { '--totals-amount-row': 1 },
-      },
-    });
+      });
 
   return (
     <div
@@ -186,18 +206,16 @@ export function TransactionTotalsRow({
         data-totals-summary=""
         style={{
           gridRow: 1,
-          gridColumn: responsiveLayout
-            ? 'var(--totals-summary-column, 1 / -1)'
-            : summaryNeedsOwnRow
-              ? '1 / -1'
-              : runColumn,
+          gridColumn: alwaysFull
+            ? full.column
+            : `var(--totals-summary-column, ${alwaysCompact ? compact.column : '1 / -1'})`,
           display: 'flex',
           alignItems: 'center',
           gap: 12,
           padding: '6px 5px',
         }}
       >
-        <span>
+        <span data-totals-label="">
           <Trans>Sum of shown posted transactions</Trans>
         </span>
         <span>
@@ -211,22 +229,20 @@ export function TransactionTotalsRow({
             </FinancialText>
           </PrivacyFilter>
         </span>
-        {(['payment', 'deposit'] satisfies Array<keyof TransactionTotals>)
-          .filter(column => !columns.includes(column))
-          .map(column => (
-            <span key={column}>
-              {column === 'payment' ? (
-                <Trans>Payment</Trans>
-              ) : (
-                <Trans>Deposit</Trans>
-              )}{' '}
-              <PrivacyFilter>
-                <FinancialText>
-                  {format(totals[column], 'financial')}
-                </FinancialText>
-              </PrivacyFilter>
-            </span>
-          ))}
+        {hiddenAmounts.map(column => (
+          <span key={column}>
+            {column === 'payment' ? (
+              <Trans>Payment</Trans>
+            ) : (
+              <Trans>Deposit</Trans>
+            )}{' '}
+            <PrivacyFilter>
+              <FinancialText>
+                {format(totals[column], 'financial')}
+              </FinancialText>
+            </PrivacyFilter>
+          </span>
+        ))}
       </div>
       {columns.map(
         (column, index) =>
@@ -235,11 +251,9 @@ export function TransactionTotalsRow({
               key={column}
               data-totals-amount=""
               style={{
-                gridRow: responsiveLayout
-                  ? 'var(--totals-amount-row, 2)'
-                  : summaryNeedsOwnRow
-                    ? 2
-                    : 1,
+                gridRow: alwaysFull
+                  ? 1
+                  : `var(--totals-amount-row, ${alwaysCompact ? 1 : 2})`,
                 gridColumn: index + 2,
                 textAlign: 'right',
                 padding: '4px 5px',

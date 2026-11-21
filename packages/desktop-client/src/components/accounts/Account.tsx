@@ -1175,6 +1175,12 @@ class AccountInternal extends PureComponent<
       state => ({
         reconcileAmount: null,
         showCleared: state.prevShowCleared,
+        filterId:
+          state.filterId?.id &&
+          state.filterConditionsOp === 'and' &&
+          state.rangeConditions.length > 0
+            ? { ...state.filterId, status: 'changed' }
+            : state.filterId,
       }),
       this.fetchTransactions,
     );
@@ -1499,26 +1505,11 @@ class AccountInternal extends PureComponent<
     void this.applyFilters(this.state.filterConditions, value);
   };
 
-  onReloadSavedFilter = (savedFilter: SavedFilter, item?: string) => {
-    if (item === 'reload') {
-      const [savedFilter] = this.props.savedFilters.filter(
-        f => f.id === this.state.filterId?.id,
-      );
-      this.setState({ filterConditionsOp: savedFilter.conditionsOp ?? 'and' });
-      this.applySavedConditions(
-        savedFilter.conditions,
-        savedFilter.conditionsOp ?? 'and',
-      );
-    } else {
-      if (savedFilter.status) {
-        this.setState({
-          filterConditionsOp: savedFilter.conditionsOp ?? 'and',
-        });
-        this.applySavedConditions(
-          savedFilter.conditions ?? [],
-          savedFilter.conditionsOp ?? 'and',
-        );
-      }
+  onReloadSavedFilter = (savedFilter: SavedFilter) => {
+    if (savedFilter.status) {
+      const conditionsOp = savedFilter.conditionsOp ?? 'and';
+      this.setState({ filterConditionsOp: conditionsOp });
+      this.applySavedConditions(savedFilter.conditions ?? [], conditionsOp);
     }
     this.setState(state => ({
       filterId: { ...state.filterId, ...savedFilter },
