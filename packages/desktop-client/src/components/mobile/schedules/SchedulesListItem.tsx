@@ -10,13 +10,18 @@ import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
 import { format as monthUtilFormat } from '@actual-app/core/shared/months';
 import type { ScheduleStatusType } from '@actual-app/core/shared/schedules';
-import { getScheduledAmount } from '@actual-app/core/shared/schedules';
+import {
+  getScheduleCategoryId,
+  getScheduledAmount,
+} from '@actual-app/core/shared/schedules';
 import type { ScheduleEntity } from '@actual-app/core/types/models';
 import type { WithRequired } from '@actual-app/core/types/util';
 
 import { ActionableGridListItem } from '#components/mobile/ActionableGridListItem';
+import { SchedulePayees } from '#components/schedules/SchedulePayees';
 import { StatusBadge } from '#components/schedules/StatusBadge';
 import { DisplayId } from '#components/util/DisplayId';
+import { useCategoriesById } from '#hooks/useCategories';
 import { useDateFormat } from '#hooks/useDateFormat';
 import { useFormat } from '#hooks/useFormat';
 
@@ -34,6 +39,8 @@ export function SchedulesListItem({
 }: SchedulesListItemProps) {
   const { t } = useTranslation();
   const format = useFormat();
+  const category = getScheduleCategoryId(schedule);
+  const { data: categories } = useCategoriesById();
   const dateFormat = useDateFormat() || 'MM/dd/yyyy';
 
   const amount = getScheduledAmount(schedule._amount);
@@ -94,8 +101,16 @@ export function SchedulesListItem({
               <Text style={{ color: theme.pageTextSubdued }}>
                 <Trans>Payee:</Trans>
               </Text>
-              <DisplayId type="payees" id={schedule._payee} />
+              <SchedulePayees schedule={schedule} />
             </SpaceBetween>
+            {category && (
+              <SpaceBetween gap={4} direction="horizontal">
+                <Text style={{ color: theme.pageTextSubdued }}>
+                  <Trans>Category:</Trans>
+                </Text>
+                <Text>{categories?.list[category]?.name}</Text>
+              </SpaceBetween>
+            )}
             <SpaceBetween gap={4} direction="horizontal">
               <Text style={{ color: theme.pageTextSubdued }}>
                 <Trans>Account:</Trans>

@@ -29,6 +29,41 @@ beforeEach(async () => {
 
 describe('schedule app', () => {
   describe('utility', () => {
+    it('replaces a single payee with several payees and a category', () => {
+      const date = { field: 'date', op: 'is', value: '2026-01-01' };
+      const replacements = [
+        { field: 'payee', op: 'oneOf', value: ['mutual-acme', 'hearth-cover'] },
+        { field: 'category', op: 'is', value: 'insurance' },
+      ];
+      expect(
+        updateConditions(
+          [{ field: 'payee', op: 'is', value: 'mutual-acme' }, date],
+          replacements,
+        ),
+      ).toEqual([date, ...replacements]);
+    });
+
+    it('replaces a payee list and removes cleared optional conditions only when requested', () => {
+      const date = { field: 'date', op: 'is', value: '2026-01-01' };
+      const category = { field: 'category', op: 'is', value: 'insurance' };
+      const account = { field: 'account', op: 'is', value: 'card' };
+      const payee = { field: 'payee', op: 'is', value: 'mutual-acme' };
+      const existing = [
+        { field: 'payee', op: 'oneOf', value: ['mutual-acme', 'hearth-cover'] },
+        category,
+        account,
+        date,
+      ];
+      expect(updateConditions(existing, [payee])).toEqual([
+        category,
+        account,
+        date,
+        payee,
+      ]);
+      expect(updateConditions(existing, [payee], true)).toEqual([date, payee]);
+      expect(updateConditions(existing, [date], true)).toEqual([date]);
+    });
+
     it('conditions are updated when they exist', () => {
       const conds = [
         { op: 'is', field: 'payee', value: 'FOO' },

@@ -36,7 +36,8 @@ import { SelectedProvider } from '#hooks/useSelected';
 import type { Actions } from '#hooks/useSelected';
 
 export type ScheduleFormFields = {
-  payee: null | string;
+  payees: string[];
+  category: string;
   account: null | string;
   amount: null | number | { num1: number; num2: number };
   amountOp: null | string;
@@ -49,9 +50,10 @@ export type ScheduleFormFields = {
 export type ScheduleEditFormDispatch =
   | {
       type: 'set-field';
-      field: 'name' | 'account' | 'payee';
+      field: 'name' | 'account' | 'category';
       value: string;
     }
+  | { type: 'set-field'; field: 'payees'; value: string[] }
   | {
       type: 'set-field';
       field: 'amountOp';
@@ -89,6 +91,7 @@ type ScheduleEditFormProps = {
   repeats: boolean;
   schedule: Partial<ScheduleEntity>;
   adding: boolean;
+  fromFilter?: boolean;
   isCustom: boolean;
   onEditRule: (ruleId: string) => void;
   transactions: TransactionEntity[];
@@ -107,6 +110,7 @@ export function ScheduleEditForm({
   repeats,
   schedule,
   adding,
+  fromFilter,
   isCustom,
   onEditRule,
   transactions,
@@ -149,20 +153,36 @@ export function ScheduleEditForm({
         >
           <FormField style={{ flex: 1 }}>
             <FormLabel
-              title={t('Payee')}
+              title={t('Payees')}
               id="payee-label"
               htmlFor="payee-field"
             />
             <GenericInput
               type="id"
               field="payee"
-              value={fields.payee || ''}
-              onChange={id =>
-                dispatch({ type: 'set-field', field: 'payee', value: id })
+              multi
+              value={fields.payees}
+              onChange={ids =>
+                dispatch({
+                  type: 'set-field',
+                  field: 'payees',
+                  value: [...new Set(ids)],
+                })
               }
             />
           </FormField>
 
+          <FormField style={{ flex: 1 }}>
+            <FormLabel title={t('Category')} htmlFor="category-field" />
+            <GenericInput
+              type="id"
+              field="category"
+              value={fields.category}
+              onChange={id =>
+                dispatch({ type: 'set-field', field: 'category', value: id })
+              }
+            />
+          </FormField>
           <FormField style={{ flex: 1 }}>
             <FormLabel
               title={t('Account')}
@@ -487,11 +507,19 @@ export function ScheduleEditForm({
           {adding ? (
             <View style={{ flexDirection: 'row', padding: '5px 0' }}>
               <Text style={{ color: theme.pageTextLight }}>
-                <Trans>These transactions match this schedule:</Trans>
+                {fromFilter ? (
+                  <Trans>Transactions from the filter</Trans>
+                ) : (
+                  <Trans>These transactions match this schedule:</Trans>
+                )}
               </Text>
               <View style={{ flex: 1 }} />
               <Text style={{ color: theme.pageTextLight }}>
-                <Trans>Select transactions to link on save</Trans>
+                {fromFilter ? (
+                  <Trans>Preselect transactions for cleanup</Trans>
+                ) : (
+                  <Trans>Select transactions to link on save</Trans>
+                )}
               </Text>
             </View>
           ) : (

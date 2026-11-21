@@ -42,6 +42,7 @@ import { FilterButton } from '#components/filters/FiltersMenu';
 import { FiltersStack } from '#components/filters/FiltersStack';
 import type { SavedFilter } from '#components/filters/SavedFilterMenuButton';
 import { NotesButton } from '#components/NotesButton';
+import { getScheduleFilter } from '#components/schedules/schedule-edit-utils';
 import { SelectedTransactionsButton } from '#components/transactions/SelectedTransactionsButton';
 import { useDateFormat } from '#hooks/useDateFormat';
 import { useFeatureFlag } from '#hooks/useFeatureFlag';
@@ -189,6 +190,14 @@ export function AccountHeader({
   onMergeTransactions,
 }: AccountHeaderProps) {
   const { t } = useTranslation();
+
+  const canScheduleFromFilter =
+    reconcileAmount == null &&
+    Boolean(getScheduleFilter(filterConditions, filterConditionsOp));
+  const scheduleFromFilterItem = {
+    name: 'schedule-from-filter',
+    text: t('Schedule from this filter'),
+  } as const;
 
   const expressionDates = filterConditions.filter(isDateFilter);
   const nonDateConditions = filterConditions.filter(
@@ -510,6 +519,7 @@ export function AccountHeader({
                   <Dialog>
                     <AccountMenu
                       account={account}
+                      canScheduleFromFilter={canScheduleFromFilter}
                       canSync={canSync}
                       showNetWorthChart={showNetWorthChart}
                       isSorted={isSorted}
@@ -537,6 +547,9 @@ export function AccountHeader({
                       slot="close"
                       onMenuSelect={onMenuSelect}
                       items={[
+                        ...(canScheduleFromFilter
+                          ? [scheduleFromFilterItem]
+                          : []),
                         ...(isSorted
                           ? [
                               {
@@ -590,6 +603,13 @@ export function AccountHeader({
             rangeConditions.length > 0) ||
           filterId?.id) && (
           <FiltersStack
+            rightActions={
+              canScheduleFromFilter && (
+                <Button onPress={() => onMenuSelect('schedule-from-filter')}>
+                  <Trans>Schedule from this filter</Trans>
+                </Button>
+              )
+            }
             visibleConditions={
               reconcileAmount == null ? nonDateConditions : filterConditions
             }
@@ -758,6 +778,7 @@ function AccountNameField({
 }
 
 type AccountMenuProps = {
+  canScheduleFromFilter: boolean;
   account: AccountEntity;
   canSync: boolean;
   showNetWorthChart: boolean;
@@ -774,11 +795,13 @@ type AccountMenuProps = {
       | 'toggle-reconciled'
       | 'toggle-net-worth-chart'
       | 'manage-columns'
-      | 'account-group',
+      | 'account-group'
+      | 'schedule-from-filter',
   ) => void;
 };
 
 function AccountMenu({
+  canScheduleFromFilter,
   account,
   canSync,
   showNetWorthChart,
@@ -797,6 +820,14 @@ function AccountMenu({
         onMenuSelect(item);
       }}
       items={[
+        ...(canScheduleFromFilter
+          ? [
+              {
+                name: 'schedule-from-filter',
+                text: t('Schedule from this filter'),
+              } as const,
+            ]
+          : []),
         ...(isSorted
           ? [
               {

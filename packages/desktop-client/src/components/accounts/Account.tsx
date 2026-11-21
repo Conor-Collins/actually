@@ -49,6 +49,10 @@ import { markAccountRead } from '#accounts/accountsSlice';
 import * as reconciliation from '#accounts/reconciliation';
 import { FeatureErrorFallback } from '#components/FeatureErrorFallback';
 import type { SavedFilter } from '#components/filters/SavedFilterMenuButton';
+import {
+  getScheduleFilter,
+  prefillFilteredSchedule,
+} from '#components/schedules/schedule-edit-utils';
 import type {
   TransactionTableColumn,
   TransactionTableColumnId,
@@ -301,6 +305,7 @@ class AccountInternal extends PureComponent<
   rootQuery!: Query;
   currentQuery: Query | null = null;
   filterRevision = 0;
+  filterQueryReady: Promise<void> | null = null;
   table: TableRef;
   unlisten?: () => void;
   dispatchSelected?: (action: Actions) => void;
@@ -886,7 +891,8 @@ class AccountInternal extends PureComponent<
       | 'toggle-reconciled'
       | 'toggle-net-worth-chart'
       | 'manage-columns'
-      | 'account-group',
+      | 'account-group'
+      | 'schedule-from-filter',
   ) => {
     const accountId = this.props.accountId!;
     const account = this.props.accounts.find(
@@ -894,6 +900,53 @@ class AccountInternal extends PureComponent<
     )!;
 
     switch (item) {
+      case 'schedule-from-filter': {
+        if (this.state.reconcileAmount != null) break;
+        const filter = getScheduleFilter(
+          [...this.state.filterConditions, ...this.state.rangeConditions],
+          this.state.filterConditionsOp,
+        );
+        if (!filter) break;
+        const revision = this.filterRevision;
+        await this.filterQueryReady;
+        const query = this.paged?.query;
+        if (!query || revision !== this.filterRevision) break;
+
+        const [{ data: category }, { data: transactions }] = await Promise.all([
+          aqlQuery(
+            q('categories').filter({ id: filter.category }).select('name'),
+          ),
+          aqlQuery(query.select('*')),
+        ]);
+        if (revision !== this.filterRevision || query !== this.paged?.query) {
+          break;
+        }
+
+        const filtered = prefillFilteredSchedule({
+          ...filter,
+          name: category[0]?.name ?? '',
+          transactions,
+        });
+        if (filtered) {
+          this.props.dispatch(
+            pushModal({
+              modal: { name: 'schedule-edit', options: { filtered } },
+            }),
+          );
+        } else {
+          this.props.dispatch(
+            addNotification({
+              notification: {
+                type: 'error',
+                message: t(
+                  'Choose one calendar year in the date range. The range must contain matching transactions to create a yearly schedule.',
+                ),
+              },
+            }),
+          );
+        }
+        break;
+      }
       case 'link':
         this.props.dispatch(
           pushModal({
@@ -1723,26 +1776,32 @@ class AccountInternal extends PureComponent<
     );
   };
 
-  applyFilters = async (
+  applyFilters = (
     conditions: ConditionEntity[],
     conditionsOp = this.state.filterConditionsOp,
     rangeConditions = this.state.rangeConditions,
   ) => {
     const revision = ++this.filterRevision;
     this.setState({ filterConditions: conditions, rangeConditions });
-    const { dateFree, dated } = await accountDateQueries(
+    this.filterQueryReady = accountDateQueries(
       this.rootQuery,
       conditions,
       conditionsOp,
       this.state.reconcileAmount == null ? rangeConditions : [],
-    );
-    if (revision !== this.filterRevision) return;
-
-    this.currentQuery = dated;
-    this.setState({ dateFreeQuery: dateFree }, () => {
+    ).then(({ dateFree, dated }) => {
       if (revision !== this.filterRevision) return;
-      this.refreshVisibleQuery();
+
+      this.currentQuery = dated;
+      return new Promise<void>(resolve => {
+        this.setState({ dateFreeQuery: dateFree }, () => {
+          if (revision === this.filterRevision) {
+            this.refreshVisibleQuery();
+          }
+          resolve();
+        });
+      });
     });
+    return this.filterQueryReady;
   };
 
   onSort = (field: string, ascDesc: 'asc' | 'desc') => {

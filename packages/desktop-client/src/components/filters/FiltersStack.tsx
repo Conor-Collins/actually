@@ -46,7 +46,11 @@ export function FiltersStack({
       <SpaceBetween
         direction="horizontal"
         gap={10}
-        style={{ justifyContent: 'flex-start', alignItems: 'flex-start' }}
+        style={{
+          justifyContent: 'flex-start',
+          alignItems: 'flex-start',
+          flexWrap: 'wrap',
+        }}
       >
         <AppliedFilters
           conditions={visibleConditions}

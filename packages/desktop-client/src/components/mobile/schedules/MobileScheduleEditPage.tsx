@@ -11,6 +11,7 @@ import { View } from '@actual-app/components/view';
 import { send, sendCatch } from '@actual-app/core/platform/client/connection';
 import * as monthUtils from '@actual-app/core/shared/months';
 import { q } from '@actual-app/core/shared/query';
+import { isCleanupEligibleSchedule } from '@actual-app/core/shared/schedules';
 import type {
   RecurConfig,
   ScheduleEntity,
@@ -24,11 +25,14 @@ import { useNavigate } from '#hooks/useNavigate';
 import { useScheduleEdit } from '#hooks/useScheduleEdit';
 import { useSelected } from '#hooks/useSelected';
 import { useUndo } from '#hooks/useUndo';
+import { pushModal } from '#modals/modalsSlice';
 import { aqlQuery } from '#queries/aqlQuery';
+import { useDispatch } from '#redux';
 
 export function MobileScheduleEditPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const globalDispatch = useDispatch();
   const { id } = useParams<{ id?: string }>();
   const { showUndoNotification } = useUndo();
 
@@ -105,6 +109,7 @@ export function MobileScheduleEditPage() {
           name: state.fields.name,
         },
         conditions,
+        replaceOptionalConditions: true,
       },
     );
 
@@ -245,6 +250,25 @@ export function MobileScheduleEditPage() {
             borderColor: theme.tableBorder,
           }}
         >
+          {id &&
+            !adding &&
+            state.schedule &&
+            isCleanupEligibleSchedule(state.schedule) && (
+              <Button
+                onPress={() =>
+                  globalDispatch(
+                    pushModal({
+                      modal: {
+                        name: 'schedule-cleanup',
+                        options: { id, isReopened: true },
+                      },
+                    }),
+                  )
+                }
+              >
+                <Trans>Clean up…</Trans>
+              </Button>
+            )}
           <Button
             variant="primary"
             onPress={onSave}

@@ -87,6 +87,7 @@ import { UnmigrateBudgetAutomationsModal } from './modals/UnmigrateBudgetAutomat
 import { CategoryLearning } from './payees/CategoryLearning';
 import { DiscoverSchedules } from './schedules/DiscoverSchedules';
 import { PostsOfflineNotification } from './schedules/PostsOfflineNotification';
+import { ScheduleCleanupModal } from './schedules/ScheduleCleanup';
 import { ScheduleEditModal } from './schedules/ScheduleEditModal';
 import { ScheduleLink } from './schedules/ScheduleLink';
 import { UpcomingLength } from './schedules/UpcomingLength';
@@ -265,6 +266,8 @@ export function Modals() {
         case 'tracking-budget-summary':
           return <TrackingBudgetSummaryModal key={key} {...modal.options} />;
 
+        case 'schedule-cleanup':
+          return <ScheduleCleanupModal key={key} {...modal.options} />;
         case 'schedule-edit':
           return <ScheduleEditModal key={key} {...modal.options} />;
 

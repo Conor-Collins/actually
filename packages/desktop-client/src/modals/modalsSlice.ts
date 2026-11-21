@@ -25,6 +25,7 @@ import type { PayloadAction } from '@reduxjs/toolkit';
 import { accountQueries } from '#accounts';
 import { resetApp, setAppState } from '#app/appSlice';
 import type { SelectLinkedAccountsModalProps } from '#components/modals/SelectLinkedAccountsModal';
+import type { FilteredSchedule } from '#components/schedules/schedule-edit-utils';
 import type { TransactionTableColumn } from '#components/transactions/table/columns';
 import { createAppAsyncThunk } from '#redux';
 import { signOut } from '#users/usersSlice';
@@ -330,7 +331,20 @@ export type Modal =
     }
   | {
       name: 'schedule-edit';
-      options: { id?: string; transaction?: TransactionEntity } | null;
+      options: {
+        id?: string;
+        transaction?: TransactionEntity;
+        filtered?: FilteredSchedule;
+      } | null;
+    }
+  | {
+      name: 'schedule-cleanup';
+      options: {
+        id: string;
+        year?: string;
+        transactionIds?: string[];
+        isReopened?: boolean;
+      };
     }
   | {
       name: 'schedule-link';

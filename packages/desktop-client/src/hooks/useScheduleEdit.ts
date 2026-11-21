@@ -7,6 +7,7 @@ import { q } from '@actual-app/core/shared/query';
 import {
   extractScheduleConds,
   getScheduledAmount,
+  getSchedulePayeeIds,
 } from '@actual-app/core/shared/schedules';
 import type {
   RecurConfig,
@@ -15,7 +16,10 @@ import type {
 } from '@actual-app/core/types/models';
 
 import { updateScheduleConditions } from '#components/schedules/schedule-edit-utils';
-import type { ScheduleFormFields } from '#components/schedules/ScheduleEditForm';
+import type {
+  ScheduleEditFormDispatch,
+  ScheduleFormFields,
+} from '#components/schedules/ScheduleEditForm';
 import { aqlQuery } from '#queries/aqlQuery';
 import { liveQuery } from '#queries/liveQuery';
 
@@ -34,44 +38,11 @@ type ScheduleEditAction =
       type: 'set-schedule';
       schedule: Partial<ScheduleEntity>;
     }
-  | {
-      type: 'set-field';
-      field: 'name' | 'account' | 'payee';
-      value: string;
-    }
-  | {
-      type: 'set-field';
-      field: 'amountOp';
-      value: 'is' | 'isbetween' | 'isapprox';
-    }
-  | {
-      type: 'set-field';
-      field: 'amount';
-      value: number | { num1: number; num2: number };
-    }
-  | {
-      type: 'set-field';
-      field: 'date';
-      value: string | RecurConfig;
-    }
-  | {
-      type: 'set-field';
-      field: 'posts_transaction';
-      value: boolean;
-    }
-  | {
-      type: 'set-field';
-      field: 'custom_upcoming_length';
-      value: string | null;
-    }
+  | ScheduleEditFormDispatch
   | {
       type: 'set-transactions';
       transactions: TransactionEntity[];
       transactionId?: string;
-    }
-  | {
-      type: 'set-repeats';
-      repeats: boolean;
     }
   | {
       type: 'set-upcoming-dates';
@@ -108,7 +79,8 @@ function createScheduleEditReducer(useGetScheduledAmount: boolean = false) {
           schedule: action.schedule,
           isCustom,
           fields: {
-            payee: schedule._payee ?? null,
+            payees: getSchedulePayeeIds(schedule),
+            category: conds.category?.value ?? '',
             account: schedule._account ?? null,
             amount: schedule._amount || 0,
             amountOp: schedule._amountOp || 'isapprox',
@@ -238,6 +210,7 @@ type UseScheduleEditOptions = {
   adding: boolean;
   initialSchedule?: Partial<ScheduleEntity>;
   transactionId?: string;
+  filteredTransactions?: TransactionEntity[];
   useGetScheduledAmount?: boolean;
 };
 
@@ -246,6 +219,7 @@ export function useScheduleEdit({
   adding,
   initialSchedule,
   transactionId,
+  filteredTransactions,
   useGetScheduledAmount = false,
 }: UseScheduleEditOptions) {
   const reducer = createScheduleEditReducer(useGetScheduledAmount);
@@ -256,7 +230,8 @@ export function useScheduleEdit({
     upcomingDates: null,
     error: null,
     fields: {
-      payee: null,
+      payees: [],
+      category: '',
       account: null,
       amount: null,
       amountOp: null,
@@ -265,7 +240,7 @@ export function useScheduleEdit({
       custom_upcoming_length: null,
       name: null,
     },
-    transactions: [],
+    transactions: filteredTransactions ?? [],
     transactionsMode: adding ? 'matched' : 'linked',
   });
 
@@ -361,7 +336,11 @@ export function useScheduleEdit({
     let current = true;
     let unsubscribe: (() => void) | undefined;
 
-    if (state.schedule && state.transactionsMode === 'matched') {
+    if (
+      !filteredTransactions &&
+      state.schedule &&
+      state.transactionsMode === 'matched'
+    ) {
       const updated = updateScheduleConditions(state.schedule, state.fields);
 
       if ('error' in updated) {
@@ -411,7 +390,13 @@ export function useScheduleEdit({
         unsubscribe();
       }
     };
-  }, [state.schedule, state.transactionsMode, state.fields, transactionId]);
+  }, [
+    filteredTransactions,
+    state.schedule,
+    state.transactionsMode,
+    state.fields,
+    transactionId,
+  ]);
 
   return {
     state,

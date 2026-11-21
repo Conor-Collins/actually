@@ -9,12 +9,17 @@ import { send } from '@actual-app/core/platform/client/connection';
 import { format as monthUtilFormat } from '@actual-app/core/shared/months';
 import { getNormalisedString } from '@actual-app/core/shared/normalisation';
 import { q } from '@actual-app/core/shared/query';
-import { getScheduledAmount } from '@actual-app/core/shared/schedules';
+import {
+  getScheduleCategoryId,
+  getScheduledAmount,
+  getSchedulePayeeIds,
+} from '@actual-app/core/shared/schedules';
 import type { ScheduleEntity } from '@actual-app/core/types/models';
 
 import { Search } from '#components/common/Search';
 import { MobilePageHeader, Page } from '#components/Page';
 import { useAccounts } from '#hooks/useAccounts';
+import { useCategoriesById } from '#hooks/useCategories';
 import { useDateFormat } from '#hooks/useDateFormat';
 import { useFormat } from '#hooks/useFormat';
 import { useNavigate } from '#hooks/useNavigate';
@@ -45,6 +50,7 @@ export function MobileSchedulesPage() {
   } = useSchedules({ query: schedulesQuery });
 
   const { data: payees = [] } = usePayees();
+  const { data: categories } = useCategoriesById();
   const { data: accounts = [] } = useAccounts();
 
   const filterIncludes = (str: string | null | undefined) =>
@@ -55,7 +61,7 @@ export function MobileSchedulesPage() {
 
   const baseSchedules = filter
     ? schedules.filter(schedule => {
-        const payee = payees.find(p => schedule._payee === p.id);
+        const schedulePayees = getSchedulePayeeIds(schedule);
         const account = accounts.find(a => schedule._account === a.id);
         const amount = getScheduledAmount(schedule._amount);
         const amountStr =
@@ -72,7 +78,13 @@ export function MobileSchedulesPage() {
 
         return (
           filterIncludes(schedule.name) ||
-          filterIncludes(payee?.name) ||
+          filterIncludes(
+            categories?.list[getScheduleCategoryId(schedule) ?? '']?.name,
+          ) ||
+          payees.some(
+            payee =>
+              schedulePayees.includes(payee.id) && filterIncludes(payee.name),
+          ) ||
           filterIncludes(account?.name) ||
           filterIncludes(amountStr) ||
           filterIncludes(statusLabel) ||

@@ -12,15 +12,22 @@ import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
 import { format as monthUtilFormat } from '@actual-app/core/shared/months';
 import { getNormalisedString } from '@actual-app/core/shared/normalisation';
-import { getScheduledAmount } from '@actual-app/core/shared/schedules';
+import {
+  getScheduleCategoryId,
+  getScheduledAmount,
+  getSchedulePayeeIds,
+  isCleanupEligibleSchedule,
+} from '@actual-app/core/shared/schedules';
 import type { ScheduleStatuses } from '@actual-app/core/shared/schedules';
 import type { ScheduleEntity } from '@actual-app/core/types/models';
 
 import { FinancialText } from '#components/FinancialText';
 import { PrivacyFilter } from '#components/PrivacyFilter';
+import { SchedulePayees } from '#components/schedules/SchedulePayees';
 import { Cell, Field, Row, Table, TableHeader } from '#components/table';
 import { DisplayId } from '#components/util/DisplayId';
 import { useAccounts } from '#hooks/useAccounts';
+import { useCategoriesById } from '#hooks/useCategories';
 import { useContextMenu } from '#hooks/useContextMenu';
 import { useDateFormat } from '#hooks/useDateFormat';
 import { useFormat } from '#hooks/useFormat';
@@ -59,6 +66,7 @@ export type ScheduleItemAction =
   | 'skip'
   | 'complete'
   | 'restart'
+  | 'cleanup'
   | 'delete';
 
 export const ROW_HEIGHT = 43;
@@ -199,6 +207,12 @@ function ScheduleRow({
             hidden: status === 'completed',
           },
           {
+            name: 'cleanup',
+            text: t('Clean up…'),
+            onClick: () => onAction('cleanup', schedule.id),
+            hidden: !isCleanupEligibleSchedule(schedule),
+          },
+          {
             name: 'delete',
             text: t('Delete'),
             onClick: () => onAction('delete', schedule.id),
@@ -233,7 +247,7 @@ function ScheduleRow({
         </Text>
       </Field>
       <Field width="flex" name="payee">
-        <DisplayId type="payees" id={schedule._payee} />
+        <SchedulePayees schedule={schedule} />
       </Field>
       <Field width="flex" name="account">
         <DisplayId type="accounts" id={schedule._account} />
@@ -310,6 +324,7 @@ export function SchedulesTable({
   const [showCompleted, setShowCompleted] = useState(false);
 
   const { data: payees } = usePayees();
+  const { data: categories } = useCategoriesById();
   const { data: accounts = [] } = useAccounts();
 
   const filteredSchedules = useMemo(() => {
@@ -323,7 +338,7 @@ export function SchedulesTable({
         : false;
 
     return schedules.filter(schedule => {
-      const payee = payees.find(p => schedule._payee === p.id);
+      const schedulePayees = getSchedulePayeeIds(schedule);
       const account = accounts.find(a => schedule._account === a.id);
       const amount = getScheduledAmount(schedule._amount);
       let amountStr = '';
@@ -340,14 +355,29 @@ export function SchedulesTable({
 
       return (
         filterIncludes(schedule.name) ||
-        filterIncludes(payee && payee.name) ||
+        filterIncludes(
+          categories?.list[getScheduleCategoryId(schedule) ?? '']?.name,
+        ) ||
+        payees?.some(
+          payee =>
+            schedulePayees.includes(payee.id) && filterIncludes(payee.name),
+        ) ||
         filterIncludes(account && account.name) ||
         filterIncludes(amountStr) ||
         filterIncludes(statuses.get(schedule.id)) ||
         filterIncludes(dateStr)
       );
     });
-  }, [payees, accounts, schedules, filter, statuses, format, dateFormat]);
+  }, [
+    payees,
+    accounts,
+    categories,
+    schedules,
+    filter,
+    statuses,
+    format,
+    dateFormat,
+  ]);
 
   const items: readonly SchedulesTableItem[] = useMemo(() => {
     const unCompletedSchedules = filteredSchedules.filter(s => !s.completed);

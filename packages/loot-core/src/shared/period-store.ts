@@ -209,6 +209,21 @@ export function checkPeriodWrite({
   if (!isWholeNumber(candidate.budget + candidate.carryover)) {
     return 'budget plus carryover is too large';
   }
+  const overlap = findOverlappingPeriod(candidate, periods);
+  return overlap
+    ? `overlaps period ${overlap.id} (${overlap.start} to ${overlap.end})`
+    : null;
+}
+
+export function findOverlappingPeriod(
+  candidate: {
+    id?: string;
+    category: string;
+    start_date: string;
+    end_date: string;
+  },
+  periods: readonly PeriodBudgetRow[],
+) {
   for (const row of periods) {
     if (
       row.id === candidate.id ||
@@ -224,7 +239,7 @@ export function checkPeriodWrite({
       row.start_date < candidate.end_date &&
       candidate.start_date < row.end_date
     ) {
-      return `overlaps period ${row.id} (${row.start_date} to ${row.end_date})`;
+      return { id: row.id, start: row.start_date, end: row.end_date };
     }
   }
   return null;

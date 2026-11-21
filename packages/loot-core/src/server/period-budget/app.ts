@@ -496,6 +496,17 @@ async function linkSchedule({
   if (!(await exists('schedules', scheduleId))) {
     return { error: `schedule "${scheduleId}" does not exist` };
   }
+  return writeScheduleLink({ scheduleId, category });
+}
+
+// The caller must verify the schedule exists or queue its insert in the same batch.
+export async function writeScheduleLink({
+  scheduleId,
+  category,
+}: {
+  scheduleId: string;
+  category: string;
+}): Promise<PeriodWriteResult> {
   if (!(await exists('categories', category))) {
     return { error: `category "${category}" does not exist` };
   }
