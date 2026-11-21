@@ -31,7 +31,9 @@ import {
   getHasTransactionsQuery,
   getNextDate,
   getNextDateAfter,
+  getScheduleCategoryId,
   getScheduledAmount,
+  getSchedulePayeeIds,
   getScheduleTransactionFields,
   getStatus,
   recurConfigToRSchedule,
@@ -117,6 +119,21 @@ export function updateConditions(
 ) {
   const scheduleConds = extractScheduleConds(conditions);
   const newScheduleConds = extractScheduleConds(newConditions);
+  const existingCategoryIsEmpty = Boolean(
+    scheduleConds.category &&
+    !getScheduleCategoryId({ _conditions: conditions }),
+  );
+  const existingPayeeIsEmpty = Boolean(
+    (scheduleConds.payee || scheduleConds.payees) &&
+    getSchedulePayeeIds({ _conditions: conditions }).length === 0,
+  );
+  const existingAccountIsEmpty = Boolean(
+    scheduleConds.account &&
+    !(
+      typeof scheduleConds.account.value === 'string' &&
+      scheduleConds.account.value.trim().length > 0
+    ),
+  );
 
   const replacements = zip(
     Object.values(scheduleConds),
@@ -127,13 +144,20 @@ export function updateConditions(
     if (
       (cond === scheduleConds.payee &&
         (newScheduleConds.payees ||
-          (replaceOptional && !newScheduleConds.payee))) ||
+          (replaceOptional &&
+            !newScheduleConds.payee &&
+            !existingPayeeIsEmpty))) ||
       (cond === scheduleConds.payees &&
-        (replaceOptional || newScheduleConds.payee) &&
+        (newScheduleConds.payee ||
+          (replaceOptional && !existingPayeeIsEmpty)) &&
         !newScheduleConds.payees) ||
       (replaceOptional &&
-        ((cond === scheduleConds.category && !newScheduleConds.category) ||
-          (cond === scheduleConds.account && !newScheduleConds.account)))
+        ((cond === scheduleConds.category &&
+          !newScheduleConds.category &&
+          !existingCategoryIsEmpty) ||
+          (cond === scheduleConds.account &&
+            !newScheduleConds.account &&
+            !existingAccountIsEmpty)))
     ) {
       return [];
     }

@@ -220,3 +220,73 @@ it.each([
     expect(isCleanupEligibleSchedule({ _conditions: conditions })).toBe(false);
   },
 );
+
+const renameFields = {
+  name: 'Renamed',
+  category: '',
+  payees: [],
+  account: null,
+  amount: -100,
+  amountOp: 'is',
+  date: '2026-03-10',
+  posts_transaction: false,
+  custom_upcoming_length: null,
+} satisfies Parameters<typeof updateScheduleConditions>[1];
+
+it('preserves an empty category on rename and can replace it with a valid category', () => {
+  const emptyCategory = {
+    field: 'category',
+    op: 'is',
+    value: '',
+  } satisfies RuleConditionEntity;
+  const payees = {
+    field: 'payee',
+    op: 'oneOf',
+    value: ['first'],
+  } satisfies RuleConditionEntity;
+  const schedule = { _conditions: [emptyCategory, payees] };
+  const renamed = updateScheduleConditions(schedule, {
+    ...renameFields,
+    payees: ['first'],
+  });
+  expect(renamed.conditions).toEqual(
+    expect.arrayContaining([emptyCategory, payees]),
+  );
+  expect(isCleanupEligibleSchedule({ _conditions: renamed.conditions })).toBe(
+    false,
+  );
+
+  const replaced = updateScheduleConditions(schedule, {
+    ...renameFields,
+    payees: ['first'],
+    category: 'insurance',
+  });
+  expect(
+    replaced.conditions?.filter(condition => condition.field === 'category'),
+  ).toEqual([{ ...emptyCategory, value: 'insurance' }]);
+  expect(isCleanupEligibleSchedule({ _conditions: replaced.conditions })).toBe(
+    true,
+  );
+});
+
+it.each([
+  { field: 'payee', op: 'oneOf', value: [] },
+  { field: 'payee', op: 'is', value: '' },
+  { field: 'account', op: 'is', value: '' },
+] satisfies RuleConditionEntity[])(
+  'preserves empty $field $op on rename',
+  condition => {
+    const category = {
+      field: 'category',
+      op: 'is',
+      value: 'insurance',
+    } satisfies RuleConditionEntity;
+    const renamed = updateScheduleConditions(
+      { _conditions: [category, condition] },
+      { ...renameFields, category: 'insurance' },
+    );
+    expect(renamed.conditions).toEqual(
+      expect.arrayContaining([category, condition]),
+    );
+  },
+);

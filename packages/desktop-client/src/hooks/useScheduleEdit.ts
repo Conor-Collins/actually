@@ -6,6 +6,7 @@ import * as monthUtils from '@actual-app/core/shared/months';
 import { q } from '@actual-app/core/shared/query';
 import {
   extractScheduleConds,
+  getScheduleCategoryId,
   getScheduledAmount,
   getSchedulePayeeIds,
 } from '@actual-app/core/shared/schedules';
@@ -80,8 +81,12 @@ function createScheduleEditReducer(useGetScheduledAmount: boolean = false) {
           isCustom,
           fields: {
             payees: getSchedulePayeeIds(schedule),
-            category: conds.category?.value ?? '',
-            account: schedule._account ?? null,
+            category: getScheduleCategoryId(schedule) ?? '',
+            account:
+              typeof schedule._account === 'string' &&
+              schedule._account.trim().length > 0
+                ? schedule._account
+                : null,
             amount: schedule._amount || 0,
             amountOp: schedule._amountOp || 'isapprox',
             date: schedule._date ?? null,

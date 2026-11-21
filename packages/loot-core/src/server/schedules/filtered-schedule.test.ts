@@ -657,3 +657,123 @@ it.each([
     expect(data).toEqual([{ id: unrelated.id, schedule: null }]);
   },
 );
+
+describe.each(['editor conditions', 'omitted empty conditions'] as const)(
+  'rename and reopen with %s',
+  mode => {
+    it.each([
+      {
+        name: 'empty category',
+        category: emptyCategory,
+        payees: { ...emptyPayeeList, value: ['mutual-acme'] },
+      },
+      {
+        name: 'empty payees and account',
+        category: insuranceCategory,
+        payees: emptyPayeeList,
+      },
+    ])(
+      'keeps cleanup restricted with $name',
+      async ({ name, category, payees }) => {
+        const emptyAccount = {
+          field: 'account',
+          op: 'is',
+          value: '',
+        } satisfies RuleConditionEntity;
+        const original = [
+          category,
+          payees,
+          ...(name === 'empty category' ? [] : [emptyAccount]),
+          ...conditions.filter(
+            condition =>
+              condition.field === 'date' || condition.field === 'amount',
+          ),
+        ];
+        const id = await runMutator(() =>
+          schedules['schedule/create']({
+            schedule: { name },
+            conditions: original,
+          }),
+        );
+        await db.insertTransaction({
+          id: 'unrelated',
+          account: 'card',
+          category: 'insurance',
+          payee: 'mutual-acme',
+          date: '2026-03-10',
+          amount: -100,
+        });
+
+        const {
+          data: [before],
+        } = await aqlQuery(q('schedules').filter({ id }).select('*'));
+        const savedConditions: RuleConditionEntity[] = before._conditions;
+        const serialized =
+          mode === 'editor conditions'
+            ? savedConditions
+            : savedConditions.filter(condition =>
+                Array.isArray(condition.value)
+                  ? condition.value.length > 0
+                  : condition.value !== '',
+              );
+        await runMutator(() =>
+          schedules['schedule/update']({
+            schedule: { id, name: 'Renamed' },
+            conditions: serialized,
+            replaceOptionalConditions: true,
+          }),
+        );
+
+        const request = { id, year: '2026' };
+        const {
+          data: [renamed],
+        } = await aqlQuery(q('schedules').filter({ id }).select('*'));
+        expect(renamed.name).toBe('Renamed');
+        if (name === 'empty category') {
+          await expect(
+            schedules['schedule/preview-cleanup'](request),
+          ).rejects.toThrow('Schedule has an empty category condition');
+          expect(isCleanupEligibleSchedule(renamed)).toBe(false);
+          await expect(
+            runMutator(() =>
+              schedules['schedule/apply-cleanup']({
+                request,
+                plan: {
+                  category: null,
+                  amounts: [],
+                  replacements: [],
+                  links: [],
+                  moves: [],
+                },
+                actions: ['links'],
+              }),
+            ),
+          ).rejects.toThrow('Schedule has an empty category condition');
+        } else {
+          const plan = await schedules['schedule/preview-cleanup'](request);
+          expect(plan.links).toEqual([]);
+          expect(
+            await runMutator(() =>
+              schedules['schedule/apply-cleanup']({
+                request,
+                plan,
+                actions: ['links'],
+              }),
+            ),
+          ).toEqual({ changed: false });
+        }
+        expect(renamed._conditions).toEqual(
+          expect.arrayContaining(
+            savedConditions.map(condition =>
+              expect.objectContaining(condition),
+            ),
+          ),
+        );
+        const { data } = await aqlQuery(
+          q('transactions').filter({ id: 'unrelated' }).select('schedule'),
+        );
+        expect(data).toEqual([{ id: 'unrelated', schedule: null }]);
+      },
+    );
+  },
+);

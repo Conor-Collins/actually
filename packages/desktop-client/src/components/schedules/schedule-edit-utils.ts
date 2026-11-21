@@ -1,4 +1,8 @@
-import { extractScheduleConds } from '@actual-app/core/shared/schedules';
+import {
+  extractScheduleConds,
+  getScheduleCategoryId,
+  getSchedulePayeeIds,
+} from '@actual-app/core/shared/schedules';
 import { ungroupTransactions } from '@actual-app/core/shared/transactions';
 import type {
   RecurConfig,
@@ -17,6 +21,22 @@ export function updateScheduleConditions(
   fields: ScheduleFormFields,
 ): { error?: string; conditions?: RuleConditionEntity[] } {
   const conds = extractScheduleConds(schedule._conditions);
+  const hadEmptyCategory = Boolean(
+    conds.category && !getScheduleCategoryId(schedule),
+  );
+  const hadEmptyPayee = Boolean(
+    (conds.payees || conds.payee) && getSchedulePayeeIds(schedule).length === 0,
+  );
+  const existingAccountId =
+    typeof conds.account?.value === 'string' &&
+    conds.account.value.trim().length > 0
+      ? conds.account.value
+      : null;
+  const hadEmptyAccount = Boolean(conds.account && !existingAccountId);
+  const nextCategory =
+    typeof fields.category === 'string' ? fields.category.trim() : '';
+  const nextAccount =
+    typeof fields.account === 'string' ? fields.account.trim() : '';
 
   const updateCond = (
     cond: ReturnType<typeof extractScheduleConds>[keyof ReturnType<
@@ -51,17 +71,23 @@ export function updateScheduleConditions(
       fields.payees.length > 1 ||
       (fields.payees.length === 1 &&
         (Boolean(conds.payees) ||
-          (Boolean(fields.category) && (!conds.payee || !conds.category))))
+          (Boolean(nextCategory) && (!conds.payee || !conds.category))))
         ? updateCond(conds.payees, 'oneOf', 'payee', fields.payees)
         : fields.payees.length === 1
           ? updateCond(conds.payee, 'is', 'payee', fields.payees[0])
-          : null,
-      fields.category
+          : hadEmptyPayee
+            ? (conds.payees ?? conds.payee)
+            : null,
+      nextCategory
         ? updateCond(conds.category, 'is', 'category', fields.category)
-        : null,
-      fields.account
+        : hadEmptyCategory
+          ? conds.category
+          : null,
+      nextAccount
         ? updateCond(conds.account, 'is', 'account', fields.account)
-        : null,
+        : hadEmptyAccount
+          ? conds.account
+          : null,
       updateCond(conds.date, 'isapprox', 'date', fields.date),
       // We don't use `updateCond` for amount because we want to
       // overwrite it completely
