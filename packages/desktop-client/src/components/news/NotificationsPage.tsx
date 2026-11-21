@@ -9,7 +9,6 @@ import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
 
 import { Link } from '#components/common/Link';
-import { MOBILE_NAV_HEIGHT } from '#components/mobile/MobileNavTabs';
 import { Page } from '#components/Page';
 import { Setting } from '#components/settings/UI';
 import { useNewsFeed } from '#hooks/useNewsFeed';
@@ -56,7 +55,6 @@ export function NotificationsPage() {
           gap: 30,
           // Keeps lines of text to a comfortable reading length.
           maxWidth: 800,
-          paddingBottom: MOBILE_NAV_HEIGHT,
         }}
       >
         {isLoading && (

@@ -133,7 +133,7 @@ export function MobilePayeeEditPage() {
             paddingLeft: styles.mobileEditingPadding,
             paddingRight: styles.mobileEditingPadding,
             paddingTop: 10,
-            paddingBottom: 'calc(10px + env(safe-area-inset-bottom))',
+            paddingBottom: 10,
             backgroundColor: theme.tableHeaderBackground,
             borderTopWidth: 1,
             borderColor: theme.tableBorder,

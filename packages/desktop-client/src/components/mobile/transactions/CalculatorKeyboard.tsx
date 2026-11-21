@@ -69,7 +69,8 @@ export const CalculatorKeyboard = memo(function CalculatorAmountInput({
         overflow: 'visible',
         position: 'fixed',
         padding: 8,
-        paddingBottom: 'calc(20px + env(safe-area-inset-bottom))',
+        paddingBottom:
+          'calc(20px + var(--fixed-content-safe-area-bottom, env(safe-area-inset-bottom)))',
         right: 0,
         transform: isOpenDebounced ? 'translateY(0)' : 'translateY(100%)',
         transitionProperty: 'transform',

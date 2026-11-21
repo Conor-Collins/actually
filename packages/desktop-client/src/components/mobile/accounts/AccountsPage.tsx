@@ -29,6 +29,7 @@ import { useMoveAccountMutation, useSyncAndDownloadMutation } from '#accounts';
 import { isAccountFailedSync } from '#accounts/syncStatus';
 import { makeAmountFullStyle } from '#components/budget/util';
 import { MOBILE_NAV_HEIGHT } from '#components/mobile/MobileNavTabs';
+import { MobileSettingsButton } from '#components/mobile/MobileSettingsButton';
 import { PullToRefresh } from '#components/mobile/PullToRefresh';
 import { MobilePageHeader, Page } from '#components/Page';
 import { CellValue, CellValueText } from '#components/spreadsheet/CellValue';
@@ -338,6 +339,7 @@ function AllAccountList({
       header={
         <MobilePageHeader
           title={t('Accounts')}
+          leftContent={<MobileSettingsButton />}
           rightContent={
             <Button
               variant="bare"
@@ -356,10 +358,7 @@ function AllAccountList({
         <EmptyMessage onAddAccount={onAddAccount} />
       ) : (
         <PullToRefresh onRefresh={onSync}>
-          <View
-            aria-label={t('Account list')}
-            style={{ paddingBottom: MOBILE_NAV_HEIGHT }}
-          >
+          <View aria-label={t('Account list')}>
             <AccountHeader
               id={ALL_ACCOUNTS_ID}
               name={t('All accounts')}

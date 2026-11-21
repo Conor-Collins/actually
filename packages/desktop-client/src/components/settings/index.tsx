@@ -193,7 +193,7 @@ function SettingsSections({ title, children }: SettingsSectionsProps) {
         maxWidth: 640,
         width: '100%',
         gap: spacing.xl,
-        paddingBottom: MOBILE_NAV_HEIGHT,
+        paddingBottom: isNarrowWidth ? undefined : MOBILE_NAV_HEIGHT,
       }}
     >
       {children}
@@ -233,7 +233,6 @@ export function SettingsIndex() {
           marginTop: 10,
           flexShrink: 0,
           gap: 30,
-          paddingBottom: MOBILE_NAV_HEIGHT,
         }}
       >
         <View

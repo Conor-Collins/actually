@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 
+import { useResponsive } from '@actual-app/components/hooks/useResponsive';
 import { styles } from '@actual-app/components/styles';
 import { Text } from '@actual-app/components/text';
 import { View } from '@actual-app/components/view';
@@ -24,6 +25,7 @@ import { useBuiltInBankSyncProviders } from './useBuiltInBankSyncProviders';
 
 export function BankSync() {
   const { t } = useTranslation();
+  const { isNarrowWidth } = useResponsive();
   const { data: accounts = [] } = useAccounts();
   const dispatch = useDispatch();
   const syncSourceReadable = useMemo(() => getSyncSourceReadable(t), [t]);
@@ -82,7 +84,13 @@ export function BankSync() {
   }, []);
 
   return (
-    <View style={{ flexShrink: 0, gap: 24, paddingBottom: MOBILE_NAV_HEIGHT }}>
+    <View
+      style={{
+        flexShrink: 0,
+        gap: 24,
+        paddingBottom: isNarrowWidth ? undefined : MOBILE_NAV_HEIGHT,
+      }}
+    >
       <BuiltInProviders
         providers={providers}
         syncServerStatus={syncServerStatus}

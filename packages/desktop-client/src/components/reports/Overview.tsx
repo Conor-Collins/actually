@@ -23,6 +23,7 @@ import type {
 } from '@actual-app/core/types/models';
 
 import { MOBILE_NAV_HEIGHT } from '#components/mobile/MobileNavTabs';
+import { MobileSettingsButton } from '#components/mobile/MobileSettingsButton';
 import { MobilePageHeader, Page } from '#components/Page';
 import { useAccounts } from '#hooks/useAccounts';
 import {
@@ -482,6 +483,7 @@ export function Overview({ dashboard }: OverviewProps) {
         isNarrowWidth ? (
           <View>
             <MobilePageHeader
+              rightContent={<MobileSettingsButton />}
               title={
                 <View
                   style={{
@@ -765,7 +767,10 @@ export function Overview({ dashboard }: OverviewProps) {
           <View
             data-testid="reports-overview"
             innerRef={containerRef}
-            style={{ userSelect: 'none', paddingBottom: MOBILE_NAV_HEIGHT }}
+            style={{
+              userSelect: 'none',
+              paddingBottom: isNarrowWidth ? undefined : MOBILE_NAV_HEIGHT,
+            }}
           >
             {isMounted && (
               <ReactGridLayout

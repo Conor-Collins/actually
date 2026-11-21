@@ -26,7 +26,7 @@ test.describe('Mobile Transactions', () => {
     await page?.close();
   });
 
-  test('creates a transaction via footer button', async () => {
+  test('creates a transaction via header button', async () => {
     const transactionEntryPage = await navigation.goToTransactionEntryPage();
     await expect(page).toMatchThemeScreenshots();
 
@@ -50,7 +50,8 @@ test.describe('Mobile Transactions', () => {
     await expect(page).toMatchThemeScreenshots();
 
     await transactionEntryPage.createTransaction();
-    await expect(page.getByLabel('Transaction list')).toHaveCount(0);
+    await expect(page).toHaveURL(/\/accounts\/all$/);
+    await expect(page.getByLabel('Transaction list')).toBeVisible();
     await expect(page).toMatchThemeScreenshots();
   });
 
