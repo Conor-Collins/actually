@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-11-21T03:17:00Z'
+updated_date: '2026-11-21T21:16:00Z'
 labels:
   - v2.0.0
   - semver-major
@@ -40,3 +41,9 @@ Gating: major-version umbrella ticket. Requires owner UI specification, design s
 - [ ] #4 Mobile delivers a modern, touch-friendly interface with sophisticated control — full editing, filtering, period and schedule management, and compact diagrams that keep cash available, monthly actuals, period remaining, overspending, and expected remaining unmistakably distinct
 - [ ] #5 SemVer major version is bumped to 2.0.0 (breaking UI changes documented and existing v1 budgets/sync state load cleanly without data loss), and full verification passes: typecheck, lint, unit/integration tests, desktop and mobile E2E suites, light/dark themes, and WCAG 2.1 AA contrast and keyboard checks
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+2026-11-21: Updated v1-to-v2 baseline is TASK-27 (v1.0.0). Remains parked in To Do under owner-approval.
+<!-- SECTION:NOTES:END -->
