@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 
 import { Button } from '@actual-app/components/button';
 import { SvgCheveronDown } from '@actual-app/components/icons/v1';
+import { styles } from '@actual-app/components/styles';
 import { Text } from '@actual-app/components/text';
 import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
@@ -34,6 +35,7 @@ function CashStrip({
   view: PeriodBudgetView;
 }) {
   const { t } = useTranslation();
+  const summaryId = useId();
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const { data, asOf } = monthly;
@@ -46,6 +48,25 @@ function CashStrip({
   if (inAccounts === null && owed === null && view.attention.length === 0) {
     return null;
   }
+
+  const shortfallSummary = t('Shortfalls ({{count}})', {
+    count: shortfalls.length,
+  });
+  const attentionSummary = t('Needs attention ({{count}})', {
+    count: view.attention.length,
+  });
+  const summary = [
+    inAccounts === null
+      ? null
+      : t('In accounts {{amount}}', { amount: labels.spokenMoney(inAccounts) }),
+    owed === null
+      ? null
+      : t('Owed {{amount}}', { amount: labels.spokenMoney(owed) }),
+    forecast === null ? null : shortfallSummary,
+    attentionSummary,
+  ]
+    .filter(Boolean)
+    .join(', ');
 
   return (
     <View
@@ -61,6 +82,7 @@ function CashStrip({
         variant="bare"
         aria-expanded={isOpen}
         aria-label={t('Cash and period budget alerts')}
+        aria-describedby={summaryId}
         onPress={() => setIsOpen(!isOpen)}
         style={{
           justifyContent: 'flex-start',
@@ -68,6 +90,9 @@ function CashStrip({
           padding: '6px 10px',
         }}
       >
+        <Text id={summaryId} style={styles.visuallyHidden}>
+          {summary}
+        </Text>
         <Text
           style={{
             display: 'flex',
@@ -95,12 +120,10 @@ function CashStrip({
                     : theme.pageTextSubdued,
               }}
             >
-              {t('Shortfalls ({{count}})', { count: shortfalls.length })}
+              {shortfallSummary}
             </Text>
           )}
-          <Text>
-            {t('Needs attention ({{count}})', { count: view.attention.length })}
-          </Text>
+          <Text>{attentionSummary}</Text>
           <SvgCheveronDown
             width={12}
             height={12}

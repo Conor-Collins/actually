@@ -41,7 +41,7 @@ describe('SettingsNav', () => {
     vi.mocked(useIsTestEnv).mockReturnValue(false);
   });
 
-  it('links every section under /settings', () => {
+  it('links sections hidden from the sidebar by default', () => {
     renderNav('/settings');
 
     const hrefs = screen
@@ -54,7 +54,6 @@ describe('SettingsNav', () => {
       '/settings/tags',
       '/settings/rules',
       '/settings/bank-sync',
-      '/settings/period-budget',
       '/settings/advanced',
       '/settings/experimental',
     ]);
@@ -77,10 +76,18 @@ describe('SettingsNav', () => {
       '/settings/tags',
       '/settings/rules',
       '/settings/bank-sync',
-      '/settings/period-budget',
       '/settings/advanced',
       '/settings/experimental',
     ]);
+  });
+
+  it('links Period Budget in Settings when hidden from the sidebar', () => {
+    renderNav('/settings', [{ id: 'period-budget', hidden: true }]);
+
+    expect(screen.getByRole('link', { name: 'Period Budget' })).toHaveAttribute(
+      'href',
+      '/settings/period-budget',
+    );
   });
 
   it('hides bank sync without a server', () => {

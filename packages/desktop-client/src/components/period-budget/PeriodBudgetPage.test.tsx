@@ -38,6 +38,7 @@ import {
   TestProviders,
 } from '#mocks';
 import { payeeQueries } from '#payees';
+import { periodBudgetQueries } from '#period-budget';
 import {
   calculate,
   charge,
@@ -51,7 +52,7 @@ import { BudgetCashStrip } from './BudgetCashStrip';
 import { BudgetPeriodsProvider } from './BudgetPeriods';
 import { BudgetPeriodTotals } from './BudgetPeriodTotals';
 import { PeriodBudgetPage } from './PeriodBudgetPage';
-import { clusterTimelineMarkers } from './TimelineMarkers';
+import { clusterTimelineMarkers, TimelineMarkers } from './TimelineMarkers';
 
 // The test setup loads the accounts and payees queries before the connection mock.
 vi.hoisted(vi.resetModules);
@@ -915,9 +916,16 @@ describe('PeriodBudgetPage', () => {
   });
 
   describe('monthly Budget integration', () => {
-    function renderBudgetPeriod(isMobile: boolean, month = '2017-06') {
+    function renderBudgetPeriod(
+      isMobile: boolean,
+      month = '2017-06',
+      isPrivate = false,
+    ) {
       const { queryClient, store } = createBook();
       responsive.isNarrowWidth = isMobile;
+      if (isPrivate) {
+        store.dispatch(mergeSyncedPrefs({ isPrivacyEnabled: 'true' }));
+      }
       render(
         <TestProviders store={store} queryClient={queryClient}>
           <MemoryRouter>
@@ -942,6 +950,7 @@ describe('PeriodBudgetPage', () => {
           </MemoryRouter>
         </TestProviders>,
       );
+      return queryClient;
     }
 
     it('uses fixed calendar controls and quick-jumps within the multi-month bounds', async () => {
@@ -962,6 +971,13 @@ describe('PeriodBudgetPage', () => {
       expect(previous).toHaveAccessibleName('Previous month');
       expect(next).toHaveAccessibleName('Next month');
       expect(headline).toHaveTextContent('June 2017');
+      const displayed = screen.getAllByTestId('selected-budget-month');
+      expect(displayed[0]).toBe(headline);
+      expect(headline).toBeVisible();
+      expect(displayed.map(element => element.dataset.month)).toEqual([
+        '2017-06',
+        '2017-07',
+      ]);
       await userEvent.click(today);
       await userEvent.click(previous);
       await userEvent.click(next);
@@ -1083,6 +1099,82 @@ describe('PeriodBudgetPage', () => {
       ).toEqual([2, 1]);
     });
 
+    it('loads schedule suggestions only when schedule linking is available', async () => {
+      const queryClient = renderBudgetPeriod(false);
+      const suggestions = periodBudgetQueries.suggestedCategories().queryKey;
+      const snapshot = await screen.findByRole('button', {
+        name: 'Period details for Tax',
+      });
+      expect(queryClient.getQueryState(suggestions)).toBeUndefined();
+      await userEvent.click(snapshot);
+      expect(queryClient.getQueryState(suggestions)).toBeUndefined();
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Cadence and schedules' }),
+      );
+      await waitFor(() =>
+        expect(queryClient.getQueryState(suggestions)?.status).toBe('success'),
+      );
+    });
+
+    it('lets the keyboard choose either period from a cluster across a boundary', async () => {
+      const openMay = vi.fn();
+      const openJune = vi.fn();
+      render(
+        <TimelineMarkers
+          center={12}
+          markers={[
+            {
+              id: 'may',
+              position: 0.41,
+              label: 'May 31 payment',
+              onClick: openMay,
+            },
+            {
+              id: 'june',
+              position: 0.413,
+              label: 'June 1 payment',
+              onClick: openJune,
+            },
+          ]}
+        />,
+      );
+      const cluster = screen.getByRole('button', {
+        name: 'Timeline markers (2)',
+      });
+      cluster.focus();
+      await userEvent.keyboard('{Enter}{ArrowDown}{ArrowDown}{Enter}');
+      expect(openJune).toHaveBeenCalledOnce();
+      expect(openMay).not.toHaveBeenCalled();
+      cluster.focus();
+      await userEvent.keyboard('{Enter}{ArrowDown}{Enter}');
+      expect(openMay).toHaveBeenCalledOnce();
+    });
+
+    it('opens an assigned period from a cluster that starts with an unassigned payment', async () => {
+      const openAssigned = vi.fn();
+      render(
+        <TimelineMarkers
+          center={30}
+          markers={[
+            { id: 'unassigned', position: 0.41, label: 'Unassigned payment' },
+            {
+              id: 'assigned',
+              position: 0.413,
+              label: 'Assigned payment',
+              onClick: openAssigned,
+            },
+          ]}
+        />,
+      );
+      screen.getByRole('button', { name: 'Timeline markers (2)' }).focus();
+      await userEvent.keyboard('{Enter}');
+      expect(
+        within(screen.getByRole('menu')).getByText('Unassigned payment'),
+      ).toBeVisible();
+      await userEvent.keyboard('{ArrowDown}{ArrowDown}{Enter}');
+      expect(openAssigned).toHaveBeenCalledOnce();
+    });
+
     it('expands the cash and attention strip', async () => {
       includeShortfall = true;
       renderBudgetPeriod(false);
@@ -1092,6 +1184,9 @@ describe('PeriodBudgetPage', () => {
       expect(strip).toHaveTextContent('In accounts 6,200.00');
       expect(strip).toHaveTextContent('Owed 1,200.00');
       expect(strip).toHaveTextContent('Shortfalls (1)');
+      expect(strip).toHaveAccessibleDescription(
+        /^In accounts 6,200.00, Owed 1,200.00, Shortfalls \(1\), Needs attention \(\d+\)$/,
+      );
       expect(strip).toHaveTextContent(/Needs attention \(\d+\)/);
       expect(
         screen.queryByRole('region', { name: 'Needs attention' }),
@@ -1107,6 +1202,16 @@ describe('PeriodBudgetPage', () => {
       expect(
         screen.queryByRole('region', { name: 'Needs attention' }),
       ).not.toBeInTheDocument();
+    });
+
+    it('keeps cash balances out of the accessible description in privacy mode', async () => {
+      renderBudgetPeriod(false, '2017-06', true);
+      const strip = await screen.findByRole('button', {
+        name: 'Cash and period budget alerts',
+      });
+      expect(strip).toHaveAccessibleDescription(
+        /^In accounts hidden amount, Owed hidden amount, Shortfalls \(0\), Needs attention \(\d+\)$/,
+      );
     });
 
     it('opens period details in a narrow Budget sheet', async () => {

@@ -83,6 +83,8 @@ export function MonthPicker({
       </Button>
       <Button
         ref={trigger}
+        data-testid="selected-budget-month"
+        data-month={startMonth}
         variant="bare"
         aria-expanded={year !== null}
         aria-haspopup="dialog"
@@ -95,16 +97,19 @@ export function MonthPicker({
       >
         {headline}
       </Button>
-      {months.rangeInclusive(startMonth, lastDisplayed).map(month => (
-        <span
-          key={month}
-          style={styles.visuallyHidden}
-          data-testid="selected-budget-month"
-          data-month={month}
-        >
-          {months.format(month, 'MMM', locale)}
-        </span>
-      ))}
+      {months
+        .rangeInclusive(startMonth, lastDisplayed)
+        .slice(1)
+        .map(month => (
+          <span
+            key={month}
+            style={styles.visuallyHidden}
+            data-testid="selected-budget-month"
+            data-month={month}
+          >
+            {months.format(month, 'MMM', locale)}
+          </span>
+        ))}
       <Popover
         triggerRef={trigger}
         isOpen={year !== null}

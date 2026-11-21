@@ -614,7 +614,9 @@ describe('the forecast of the period budget', () => {
       ]);
       for (const mark of marks) {
         // Solid
-        expect(styleOf(mark.children[0])).not.toContain('border: 2px solid');
+        expect(
+          styleOf(within(mark).getByTitle(/Payment/).children[0]),
+        ).not.toContain('border: 2px solid');
       }
     });
 
@@ -636,7 +638,9 @@ describe('the forecast of the period budget', () => {
         ['67.188%', '50%'],
       ]);
       for (const mark of [overdue, expected]) {
-        expect(styleOf(mark.children[0])).toContain('border: 2px solid');
+        expect(
+          styleOf(within(mark).getByTitle(/charge/).children[0]),
+        ).toContain('border: 2px solid');
       }
 
       const runs = within(graph).getAllByTestId('graph-expected');
@@ -815,6 +819,15 @@ describe('the forecast of the period budget', () => {
         name: 'Payment on 07/02/2017, late for June 2017: Bakery, -40.00',
       });
       expect(late.style.left).toBe('98.529%');
+      expect(late).toHaveStyle({ width: '20px', height: '20px' });
+      expect(
+        within(late).getByTitle(
+          'Payment on 07/02/2017, late for June 2017: Bakery, -40.00',
+        ),
+      ).toHaveStyle({
+        position: 'absolute',
+        inset: '0',
+      });
       expect(
         within(graph)
           .getAllByTestId('graph-late-link')

@@ -16,11 +16,7 @@ import {
   horizonEndFor,
   periodBudgetQueries,
 } from '#period-budget';
-import type {
-  Axis,
-  PeriodBudgetView,
-  SuggestedCategories,
-} from '#period-budget';
+import type { Axis, PeriodBudgetView } from '#period-budget';
 
 export type PeriodBudgetData = {
   // Null until the first calculation has arrived
@@ -30,7 +26,6 @@ export type PeriodBudgetData = {
   rows: PeriodBudgetRows | null;
   accounts: AccountEntity[];
   schedules: ScheduleEntity[];
-  suggestedCategories: SuggestedCategories;
   error: Error | null;
   categoryName: (id: string) => string;
   payeeName: (id: string | null) => string;
@@ -76,7 +71,6 @@ export function usePeriodBudgetDataForDates(dates: UsePeriodBudgetDataProps[]) {
     })),
   });
   const schedulesQuery = useQuery(periodBudgetQueries.schedules());
-  const suggestedQuery = useQuery(periodBudgetQueries.suggestedCategories());
   // These lookups must load on the page's first offline visit.
   const { data: categories } = useQuery({
     ...categoryQueries.list(),
@@ -145,7 +139,6 @@ export function usePeriodBudgetDataForDates(dates: UsePeriodBudgetDataProps[]) {
       rows,
       accounts,
       schedules,
-      suggestedCategories: suggestedQuery.data ?? {},
       error: rowsQuery.error ?? calculationQuery.error ?? null,
       categoryName,
       payeeName,

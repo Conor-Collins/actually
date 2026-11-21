@@ -1,6 +1,10 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { Button } from '@actual-app/components/button';
+import { Menu } from '@actual-app/components/menu';
+import { Popover } from '@actual-app/components/popover';
+import type { CSSProperties } from '@actual-app/components/styles';
 import { Text } from '@actual-app/components/text';
 import { theme } from '@actual-app/components/theme';
 
@@ -47,7 +51,6 @@ export function TimelineMarkers({
   center: number;
   inset?: number;
 }) {
-  const { t } = useTranslation();
   const [width, setWidth] = useState(360);
   const ref = useResizeObserver<HTMLSpanElement>(entry =>
     setWidth(entry.width),
@@ -70,41 +73,89 @@ export function TimelineMarkers({
         if (cluster.length === 1) {
           return <TimelineDot key={first.id} center={center} {...first} />;
         }
-        const position =
-          cluster.reduce((sum, marker) => sum + marker.position, 0) /
-          cluster.length;
-        const label = cluster.map(marker => marker.label).join('\n');
         return (
-          <Text
-            key={first.id}
-            role="img"
-            aria-label={label}
-            title={label}
-            onClick={first.onClick}
-            style={{
-              position: 'absolute',
-              width: MARKER_WIDTH,
-              height: 14,
-              borderRadius: 8,
-              border: `1px solid ${theme.tableBackground}`,
-              backgroundColor: theme.pageTextDark,
-              color: theme.tableBackground,
-              fontSize: 9,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              pointerEvents: 'auto',
-              left: percent(position),
-              top: center - 7,
-              transform: 'translateX(-50%)',
-            }}
-          >
-            <span aria-hidden>
-              {cluster.length < 100 ? cluster.length : t('99+')}
-            </span>
-          </Text>
+          <ClusterMarker key={first.id} cluster={cluster} center={center} />
         );
       })}
     </Text>
+  );
+}
+
+function ClusterMarker({
+  cluster,
+  center,
+}: {
+  cluster: TimelineMarker[];
+  center: number;
+}) {
+  const { t } = useTranslation();
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const position =
+    cluster.reduce((sum, marker) => sum + marker.position, 0) / cluster.length;
+  const label = cluster.map(marker => marker.label).join('\n');
+  const count = cluster.length < 100 ? cluster.length : t('99+');
+  const badgeStyle: CSSProperties = {
+    position: 'absolute',
+    width: MARKER_WIDTH,
+    height: 14,
+    borderRadius: 8,
+    border: `1px solid ${theme.tableBackground}`,
+    backgroundColor: theme.pageTextDark,
+    color: theme.tableBackground,
+    fontSize: 9,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    pointerEvents: 'auto',
+    left: percent(position),
+    top: center - 7,
+    transform: 'translateX(-50%)',
+  };
+
+  if (!cluster.some(marker => marker.onClick !== undefined)) {
+    return (
+      <Text role="img" aria-label={label} title={label} style={badgeStyle}>
+        <span aria-hidden>{count}</span>
+      </Text>
+    );
+  }
+
+  return (
+    <>
+      <Button
+        ref={triggerRef}
+        variant="bare"
+        bounce={false}
+        aria-label={t('Timeline markers ({{count}})', {
+          count: cluster.length,
+        })}
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        onPress={() => setIsOpen(!isOpen)}
+        style={{ ...badgeStyle, padding: 0 }}
+      >
+        <Text
+          aria-hidden
+          title={label}
+          style={{ position: 'absolute', inset: 0 }}
+        >
+          {count}
+        </Text>
+      </Button>
+      <Popover triggerRef={triggerRef} isOpen={isOpen} onOpenChange={setIsOpen}>
+        <Menu
+          items={cluster.map(marker => ({
+            name: marker.id,
+            text: marker.label,
+            disabled: marker.onClick === undefined,
+          }))}
+          onMenuSelect={id => {
+            setIsOpen(false);
+            cluster.find(marker => marker.id === id)?.onClick?.();
+          }}
+        />
+      </Popover>
+    </>
   );
 }
