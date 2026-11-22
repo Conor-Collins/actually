@@ -72,7 +72,13 @@ async function saveDiff(diff, learnCategories) {
   return {};
 }
 
-async function saveDiffAndApply(diff, changes, onChange, learnCategories) {
+async function saveDiffAndApply(
+  diff,
+  changes,
+  onChange,
+  learnCategories,
+  onRefetch: () => void,
+) {
   const remoteDiff = await saveDiff(diff, learnCategories);
   onChange(
     // TODO:
@@ -81,6 +87,7 @@ async function saveDiffAndApply(diff, changes, onChange, learnCategories) {
     // @ts-expect-error - fix me
     applyChanges(remoteDiff, changes.data),
   );
+  onRefetch();
 }
 
 type TransactionListProps = Pick<
@@ -117,6 +124,7 @@ type TransactionListProps = Pick<
   | 'columnOrder'
   | 'sortField'
   | 'transactions'
+  | 'totals'
 > & {
   tableRef: RefObject<TableHandleRef<TransactionEntity> | null>;
   allTransactions: TransactionEntity[];
@@ -155,6 +163,7 @@ export function TransactionList({
   isNew,
   isMatched,
   isFiltered,
+  totals,
   allowReorder = true,
   dateFormat,
   hideFraction,
@@ -213,11 +222,12 @@ export function TransactionList({
             onRefetch();
           } else {
             onChange(changes.newTransaction, changes.data);
-            void saveDiffAndApply(
+            await saveDiffAndApply(
               changes.diff,
               changes,
               onChange,
               isLearnCategoriesEnabled,
+              onRefetch,
             );
           }
         }
@@ -237,10 +247,11 @@ export function TransactionList({
         changes,
         onChange,
         isLearnCategoriesEnabled,
+        onRefetch,
       );
       return changes.diff.added[0].id;
     },
-    [isLearnCategoriesEnabled, onChange],
+    [isLearnCategoriesEnabled, onChange, onRefetch],
   );
 
   const onSplit = useCallback(
@@ -256,10 +267,11 @@ export function TransactionList({
         changes,
         onChange,
         isLearnCategoriesEnabled,
+        onRefetch,
       );
       return changes.diff.added[0].id;
     },
-    [isLearnCategoriesEnabled, onChange],
+    [isLearnCategoriesEnabled, onChange, onRefetch],
   );
 
   const onApplyRules = useCallback(
@@ -531,6 +543,7 @@ export function TransactionList({
         sortField={sortField}
         ascDesc={ascDesc}
         isFiltered={isFiltered}
+        totals={totals}
         onReorder={allowReorder ? onReorder : undefined}
         onBatchDelete={onBatchDelete}
         onBatchDuplicate={onBatchDuplicate}

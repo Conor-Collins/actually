@@ -131,22 +131,6 @@ export function SelectedBalance({
   );
 }
 
-type FilteredBalanceProps = {
-  filteredAmount?: number | null;
-};
-
-function FilteredBalance({ filteredAmount }: FilteredBalanceProps) {
-  const { t } = useTranslation();
-
-  return (
-    <DetailedBalance
-      name={t('Filtered balance:')}
-      balance={filteredAmount ?? 0}
-      isExactBalance
-    />
-  );
-}
-
 type MoreBalancesProps = {
   balanceQuery: { name: `balance-query-${string}`; query: Query };
 };
@@ -180,8 +164,6 @@ type BalancesProps = {
   showExtraBalances: boolean;
   onToggleExtraBalances: () => void;
   account?: AccountEntity;
-  isFiltered: boolean;
-  filteredAmount?: number | null;
 };
 
 export function Balances({
@@ -189,8 +171,6 @@ export function Balances({
   showExtraBalances,
   onToggleExtraBalances,
   account,
-  isFiltered,
-  filteredAmount,
 }: BalancesProps) {
   const selectedItems = useSelectedItems();
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -263,7 +243,6 @@ export function Balances({
       {selectedItems.size > 0 && (
         <SelectedBalance selectedItems={selectedItems} account={account} />
       )}
-      {isFiltered && <FilteredBalance filteredAmount={filteredAmount} />}
     </View>
   );
 }

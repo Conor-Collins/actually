@@ -52,6 +52,8 @@ import { useSyncedPref } from '#hooks/useSyncedPref';
 import { useSyncServerStatus } from '#hooks/useSyncServerStatus';
 
 import type { TableRef } from './Account';
+import { isDateFilter } from './account-date-filters';
+import { AccountDateRange } from './AccountDateRange';
 import { Balances } from './Balance';
 import { BalanceHistoryGraph } from './BalanceHistoryGraph';
 import { ReconcileMenu, ReconcilingMessage } from './Reconcile';
@@ -73,12 +75,14 @@ type AccountHeaderProps = {
   showEmptyMessage: boolean;
   balanceQuery: ComponentProps<typeof ReconcilingMessage>['balanceQuery'];
   reconcileAmount?: number | null;
-  isFiltered: boolean;
-  filteredAmount?: number | null;
   isSorted: boolean;
   search: string;
   filterConditions: RuleConditionEntity[];
   filterConditionsOp: 'and' | 'or';
+  rangeConditions: RuleConditionEntity[];
+  chartQuery: ComponentProps<typeof AccountDateRange>['chartQuery'];
+  onClearDateAlternatives: () => void;
+  onDateRangeChange: ComponentProps<typeof AccountDateRange>['onChange'];
   onSearch: (newSearch: string) => void;
   onAddTransaction: () => void;
   onShowTransactions: ComponentProps<
@@ -145,12 +149,14 @@ export function AccountHeader({
   showEmptyMessage,
   balanceQuery,
   reconcileAmount,
-  isFiltered,
-  filteredAmount,
   isSorted,
   search,
   filterConditions,
   filterConditionsOp,
+  rangeConditions,
+  chartQuery,
+  onDateRangeChange,
+  onClearDateAlternatives,
   onSearch,
   onAddTransaction,
   onShowTransactions,
@@ -184,6 +190,10 @@ export function AccountHeader({
 }: AccountHeaderProps) {
   const { t } = useTranslation();
 
+  const expressionDates = filterConditions.filter(isDateFilter);
+  const nonDateConditions = filterConditions.filter(
+    condition => !isDateFilter(condition),
+  );
   const [reconcileOpen, setReconcileOpen] = useState(false);
   const searchInput = useRef<HTMLInputElement>(null);
   const reconcileRef = useRef(null);
@@ -315,8 +325,6 @@ export function AccountHeader({
               showExtraBalances={showExtraBalances}
               onToggleExtraBalances={onToggleExtraBalances}
               account={account}
-              isFiltered={isFiltered}
-              filteredAmount={filteredAmount}
             />
           </View>
 
@@ -562,9 +570,35 @@ export function AccountHeader({
             </View>
           )}
         </SpaceBetween>
-        {filterConditions?.length > 0 && (
+        {reconcileAmount == null && (
+          <AccountDateRange
+            key={accountId}
+            conditions={
+              filterConditionsOp === 'and'
+                ? [...rangeConditions, ...expressionDates]
+                : rangeConditions
+            }
+            alternatives={filterConditionsOp === 'or' ? expressionDates : []}
+            onClearAlternatives={onClearDateAlternatives}
+            chartQuery={chartQuery}
+            onChange={onDateRangeChange}
+          />
+        )}
+        {(filterConditions.length > 0 ||
+          (reconcileAmount == null &&
+            filterConditionsOp === 'and' &&
+            rangeConditions.length > 0) ||
+          filterId?.id) && (
           <FiltersStack
-            conditions={filterConditions}
+            visibleConditions={
+              reconcileAmount == null ? nonDateConditions : filterConditions
+            }
+            operatorConditions={filterConditions}
+            conditions={
+              reconcileAmount == null && filterConditionsOp === 'and'
+                ? [...filterConditions, ...rangeConditions]
+                : filterConditions
+            }
             conditionsOp={filterConditionsOp}
             onUpdateFilter={onUpdateFilter}
             onDeleteFilter={onDeleteFilter}

@@ -9,6 +9,7 @@ import { FilterExpression } from './FilterExpression';
 
 type AppliedFiltersProps = {
   conditions: RuleConditionEntity[];
+  operatorConditions?: RuleConditionEntity[];
   onUpdate: (
     filter: RuleConditionEntity,
     newFilter: RuleConditionEntity,
@@ -21,6 +22,7 @@ type AppliedFiltersProps = {
 
 export function AppliedFilters({
   conditions,
+  operatorConditions = conditions,
   onUpdate,
   onDelete,
   conditionsOp,
@@ -39,7 +41,7 @@ export function AppliedFilters({
       <ConditionsOpMenu
         conditionsOp={conditionsOp}
         onChange={onConditionsOpChange}
-        conditions={conditions}
+        conditions={operatorConditions}
       />
       {conditions.map((filter: RuleConditionEntity, i: number) => (
         <FilterExpression

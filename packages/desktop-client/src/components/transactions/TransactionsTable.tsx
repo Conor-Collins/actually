@@ -168,6 +168,8 @@ import type {
   TransactionEditFunction,
   TransactionUpdateFunction,
 } from './table/utils';
+import { TransactionTotalsRow } from './TransactionTotals';
+import type { TransactionTotals } from './TransactionTotals';
 import { useTransactionRowContextActions } from './useTransactionRowContextActions';
 
 type AmountColumnWidths = {
@@ -202,10 +204,17 @@ function measureAmountColumnWidth(values: string[], minWidth: number) {
 export function useAmountColumnWidths(
   transactions: TransactionEntity[],
   balances: Record<TransactionEntity['id'], IntegerAmount> | null,
+  totals?: TransactionTotals | null,
 ): AmountColumnWidths {
   const debitCreditValues = transactions.map(t =>
     integerToCurrency(Math.abs(t.amount ?? 0)),
   );
+  if (totals) {
+    debitCreditValues.push(
+      integerToCurrency(totals.payment),
+      integerToCurrency(totals.deposit),
+    );
+  }
   const balanceValues = balances
     ? Object.values(balances).map(balance => integerToCurrency(balance))
     : [];
@@ -2621,6 +2630,7 @@ type TransactionTableInnerProps = {
   payees: PayeeEntity[];
   balances: Record<TransactionEntity['id'], IntegerAmount> | null;
   columns: TransactionTableColumnId[];
+  totals?: TransactionTotals | null;
   showReconciled: boolean;
   currentAccountId: AccountEntity['id'];
   currentCategoryId: CategoryEntity['id'];
@@ -2750,6 +2760,7 @@ function TransactionTableInner({
   const amountColumnWidths = useAmountColumnWidths(
     transactionsToRender,
     props.balances,
+    props.totals,
   );
 
   const renderRow: TableProps<TransactionEntity>['renderItem'] = ({
@@ -3003,6 +3014,14 @@ function TransactionTableInner({
           />
         )}
       </View>
+      {props.totals && (
+        <TransactionTotalsRow
+          columns={props.columns}
+          amountColumnWidths={amountColumnWidths}
+          scrollWidth={scrollWidth}
+          totals={props.totals}
+        />
+      )}
     </View>
   );
 }
@@ -3032,6 +3051,7 @@ export type TransactionTableProps = {
   // still control the availability of the account/category/group/balance/
   // cleared columns in the current view.
   columnOrder?: TransactionTableColumnId[];
+  totals?: TransactionTotals | null;
   currentAccountId: AccountEntity['id'];
   currentCategoryId: CategoryEntity['id'];
   isAdding: boolean;

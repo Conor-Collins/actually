@@ -1,4 +1,4 @@
-import React from 'react';
+import type { ReactNode } from 'react';
 
 import { SpaceBetween } from '@actual-app/components/space-between';
 import { View } from '@actual-app/components/view';
@@ -21,8 +21,14 @@ export function FiltersStack({
   filterId,
   savedFilters,
   onConditionsOpChange,
+  visibleConditions = conditions,
+  operatorConditions = visibleConditions,
+  rightActions,
 }: {
   conditions: RuleConditionEntity[];
+  rightActions?: ReactNode;
+  operatorConditions?: RuleConditionEntity[];
+  visibleConditions?: RuleConditionEntity[];
   conditionsOp: 'and' | 'or';
   onUpdateFilter: (
     filter: RuleConditionEntity,
@@ -43,12 +49,14 @@ export function FiltersStack({
         style={{ justifyContent: 'flex-start', alignItems: 'flex-start' }}
       >
         <AppliedFilters
-          conditions={conditions}
+          conditions={visibleConditions}
+          operatorConditions={operatorConditions}
           conditionsOp={conditionsOp}
           onConditionsOpChange={onConditionsOpChange}
           onUpdate={onUpdateFilter}
           onDelete={onDeleteFilter}
         />
+        {rightActions}
         <View style={{ flex: 1 }} />
         <SavedFilterMenuButton
           conditions={conditions}
