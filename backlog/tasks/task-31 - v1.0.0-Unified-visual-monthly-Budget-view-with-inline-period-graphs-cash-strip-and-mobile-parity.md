@@ -3,9 +3,10 @@ id: TASK-31
 title: >-
   v1.0.0: Unified visual monthly Budget view with inline period graphs, cash
   strip, and mobile parity
-status: To Do
+status: Review
 assignee: []
 created_date: '2026-11-21T21:16:00Z'
+updated_date: '2026-11-22T00:03:00Z'
 labels:
   - v1.0.0
   - ui
