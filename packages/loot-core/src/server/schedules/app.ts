@@ -31,7 +31,9 @@ import {
   getHasTransactionsQuery,
   getNextDate,
   getNextDateAfter,
+  getScheduleCategoryId,
   getScheduledAmount,
+  getScheduleTransactionFields,
   getStatus,
   recurConfigToRSchedule,
 } from '#shared/schedules';
@@ -41,6 +43,11 @@ import type {
   ScheduleEntity,
 } from '#types/models';
 
+import {
+  applyScheduleCleanup,
+  createFilteredSchedule,
+  previewScheduleCleanup,
+} from './filtered-schedule';
 import { findSchedules } from './find-schedules';
 
 // Utilities
@@ -104,18 +111,69 @@ function areScheduleConditionsEqual(
   return areConditionValuesEqual(leftCondition, rightCondition);
 }
 
-export function updateConditions(conditions, newConditions) {
+export function updateConditions(
+  conditions,
+  newConditions,
+  replaceOptional = false,
+) {
   const scheduleConds = extractScheduleConds(conditions);
   const newScheduleConds = extractScheduleConds(newConditions);
+  const existingCategoryIsEmpty = Boolean(
+    scheduleConds.category &&
+    !getScheduleCategoryId({ _conditions: conditions }),
+  );
+  const existingSinglePayeeIsEmpty = Boolean(
+    scheduleConds.payee &&
+    !(
+      typeof scheduleConds.payee.value === 'string' &&
+      scheduleConds.payee.value.trim().length > 0
+    ),
+  );
+  const existingPayeeListIsEmpty = Boolean(
+    scheduleConds.payees &&
+    !(
+      Array.isArray(scheduleConds.payees.value) &&
+      scheduleConds.payees.value.some(
+        id => typeof id === 'string' && id.trim().length > 0,
+      )
+    ),
+  );
+  const existingAccountIsEmpty = Boolean(
+    scheduleConds.account &&
+    !(
+      typeof scheduleConds.account.value === 'string' &&
+      scheduleConds.account.value.trim().length > 0
+    ),
+  );
 
   const replacements = zip(
     Object.values(scheduleConds),
     Object.values(newScheduleConds),
   );
 
-  const updated = conditions.map(cond => {
-    const r = replacements.find(r => cond === r[0]);
-    return r && r[1] ? r[1] : cond;
+  const updated = conditions.flatMap(cond => {
+    if (
+      (cond === scheduleConds.payee &&
+        (newScheduleConds.payees ||
+          (replaceOptional &&
+            !newScheduleConds.payee &&
+            !existingSinglePayeeIsEmpty))) ||
+      (cond === scheduleConds.payees &&
+        (newScheduleConds.payee ||
+          (replaceOptional && !existingPayeeListIsEmpty)) &&
+        !newScheduleConds.payees) ||
+      (replaceOptional &&
+        ((cond === scheduleConds.category &&
+          !newScheduleConds.category &&
+          !existingCategoryIsEmpty) ||
+          (cond === scheduleConds.account &&
+            !newScheduleConds.account &&
+            !existingAccountIsEmpty)))
+    ) {
+      return [];
+    }
+    const replacement = replacements.find(([previous]) => cond === previous);
+    return [replacement?.[1] ?? cond];
   });
 
   const added = replacements
@@ -397,10 +455,12 @@ export async function updateSchedule({
   schedule,
   conditions,
   resetNextDate,
+  replaceOptionalConditions,
 }: {
   schedule: Partial<ScheduleEntity> & Pick<ScheduleEntity, 'id'>;
   conditions?: RuleConditionEntity[];
   resetNextDate?: boolean;
+  replaceOptionalConditions?: boolean;
 }) {
   if (schedule.rule) {
     throw new Error('You cannot change the rule of a schedule');
@@ -441,7 +501,11 @@ export async function updateSchedule({
   await batchMessages(async () => {
     if (conditions) {
       const oldConditions = rule.serialize().conditions;
-      const newConditions = updateConditions(oldConditions, conditions);
+      const newConditions = updateConditions(
+        oldConditions,
+        conditions,
+        replaceOptionalConditions,
+      );
 
       const newActions = updateActions(newConditions, rule.serialize().actions);
 
@@ -600,7 +664,7 @@ async function postTransactionForSchedule({
   }
 
   const transaction = {
-    payee: schedule._payee,
+    ...getScheduleTransactionFields(schedule),
     account: schedule._account,
     amount: getScheduledAmount(schedule._amount),
     date: today ? currentDay() : schedule.next_date,
@@ -824,7 +888,18 @@ export async function advanceSchedulesService(syncSuccess) {
   }
 }
 
+function createFromFilter(input: Parameters<typeof createFilteredSchedule>[0]) {
+  return createFilteredSchedule(input, createSchedule);
+}
+
+function cleanupFromFilter(input: Parameters<typeof applyScheduleCleanup>[0]) {
+  return applyScheduleCleanup(input, deleteSchedule);
+}
+
 export type SchedulesHandlers = {
+  'schedule/create-from-filter': typeof createFromFilter;
+  'schedule/preview-cleanup': typeof previewScheduleCleanup;
+  'schedule/apply-cleanup': typeof cleanupFromFilter;
   'schedule/create': typeof createSchedule;
   'schedule/update': typeof updateSchedule;
   'schedule/delete': typeof deleteSchedule;
@@ -839,6 +914,9 @@ export type SchedulesHandlers = {
 // Expose functions to the client
 export const app = createApp<SchedulesHandlers>();
 
+app.method('schedule/create-from-filter', mutator(undoable(createFromFilter)));
+app.method('schedule/preview-cleanup', previewScheduleCleanup);
+app.method('schedule/apply-cleanup', mutator(undoable(cleanupFromFilter)));
 app.method('schedule/create', mutator(undoable(createSchedule)));
 app.method('schedule/update', mutator(undoable(updateSchedule)));
 app.method('schedule/delete', mutator(undoable(deleteSchedule)));

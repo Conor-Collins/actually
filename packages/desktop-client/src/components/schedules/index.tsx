@@ -68,6 +68,16 @@ export function Schedules() {
             resetNextDate: true,
           });
           break;
+        case 'cleanup':
+          dispatch(
+            pushModal({
+              modal: {
+                name: 'schedule-cleanup',
+                options: { id, isReopened: true },
+              },
+            }),
+          );
+          break;
         case 'delete':
           await send('schedule/delete', { id });
           break;
@@ -75,7 +85,7 @@ export function Schedules() {
           throw new Error(`Unknown action: ${String(name)}`);
       }
     },
-    [],
+    [dispatch],
   );
 
   const schedulesQuery = useMemo(() => q('schedules').select('*'), []);

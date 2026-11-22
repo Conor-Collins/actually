@@ -31,6 +31,8 @@ import { AmountInput } from './AmountInput';
 import { PercentInput } from './PercentInput';
 
 type GenericInputProps = {
+  id?: string;
+  labelId?: string;
   ref?: Ref<HTMLInputElement>;
   style?: CSSProperties;
   inputStyle?: CSSProperties;
@@ -119,6 +121,8 @@ type GenericInputProps = {
 );
 
 export const GenericInput = ({
+  id,
+  labelId,
   ref,
   style,
   inputStyle,
@@ -156,8 +160,10 @@ export const GenericInput = ({
               showMakeTransfer={false}
               openOnFocus={!isNarrowWidth}
               updateOnValueChange={isNarrowWidth}
+              labelProps={labelId ? { id: labelId } : undefined}
               inputProps={{
                 ref,
+                ...(id ? { id } : null),
                 ...(showPlaceholder ? { placeholder: t('nothing') } : null),
                 onClick: () => {
                   if (!isNarrowWidth) {
@@ -201,8 +207,10 @@ export const GenericInput = ({
                   {...multiProps}
                   openOnFocus={!isNarrowWidth}
                   updateOnValueChange={isNarrowWidth}
+                  labelProps={labelId ? { id: labelId } : undefined}
                   inputProps={{
                     ref,
+                    ...(id ? { id } : null),
                     ...(showPlaceholder ? { placeholder: t('nothing') } : null),
                     onClick: () => {
                       if (!isNarrowWidth) {
@@ -243,8 +251,10 @@ export const GenericInput = ({
               openOnFocus={!isNarrowWidth}
               updateOnValueChange={isNarrowWidth}
               showHiddenCategories
+              labelProps={labelId ? { id: labelId } : undefined}
               inputProps={{
                 ref,
+                ...(id ? { id } : null),
                 ...(showPlaceholder ? { placeholder: t('nothing') } : null),
                 onClick: () => {
                   if (!isNarrowWidth) {

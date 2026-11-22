@@ -253,12 +253,22 @@ export function recurConfigToRSchedule(config) {
 }
 
 export function extractScheduleConds(conditions) {
+  conditions ??= [];
   return {
     payee:
       conditions.find(cond => cond.op === 'is' && cond.field === 'payee') ||
       conditions.find(
         cond => cond.op === 'is' && cond.field === 'description',
       ) ||
+      null,
+    payees:
+      conditions.find(
+        cond =>
+          cond.op === 'oneOf' &&
+          (cond.field === 'payee' || cond.field === 'description'),
+      ) || null,
+    category:
+      conditions.find(cond => cond.op === 'is' && cond.field === 'category') ||
       null,
     account:
       conditions.find(cond => cond.op === 'is' && cond.field === 'account') ||
@@ -277,6 +287,67 @@ export function extractScheduleConds(conditions) {
         cond =>
           (cond.op === 'is' || cond.op === 'isapprox') && cond.field === 'date',
       ) || null,
+  };
+}
+
+export function getSchedulePayeeIds(
+  schedule: Pick<Partial<ScheduleEntity>, '_conditions' | '_payee'>,
+): string[] {
+  const { payee, payees } = extractScheduleConds(schedule._conditions);
+  const values: unknown = payees?.value;
+  if (Array.isArray(values)) {
+    return [
+      ...new Set(
+        values.filter(
+          (id): id is string => typeof id === 'string' && id.trim().length > 0,
+        ),
+      ),
+    ];
+  }
+  const singleValue: unknown = payee ? payee.value : schedule._payee;
+  return typeof singleValue === 'string' && singleValue.trim().length > 0
+    ? [singleValue]
+    : [];
+}
+
+export function getScheduleCategoryId(
+  schedule: Pick<Partial<ScheduleEntity>, '_conditions'>,
+): string | null {
+  const category: unknown = extractScheduleConds(schedule._conditions).category
+    ?.value;
+  return typeof category === 'string' && category.trim().length > 0
+    ? category
+    : null;
+}
+
+export function isCleanupEligibleSchedule(
+  schedule: Pick<Partial<ScheduleEntity>, '_conditions' | '_payee'>,
+): boolean {
+  const { category, payees } = extractScheduleConds(schedule._conditions);
+  const categoryId = getScheduleCategoryId(schedule);
+  if (category && !categoryId) {
+    return false;
+  }
+  const payeeIds = getSchedulePayeeIds(schedule);
+  return Boolean(
+    categoryId || (payees && payeeIds.length > 0) || payeeIds.length > 1,
+  );
+}
+
+export function getScheduleTransactionFields(
+  schedule: Pick<ScheduleEntity, '_conditions' | '_payee'>,
+) {
+  const conditions = extractScheduleConds(schedule._conditions);
+  // Existing single-payee rules set a posted transaction's category via actions.
+  if (conditions.payee) {
+    return { payee: schedule._payee };
+  }
+
+  const payees = getSchedulePayeeIds(schedule);
+  const category = getScheduleCategoryId(schedule);
+  return {
+    payee: payees.length === 1 ? payees[0] : schedule._payee,
+    ...(category ? { category } : {}),
   };
 }
 
@@ -496,9 +567,10 @@ export function computeSchedulePreviewTransactions(
         dates.shift();
       }
 
+      const fields = getScheduleTransactionFields(schedule);
       return dates.map(date => ({
         id: 'preview/' + schedule.id + `/${date}`,
-        payee: schedule._payee,
+        ...fields,
         account: schedule._account,
         amount: getScheduledAmount(schedule._amount),
         date,

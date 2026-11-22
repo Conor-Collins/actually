@@ -1,0 +1,308 @@
+import { isCleanupEligibleSchedule } from '@actual-app/core/shared/schedules';
+import type {
+  RuleConditionEntity,
+  TransactionEntity,
+} from '@actual-app/core/types/models';
+
+import {
+  getScheduleFilter,
+  prefillFilteredSchedule,
+  updateScheduleConditions,
+} from './schedule-edit-utils';
+
+it('prefills a yearly category schedule from the five filtered transactions', () => {
+  const filter = getScheduleFilter(
+    [
+      { field: 'category', op: 'is', value: 'insurance' },
+      { field: 'date', op: 'is', value: '2026', options: { year: true } },
+    ],
+    'and',
+  );
+  expect(filter).toEqual({ category: 'insurance', year: '2026' });
+  if (!filter) {
+    throw new Error('Expected a category filter');
+  }
+  const transactions: TransactionEntity[] = [
+    -11966, -104060, -30690, -73700, 603,
+  ].map((amount, index) => ({
+    id: String(index),
+    date: `2026-0${index + 2}-10`,
+    amount,
+    account: 'card',
+    category: 'insurance',
+    payee: index === 1 ? 'hearth-cover' : 'mutual-acme',
+  }));
+  const result = prefillFilteredSchedule({
+    ...filter,
+    name: 'Insurance',
+    transactions: [...transactions].reverse(),
+  });
+  expect(result?.year).toBe('2026');
+  expect(result?.schedule).toMatchObject({
+    name: 'Insurance',
+    _date: { start: '2026-02-10', frequency: 'yearly' },
+    _account: 'card',
+    _amount: -219813,
+    _amountOp: 'isapprox',
+  });
+  expect(result?.schedule._conditions).toEqual(
+    expect.arrayContaining([
+      { field: 'category', op: 'is', value: 'insurance' },
+      { field: 'payee', op: 'oneOf', value: ['mutual-acme', 'hearth-cover'] },
+    ]),
+  );
+  expect(result?.transactions.map(transaction => transaction.id)).toEqual([
+    '4',
+    '3',
+    '2',
+    '1',
+    '0',
+  ]);
+});
+
+it('requires a single calendar year before deriving the allowance and links', () => {
+  const row: TransactionEntity = {
+    id: 'first',
+    date: '2026-03-10',
+    account: 'card',
+    category: 'insurance',
+    payee: 'mutual-acme',
+    amount: -11966,
+  };
+  const later = {
+    ...row,
+    id: 'later',
+    date: '2027-03-10',
+    payee: 'hearth-cover',
+  };
+  const input = { category: 'insurance', name: 'Insurance' };
+  expect(
+    prefillFilteredSchedule({ ...input, transactions: [row, later] }),
+  ).toBeNull();
+  expect(
+    prefillFilteredSchedule({
+      ...input,
+      year: '2026',
+      transactions: [row, later],
+    }),
+  ).toBeNull();
+  expect(
+    prefillFilteredSchedule({ ...input, transactions: [row] }),
+  ).toMatchObject({
+    year: '2026',
+    transactions: [row],
+    schedule: {
+      _amount: -11966,
+      _conditions: expect.arrayContaining([
+        { field: 'payee', op: 'oneOf', value: ['mutual-acme'] },
+      ]),
+    },
+  });
+});
+
+it('edits category and multiple payees and clears optional conditions', () => {
+  const fields = {
+    name: 'Insurance',
+    category: 'insurance',
+    payees: ['first', 'second'],
+    date: '2026-03-10',
+    amount: -100,
+    amountOp: 'isapprox',
+    account: 'card',
+    posts_transaction: false,
+    custom_upcoming_length: null,
+  } satisfies Parameters<typeof updateScheduleConditions>[1];
+  const { conditions } = updateScheduleConditions({}, fields);
+  expect(conditions).toEqual(
+    expect.arrayContaining([
+      { field: 'category', op: 'is', value: 'insurance' },
+      { field: 'payee', op: 'oneOf', value: ['first', 'second'] },
+    ]),
+  );
+  expect(isCleanupEligibleSchedule({ _conditions: conditions })).toBe(true);
+  const cleared = updateScheduleConditions(
+    { _conditions: conditions },
+    {
+      ...fields,
+      category: '',
+      payees: [],
+      account: null,
+    },
+  );
+  expect(cleared.conditions?.map(condition => condition.field)).toEqual([
+    'date',
+    'amount',
+  ]);
+  expect(isCleanupEligibleSchedule({ _conditions: cleared.conditions })).toBe(
+    false,
+  );
+});
+
+it('prefills only the matching child from grouped splits', () => {
+  const matching: TransactionEntity = {
+    id: 'child',
+    account: 'card',
+    category: 'insurance',
+    amount: -4500,
+    date: '2026-03-10',
+    is_child: true,
+    parent_id: 'split',
+  };
+  const result = prefillFilteredSchedule({
+    category: 'insurance',
+    name: 'Insurance',
+    transactions: [
+      {
+        id: 'split',
+        date: matching.date,
+        account: matching.account,
+        amount: -5000,
+        is_parent: true,
+        subtransactions: [
+          matching,
+          { ...matching, id: 'unmatched', amount: -500, _unmatched: true },
+        ],
+      },
+    ],
+  });
+  expect(result?.schedule._amount).toBe(-4500);
+  expect(result?.transactions.map(row => row.id)).toEqual(['child']);
+});
+
+it('uses oneOf for the first payee on an existing category-only schedule', () => {
+  const category = { field: 'category', op: 'is', value: 'insurance' } as const;
+  const payee = { field: 'payee', op: 'is', value: 'mutual-acme' } as const;
+  const fields = {
+    name: 'Insurance',
+    category: 'insurance',
+    payees: ['mutual-acme'],
+    account: 'card',
+    amount: -4500,
+    amountOp: 'isapprox',
+    date: '2026-03-10',
+    posts_transaction: false,
+    custom_upcoming_length: null,
+  };
+  expect(
+    updateScheduleConditions({ _conditions: [category] }, fields).conditions,
+  ).toEqual(
+    expect.arrayContaining([
+      category,
+      { ...payee, op: 'oneOf', value: ['mutual-acme'] },
+    ]),
+  );
+  const legacy = updateScheduleConditions(
+    { _conditions: [payee] },
+    { ...fields, category: '' },
+  );
+  expect(legacy.conditions).toContainEqual(payee);
+});
+
+it.each([
+  {
+    name: 'empty category',
+    conditions: [{ field: 'category', op: 'is', value: '' }],
+  },
+  {
+    name: 'empty category with payees',
+    conditions: [
+      { field: 'category', op: 'is', value: '' },
+      { field: 'payee', op: 'oneOf', value: ['first'] },
+    ],
+  },
+  {
+    name: 'empty payee list',
+    conditions: [{ field: 'payee', op: 'oneOf', value: [] }],
+  },
+] satisfies { name: string; conditions: RuleConditionEntity[] }[])(
+  'hides cleanup for $name',
+  ({ conditions }) => {
+    expect(isCleanupEligibleSchedule({ _conditions: conditions })).toBe(false);
+  },
+);
+
+const renameFields = {
+  name: 'Renamed',
+  category: '',
+  payees: [],
+  account: null,
+  amount: -100,
+  amountOp: 'is',
+  date: '2026-03-10',
+  posts_transaction: false,
+  custom_upcoming_length: null,
+} satisfies Parameters<typeof updateScheduleConditions>[1];
+
+it('preserves an empty category on rename and can replace it with a valid category', () => {
+  const emptyCategory = {
+    field: 'category',
+    op: 'is',
+    value: '',
+  } satisfies RuleConditionEntity;
+  const payees = {
+    field: 'payee',
+    op: 'oneOf',
+    value: ['first'],
+  } satisfies RuleConditionEntity;
+  const schedule = { _conditions: [emptyCategory, payees] };
+  const renamed = updateScheduleConditions(schedule, {
+    ...renameFields,
+    payees: ['first'],
+  });
+  expect(renamed.conditions).toEqual(
+    expect.arrayContaining([emptyCategory, payees]),
+  );
+  expect(isCleanupEligibleSchedule({ _conditions: renamed.conditions })).toBe(
+    false,
+  );
+
+  const replaced = updateScheduleConditions(schedule, {
+    ...renameFields,
+    payees: ['first'],
+    category: 'insurance',
+  });
+  expect(
+    replaced.conditions?.filter(condition => condition.field === 'category'),
+  ).toEqual([{ ...emptyCategory, value: 'insurance' }]);
+  expect(isCleanupEligibleSchedule({ _conditions: replaced.conditions })).toBe(
+    true,
+  );
+});
+
+it.each([
+  { field: 'payee', op: 'oneOf', value: [] },
+  { field: 'payee', op: 'is', value: '' },
+  { field: 'account', op: 'is', value: '' },
+] satisfies RuleConditionEntity[])(
+  'preserves empty $field $op on rename',
+  condition => {
+    const category = {
+      field: 'category',
+      op: 'is',
+      value: 'insurance',
+    } satisfies RuleConditionEntity;
+    const renamed = updateScheduleConditions(
+      { _conditions: [category, condition] },
+      { ...renameFields, category: 'insurance' },
+    );
+    expect(renamed.conditions).toEqual(
+      expect.arrayContaining([category, condition]),
+    );
+  },
+);
+
+it('clears a populated single payee when the schedule only has conditions', () => {
+  const payee = {
+    field: 'payee',
+    op: 'is',
+    value: 'mutual-acme',
+  } satisfies RuleConditionEntity;
+  const edited = updateScheduleConditions(
+    { _conditions: [payee] },
+    renameFields,
+  );
+  expect(edited.conditions?.map(condition => condition.field)).toEqual([
+    'date',
+    'amount',
+  ]);
+});
