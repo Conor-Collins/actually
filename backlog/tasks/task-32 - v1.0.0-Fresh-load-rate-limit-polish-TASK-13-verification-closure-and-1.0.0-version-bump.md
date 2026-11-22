@@ -3,9 +3,10 @@ id: TASK-32
 title: >-
   v1.0.0: Fresh-load rate-limit polish, TASK-13 verification closure, and 1.0.0
   version bump
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-11-21T21:16:00Z'
+updated_date: '2026-11-22T03:54:00Z'
 labels:
   - v1.0.0
   - verification
