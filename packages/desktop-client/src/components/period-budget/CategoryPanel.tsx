@@ -7,11 +7,13 @@ import { Text } from '@actual-app/components/text';
 import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
 import * as monthUtils from '@actual-app/core/shared/months';
+import { useQuery } from '@tanstack/react-query';
 
 import {
   findOverlappingPeriod,
   isDay,
   monthOf,
+  periodBudgetQueries,
   usePeriodBudgetMutation,
 } from '#period-budget';
 import type { CategoryRowView } from '#period-budget';
@@ -75,11 +77,15 @@ export function CategoryPanel({
     schedule =>
       !schedule.completed && !linkedCategoryBySchedule.has(schedule.id),
   );
+  const { data: suggestedCategories } = useQuery({
+    ...periodBudgetQueries.suggestedCategories(),
+    enabled: unlinkedSchedules.length > 0,
+  });
   const suggestedSchedules = unlinkedSchedules.filter(
-    schedule => data.suggestedCategories[schedule.id] === category.id,
+    schedule => suggestedCategories?.[schedule.id] === category.id,
   );
   const otherSchedules = unlinkedSchedules.filter(
-    schedule => data.suggestedCategories[schedule.id] !== category.id,
+    schedule => suggestedCategories?.[schedule.id] !== category.id,
   );
 
   function repeatingText(cadence: { anchorDate: string; months: number }) {

@@ -28,6 +28,7 @@ type CategoryRowProps = {
   data: PeriodBudgetData;
   labels: PeriodBudgetLabels;
   isOpen: boolean;
+  focusOnMount?: boolean;
   // The period chosen in the opened row
   openPeriod: PeriodRef | null;
   onSelect: (selection: Selection | null) => void;
@@ -42,10 +43,16 @@ export function CategoryRow({
   data,
   labels,
   isOpen,
+  focusOnMount,
   openPeriod,
   onSelect,
 }: CategoryRowProps) {
   const { category, activePeriod } = row;
+  const isConfigured =
+    row.periods.length > 0 ||
+    row.cadence !== null ||
+    row.linkedScheduleIds.length > 0 ||
+    row.deletedPeriods.length > 0;
   const openView =
     isOpen && openPeriod !== null ? findPeriod(row, openPeriod) : null;
   const isCategoryOpen = isOpen && openView === null;
@@ -74,6 +81,7 @@ export function CategoryRow({
         <View role="rowheader" style={{ width: NAME_WIDTH, flexShrink: 0 }}>
           <Button
             variant="bare"
+            autoFocus={focusOnMount}
             aria-expanded={isCategoryOpen}
             onPress={() =>
               onSelect(
@@ -86,6 +94,7 @@ export function CategoryRow({
           >
             <Text
               style={{
+                color: isConfigured ? undefined : theme.pageTextSubdued,
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
@@ -114,13 +123,11 @@ export function CategoryRow({
             aria-colspan={4}
             style={{ width: AMOUNT_WIDTH * 4, flexShrink: 0 }}
           >
-            <Text style={{ color: theme.pageTextSubdued }}>
-              {row.periods.length === 0 ? (
-                <Trans>No periods yet</Trans>
-              ) : (
+            {isConfigured && (
+              <Text style={{ color: theme.pageTextSubdued }}>
                 <Trans>No active period</Trans>
-              )}
-            </Text>
+              </Text>
+            )}
           </View>
         )}
         <View role="cell" style={{ flex: 1 }}>

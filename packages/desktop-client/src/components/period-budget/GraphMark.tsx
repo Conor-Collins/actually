@@ -53,19 +53,29 @@ export function GraphMark({
     >
       <View
         aria-hidden
+        title={label}
         style={{
-          width: MARK_SIZE,
-          height: MARK_SIZE,
-          boxSizing: 'border-box',
-          borderRadius: MARK_SIZE,
+          position: 'absolute',
+          inset: 0,
+          alignItems: 'center',
+          justifyContent: 'center',
         }}
-        nativeStyle={{
-          border: isHollow
-            ? `2px solid ${color}`
-            : `1px solid ${theme.tableBackground}`,
-          backgroundColor: isHollow ? theme.tableBackground : color,
-        }}
-      />
+      >
+        <View
+          style={{
+            width: MARK_SIZE,
+            height: MARK_SIZE,
+            boxSizing: 'border-box',
+            borderRadius: MARK_SIZE,
+          }}
+          nativeStyle={{
+            border: isHollow
+              ? `2px solid ${color}`
+              : `1px solid ${theme.tableBackground}`,
+            backgroundColor: isHollow ? theme.tableBackground : color,
+          }}
+        />
+      </View>
     </Button>
   );
 }

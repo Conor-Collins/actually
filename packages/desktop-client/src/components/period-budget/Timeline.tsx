@@ -27,6 +27,7 @@ type TimelineProps = {
   data: PeriodBudgetData;
   labels: PeriodBudgetLabels;
   selection: Selection | null;
+  focusCategoryId?: string;
   onSelect: (selection: Selection | null) => void;
 };
 
@@ -42,6 +43,7 @@ export function Timeline({
   data,
   labels,
   selection,
+  focusCategoryId,
   onSelect,
 }: TimelineProps) {
   const { t } = useTranslation();
@@ -175,6 +177,7 @@ export function Timeline({
                     data={data}
                     labels={labels}
                     isOpen={opened !== null}
+                    focusOnMount={focusCategoryId === row.category.id}
                     openPeriod={opened?.period ?? null}
                     onSelect={onSelect}
                   />

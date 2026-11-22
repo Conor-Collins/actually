@@ -3,7 +3,9 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { generateAccount } from '@actual-app/core/mocks';
 import { initServer } from '@actual-app/core/platform/client/connection';
 import type { PeriodBudgetCalculation } from '@actual-app/core/server/period-budget/calculate';
+import * as months from '@actual-app/core/shared/months';
 import type { BudgetPeriod } from '@actual-app/core/shared/period-budget';
+import { planCash } from '@actual-app/core/shared/period-charges';
 import type { SetAsideRow } from '@actual-app/core/shared/period-loader';
 import type { Handlers } from '@actual-app/core/types/handlers';
 import type {
@@ -15,6 +17,7 @@ import type {
 } from '@actual-app/core/types/models';
 import { onlineManager } from '@tanstack/react-query';
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -24,6 +27,10 @@ import {
 import userEvent from '@testing-library/user-event';
 
 import { accountQueries } from '#accounts';
+import { BudgetPeriodRow } from '#components/budget/BudgetPeriodRow';
+import { MonthPicker } from '#components/budget/MonthPicker';
+import { MonthsProvider } from '#components/budget/MonthsContext';
+import { MobileBudgetPeriod } from '#components/mobile/budget/MobileBudgetPeriod';
 import { SidebarMenuRoute } from '#components/sidebar/SidebarMenuRoute';
 import { useAccounts } from '#hooks/useAccounts';
 import {
@@ -32,6 +39,7 @@ import {
   TestProviders,
 } from '#mocks';
 import { payeeQueries } from '#payees';
+import { periodBudgetQueries } from '#period-budget';
 import {
   calculate,
   charge,
@@ -41,7 +49,11 @@ import {
 } from '#period-budget/fixtures';
 import { mergeSyncedPrefs } from '#prefs/prefsSlice';
 
+import { BudgetCashStrip } from './BudgetCashStrip';
+import { BudgetPeriodsProvider } from './BudgetPeriods';
+import { BudgetPeriodTotals } from './BudgetPeriodTotals';
 import { PeriodBudgetPage } from './PeriodBudgetPage';
+import { clusterTimelineMarkers, TimelineMarkers } from './TimelineMarkers';
 
 // The test setup loads the accounts and payees queries before the connection mock.
 vi.hoisted(vi.resetModules);
@@ -155,6 +167,8 @@ const FOOD_AUGUST = period(
   '2017-09-01',
   40000,
 );
+let taxCarryover = 0;
+let includeShortfall = false;
 const TAX_2017 = period('tax-2017', 'tax', '2017-01-01', '2018-01-01', 150000);
 const RENT_JANUARY = period(
   'rent-january',
@@ -451,7 +465,7 @@ function rows(): PeriodBudgetRows {
             ),
           ]
         : []),
-      stored(TAX_2017),
+      stored({ ...TAX_2017, carryover: taxCarryover }),
       ...(storedJuly ? [stored(storedJuly)] : []),
       ...(hasDeletedRentPeriod
         ? [stored(RENT_JANUARY, { tombstone: true })]
@@ -501,6 +515,21 @@ function calculation(asOf: string): PeriodBudgetCalculation {
   const payments = [...PAYMENTS, ...extraPayments].filter(
     payment => !isTidy || payment.id !== 'p-april',
   );
+  const movements = includeShortfall
+    ? [
+        {
+          id: 'large-bill',
+          account: 'checking',
+          amount: -630000,
+          date: '2017-07-02',
+          dueDate: '2017-07-02',
+          scheduleId: 'sched-tax',
+          isTransfer: false,
+          isApproximate: false,
+          isPosted: false,
+        },
+      ]
+    : [];
   const result = calculate({
     asOf,
     periods: [
@@ -509,7 +538,7 @@ function calculation(asOf: string): PeriodBudgetCalculation {
       { ...FOOD_JUNE, budget: juneBudget },
       july,
       ...(hasPlannedAugust ? [FOOD_AUGUST] : []),
-      TAX_2017,
+      { ...TAX_2017, carryover: taxCarryover },
     ],
     postings: payments,
     offsets: [{ transactionId: 'p-early', periodId: 'food-june' }],
@@ -557,13 +586,25 @@ function calculation(asOf: string): PeriodBudgetCalculation {
               reason: 'uncategorized',
             },
           ],
-      cash: {
-        cashAvailable: 500000,
-        inAccounts: 620000,
-        owed: 120000,
-        projectedCash: 449000,
-        accounts: [],
-      },
+      movements,
+      cash: includeShortfall
+        ? planCash({
+            accounts: [
+              { id: 'checking', balance: 620000 },
+              { id: 'savings', balance: -120000 },
+            ],
+            selectedAccountIds: ['checking', 'savings'],
+            movements,
+            asOf,
+            horizonEnd: '2017-12-31',
+          })
+        : {
+            cashAvailable: 500000,
+            inAccounts: 620000,
+            owed: 120000,
+            projectedCash: 449000,
+            accounts: [],
+          },
     },
   });
   return {
@@ -692,7 +733,7 @@ function bar(category: string, periodName: string) {
 }
 
 function dot(name: string) {
-  return screen.getByRole('img', { name });
+  return screen.getByTitle(name);
 }
 
 function rowOf(category: string) {
@@ -757,11 +798,11 @@ function attentionItem(text: string) {
 // when it is one of the entries of the sidebar
 async function renderRoutedPage({ isInSidebar }: { isInSidebar: boolean }) {
   const { queryClient, store } = createBook();
-  if (isInSidebar) {
+  if (!isInSidebar) {
     store.dispatch(
       mergeSyncedPrefs({
         'sidebar-menu-items': JSON.stringify([
-          { id: 'period-budget', hidden: false },
+          { id: 'period-budget', hidden: true },
         ]),
       }),
     );
@@ -859,6 +900,8 @@ describe('PeriodBudgetPage', () => {
     write.mockClear();
     calculateRequest.mockClear();
     juneBudget = FOOD_JUNE.budget;
+    taxCarryover = 0;
+    includeShortfall = false;
     storedJuly = null;
     extraPayments = [];
     calculationError = null;
@@ -871,6 +914,375 @@ describe('PeriodBudgetPage', () => {
     ledgerHold = null;
     responsive.isNarrowWidth = false;
     startServer();
+  });
+
+  describe('monthly Budget integration', () => {
+    function renderBudgetPeriod(
+      isMobile: boolean,
+      month = '2017-06',
+      isPrivate = false,
+    ) {
+      const { queryClient, store } = createBook();
+      responsive.isNarrowWidth = isMobile;
+      if (isPrivate) {
+        store.dispatch(mergeSyncedPrefs({ isPrivacyEnabled: 'true' }));
+      }
+      render(
+        <TestProviders store={store} queryClient={queryClient}>
+          <MemoryRouter>
+            <div style={{ width: isMobile ? 360 : 800 }}>
+              <MonthsProvider
+                startMonth={month}
+                numMonths={1}
+                monthBounds={{ start: '2017-01', end: '2017-12' }}
+                type="envelope"
+              >
+                <BudgetPeriodsProvider visibleMonths={[month]}>
+                  <BudgetCashStrip month={month} />
+                  <BudgetPeriodTotals month={month} />
+                  {isMobile ? (
+                    <MobileBudgetPeriod month={month} categoryId="tax" />
+                  ) : (
+                    <BudgetPeriodRow categoryId="tax" />
+                  )}
+                </BudgetPeriodsProvider>
+              </MonthsProvider>
+            </div>
+          </MemoryRouter>
+        </TestProviders>,
+      );
+      return queryClient;
+    }
+
+    it('uses fixed calendar controls and quick-jumps within the multi-month bounds', async () => {
+      const { queryClient, store } = createBook();
+      const onSelect = vi.fn();
+      render(
+        <TestProviders store={store} queryClient={queryClient}>
+          <MonthPicker
+            startMonth="2017-06"
+            numDisplayed={2}
+            monthBounds={{ start: '2017-01', end: '2018-03' }}
+            onSelect={onSelect}
+          />
+        </TestProviders>,
+      );
+      const [today, previous, next, headline] = screen.getAllByRole('button');
+      expect(today).toHaveTextContent('Today');
+      expect(previous).toHaveAccessibleName('Previous month');
+      expect(next).toHaveAccessibleName('Next month');
+      expect(headline).toHaveTextContent('June 2017');
+      const displayed = screen.getAllByTestId('selected-budget-month');
+      expect(displayed[0]).toBe(headline);
+      expect(headline).toBeVisible();
+      expect(displayed.map(element => element.dataset.month)).toEqual([
+        '2017-06',
+        '2017-07',
+      ]);
+      await userEvent.click(today);
+      await userEvent.click(previous);
+      await userEvent.click(next);
+      expect(onSelect.mock.calls).toEqual([
+        [months.currentMonth()],
+        ['2017-05'],
+        ['2017-07'],
+      ]);
+      await userEvent.click(headline);
+      expect(screen.getByRole('button', { name: 'June 2017' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+      expect(screen.getByRole('button', { name: 'July 2017' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+      await userEvent.click(screen.getByRole('button', { name: 'Next year' }));
+      expect(screen.getByRole('button', { name: 'March 2018' })).toBeDisabled();
+      await userEvent.click(
+        screen.getByRole('button', { name: 'February 2018' }),
+      );
+      expect(onSelect).toHaveBeenLastCalledWith('2018-02');
+      expect(headline).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('keeps period amounts separate, includes carryover and opens the inline graph and actions', async () => {
+      taxCarryover = 25000;
+      renderBudgetPeriod(false);
+      const snapshot = await screen.findByRole('button', {
+        name: 'Period details for Tax',
+      });
+      expect(snapshot).toHaveAccessibleDescription(
+        'Budgeted 1,750.00, Spent 300.00, Balance 1,450.00',
+      );
+      expect(within(snapshot).getByText('Yearly')).toBeVisible();
+      expect(
+        within(snapshot).getByTestId('period-progress'),
+      ).toBeInTheDocument();
+      expect(within(snapshot).getByTestId('period-as-of')).toHaveAccessibleName(
+        'As of 06/30/2017',
+      );
+      const totals = screen.getByRole('group', {
+        name: 'Active multi-month period totals',
+      });
+      expect(totals).toHaveTextContent('Active multi-month periods (1)');
+      expect(totals).toHaveTextContent('Budgeted 1,750.00');
+      expect(totals).toHaveTextContent('Balance 1,450.00');
+      expect(calculateRequest).toHaveBeenCalledWith(
+        expect.objectContaining({ asOf: '2017-06-30' }),
+      );
+
+      await userEvent.click(within(snapshot).getByText('Yearly'));
+      expect(snapshot).toHaveAttribute('aria-expanded', 'true');
+      expect(
+        screen.getByRole('group', { name: 'Graph of Tax, 2017' }),
+      ).toBeVisible();
+      expect(screen.getByRole('group', { name: 'Payments' })).toBeVisible();
+      expect(
+        screen.getByRole('group', { name: 'Scheduled charges' }),
+      ).toBeVisible();
+      expect(screen.getByRole('button', { name: 'Edit' })).toBeVisible();
+      expect(
+        screen.getByRole('link', { name: 'Open full Period Budget' }),
+      ).toHaveAttribute(
+        'href',
+        '/period-budget?asOf=2017-06-30&category=tax&period=tax-2017&start=2017-01-01',
+      );
+
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Cadence and schedules' }),
+      );
+      expect(
+        screen.queryByRole('group', { name: 'Graph of Tax, 2017' }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByRole('region', { name: 'Tax' })).toBeVisible();
+    });
+
+    it('clusters close payments and keeps each date, payee and full amount in the tooltip', async () => {
+      extraPayments = [
+        {
+          id: 'a',
+          category: 'tax',
+          date: '2017-08-30',
+          amount: -123456,
+          payee: 'tax-office',
+        },
+        {
+          id: 'b',
+          category: 'tax',
+          date: '2017-09-02',
+          amount: -789123,
+          payee: 'market',
+        },
+      ];
+      renderBudgetPeriod(false, '2017-09');
+      const snapshot = await screen.findByRole('button', {
+        name: 'Period details for Tax',
+      });
+      const cluster = within(snapshot).getByTitle(
+        /08\/30\/2017.*Tax office.*1,234\.56[\s\S]*09\/02\/2017.*Market.*7,891\.23/,
+      );
+      expect(cluster).toHaveTextContent('3');
+      expect(cluster).toHaveAttribute(
+        'title',
+        expect.stringContaining(
+          'Overdue charge of 09/15/2017: Tax office, 210.00',
+        ),
+      );
+      expect(
+        clusterTimelineMarkers(
+          [
+            { id: 'a', position: 0.66, label: 'August 30' },
+            { id: 'b', position: 0.668, label: 'September 2' },
+            { id: 'c', position: 0.8, label: 'October 19' },
+          ],
+          500,
+        ).map(group => group.length),
+      ).toEqual([2, 1]);
+    });
+
+    it('loads schedule suggestions only when schedule linking is available', async () => {
+      const queryClient = renderBudgetPeriod(false);
+      const suggestions = periodBudgetQueries.suggestedCategories().queryKey;
+      const snapshot = await screen.findByRole('button', {
+        name: 'Period details for Tax',
+      });
+      expect(queryClient.getQueryState(suggestions)).toBeUndefined();
+      await userEvent.click(snapshot);
+      expect(queryClient.getQueryState(suggestions)).toBeUndefined();
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Cadence and schedules' }),
+      );
+      await waitFor(() =>
+        expect(queryClient.getQueryState(suggestions)?.status).toBe('success'),
+      );
+    });
+
+    it('lets the keyboard choose either period from a cluster across a boundary', async () => {
+      const openMay = vi.fn();
+      const openJune = vi.fn();
+      render(
+        <TimelineMarkers
+          center={12}
+          markers={[
+            {
+              id: 'may',
+              position: 0.41,
+              label: 'May 31 payment, 10.00',
+              onClick: openMay,
+            },
+            {
+              id: 'june',
+              position: 0.413,
+              label: 'June 1 payment, 25.00',
+              onClick: openJune,
+            },
+          ]}
+        />,
+      );
+      const cluster = screen.getByRole('button', {
+        name: 'Timeline markers (2)',
+      });
+      await userEvent.tab();
+      await userEvent.keyboard('{Enter}');
+      const may = screen.getByRole('menuitem', {
+        name: 'May 31 payment, 10.00',
+      });
+      const june = screen.getByRole('menuitem', {
+        name: 'June 1 payment, 25.00',
+      });
+      expect(may).toHaveFocus();
+      await userEvent.keyboard('{ArrowDown}');
+      expect(june).toHaveFocus();
+      await userEvent.keyboard('{Home}');
+      expect(may).toHaveFocus();
+      await userEvent.keyboard('{End}');
+      expect(june).toHaveFocus();
+      await userEvent.keyboard('{ArrowUp}');
+      expect(may).toHaveFocus();
+      await userEvent.keyboard('{ArrowDown}{Enter}');
+      expect(openJune).toHaveBeenCalledOnce();
+      expect(openMay).not.toHaveBeenCalled();
+      await waitFor(() => expect(cluster).toHaveFocus());
+      await userEvent.keyboard('{Enter}{Escape}');
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+      await waitFor(() => expect(cluster).toHaveFocus());
+    });
+
+    it('opens an assigned period from a cluster that starts with an unassigned payment', async () => {
+      const openAssigned = vi.fn();
+      render(
+        <TimelineMarkers
+          center={30}
+          markers={[
+            { id: 'unassigned', position: 0.41, label: 'Unassigned payment' },
+            {
+              id: 'assigned',
+              position: 0.413,
+              label: 'Assigned payment',
+              onClick: openAssigned,
+            },
+          ]}
+        />,
+      );
+      await userEvent.tab();
+      await userEvent.keyboard('{Enter}');
+      expect(
+        screen.getByRole('menuitem', { name: 'Unassigned payment' }),
+      ).toBeDisabled();
+      expect(
+        screen.getByRole('menuitem', { name: 'Assigned payment' }),
+      ).toHaveFocus();
+      await userEvent.keyboard(' ');
+      expect(openAssigned).toHaveBeenCalledOnce();
+    });
+
+    it('expands the cash and attention strip', async () => {
+      includeShortfall = true;
+      renderBudgetPeriod(false);
+      const strip = await screen.findByRole('button', {
+        name: 'Cash and period budget alerts',
+      });
+      expect(strip).toHaveTextContent('In accounts 6,200.00');
+      expect(strip).toHaveTextContent('Owed 1,200.00');
+      expect(strip).toHaveTextContent('Shortfalls (1)');
+      expect(strip).toHaveAccessibleDescription(
+        /^In accounts 6,200.00, Owed 1,200.00, Shortfalls \(1\), Needs attention \(\d+\)$/,
+      );
+      expect(strip).toHaveTextContent(/Needs attention \(\d+\)/);
+      expect(
+        screen.queryByRole('region', { name: 'Needs attention' }),
+      ).not.toBeInTheDocument();
+      await userEvent.click(strip);
+      expect(
+        screen.getByText('Checking is short from 07/02/2017'),
+      ).toBeVisible();
+      expect(
+        screen.getByRole('region', { name: 'Needs attention' }),
+      ).toBeVisible();
+      await userEvent.click(strip);
+      expect(
+        screen.queryByRole('region', { name: 'Needs attention' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('keeps cash balances out of the accessible description in privacy mode', async () => {
+      renderBudgetPeriod(false, '2017-06', true);
+      const strip = await screen.findByRole('button', {
+        name: 'Cash and period budget alerts',
+      });
+      expect(strip).toHaveAccessibleDescription(
+        /^In accounts hidden amount, Owed hidden amount, Shortfalls \(0\), Needs attention \(\d+\)$/,
+      );
+    });
+
+    it('opens period details in a narrow Budget sheet', async () => {
+      renderBudgetPeriod(true);
+      const snapshot = await screen.findByRole('button', {
+        name: 'Period details for Tax',
+      });
+      for (const value of [
+        'Budgeted',
+        '1,500.00',
+        'Spent',
+        '300.00',
+        'Balance',
+        '1,200.00',
+        'Yearly',
+      ]) {
+        expect(within(snapshot).getByText(value)).toBeVisible();
+      }
+      await userEvent.click(snapshot);
+      const dialog = screen.getByRole('dialog', {
+        name: 'Period details for Tax',
+      });
+      expect(
+        within(dialog).getByRole('group', { name: 'Graph of Tax, 2017' }),
+      ).toBeVisible();
+      expect(
+        within(dialog).getByRole('group', { name: 'Scheduled charges' }),
+      ).toBeVisible();
+      await userEvent.keyboard('{Escape}');
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('opens the category and period named by a deep link', async () => {
+      const { queryClient, store } = createBook();
+      render(
+        <TestProviders store={store} queryClient={queryClient}>
+          <MemoryRouter
+            initialEntries={[
+              '/period-budget?asOf=2017-06-30&category=tax&period=tax-2017&start=2017-01-01',
+            ]}
+          >
+            <PeriodBudgetPage />
+          </MemoryRouter>
+        </TestProviders>,
+      );
+      expect(
+        await screen.findByRole('group', { name: 'Graph of Tax, 2017' }),
+      ).toBeVisible();
+      expect(screen.getByLabelText('As of')).toHaveValue('2017-06-30');
+    });
   });
 
   describe('the figures', () => {
@@ -1026,7 +1438,9 @@ describe('PeriodBudgetPage', () => {
         '1,200.00',
         '690.00',
       ]);
-      expect(within(rowOf('Rent')).getByText('No periods yet')).toBeVisible();
+      expect(
+        within(rowOf('Rent')).queryByText('No periods yet'),
+      ).not.toBeInTheDocument();
     });
 
     it('says in words what each bar shows', async () => {
@@ -1081,11 +1495,18 @@ describe('PeriodBudgetPage', () => {
       }
       // The charge that is paid and the one that is skipped have no dot, and
       // the one of March 2018 is not in this year
-      expect(screen.getAllByRole('img')).toHaveLength(names.length);
+      expect(screen.getAllByRole('img')).toHaveLength(1);
+      expect(
+        screen.getAllByRole('button', {
+          name: /^(Payment on|Overdue charge|Expected charge)/,
+        }),
+      ).toHaveLength(names.length - 1);
 
       // The middle of the 10th of May, the 130th of the 365 days
       expect(
-        parseFloat(dot('Payment on 05/10/2017: Grocer, -250.00').style.left),
+        parseFloat(
+          getComputedStyle(dot('Payment on 05/10/2017: Grocer, -250.00')).left,
+        ),
       ).toBeCloseTo(35.479, 2);
       const lines = screen.getAllByTestId('as-of-line');
       expect(lines).toHaveLength(3);
@@ -1101,12 +1522,25 @@ describe('PeriodBudgetPage', () => {
       ).not.toBeInTheDocument();
     });
 
-    it('lets a press on a dot through to the bar under it', async () => {
+    it('tabs to a single payment marker and activates it with Enter or Space', async () => {
       await renderPage();
 
-      for (const mark of screen.getAllByRole('img')) {
-        expect(mark).toHaveStyle({ pointerEvents: 'none' });
-      }
+      const mark = screen.getByRole('button', {
+        name: 'Payment on 03/20/2017: Tax office, -300.00',
+      });
+      expect(mark).toHaveAttribute(
+        'title',
+        'Payment on 03/20/2017: Tax office, -300.00',
+      );
+      act(() => bar('Tax', '2017').focus());
+      await userEvent.tab();
+      expect(mark).toHaveFocus();
+      await userEvent.keyboard('{Enter}');
+      expect(screen.getByRole('region', { name: 'Tax, 2017' })).toBeVisible();
+      await userEvent.keyboard(' ');
+      expect(
+        screen.queryByRole('region', { name: 'Tax, 2017' }),
+      ).not.toBeInTheDocument();
     });
 
     it('moves and zooms the months it shows', async () => {
@@ -1254,7 +1688,7 @@ describe('PeriodBudgetPage', () => {
       expect(section(panel, 'Scheduled charges')).toHaveTextContent(
         'No scheduled charge is due in this period.',
       );
-      for (const name of ['Edit', 'Link schedules', 'Delete']) {
+      for (const name of ['Edit', 'Cadence and schedules', 'Delete']) {
         expect(within(panel).getByRole('button', { name })).toBeEnabled();
       }
 
@@ -2218,7 +2652,7 @@ describe('PeriodBudgetPage', () => {
       const panel = await openPeriod('Tax', '2017');
 
       await userEvent.click(
-        within(panel).getByRole('button', { name: 'Link schedules' }),
+        within(panel).getByRole('button', { name: 'Cadence and schedules' }),
       );
 
       const category = screen.getByRole('region', { name: 'Tax' });
@@ -2850,7 +3284,7 @@ describe('PeriodBudgetPage', () => {
       expect(
         within(tax).getByRole('group', { name: 'Expected remaining' }),
       ).toHaveTextContent('690.00');
-      expect(rent).toHaveTextContent('RentNo periods yet');
+      expect(rent).toHaveTextContent(/^Rent$/);
 
       await userEvent.click(food);
 
@@ -2929,7 +3363,7 @@ describe('PeriodBudgetPage', () => {
   });
 
   describe('where the app has it', () => {
-    it('is under the settings until it is an entry of the sidebar, without a frame of its own', async () => {
+    it('is under settings when hidden from the sidebar', async () => {
       await renderRoutedPage({ isInSidebar: false });
 
       expect(screen.getByTestId('location')).toHaveTextContent(
@@ -2940,7 +3374,7 @@ describe('PeriodBudgetPage', () => {
       expect(screen.queryByText('Period Budget')).not.toBeInTheDocument();
     });
 
-    it('has one frame and one title as an entry of the sidebar', async () => {
+    it('has one frame and one title in the sidebar by default', async () => {
       await renderRoutedPage({ isInSidebar: true });
 
       expect(screen.getByTestId('location')).toHaveTextContent(

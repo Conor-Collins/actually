@@ -70,7 +70,7 @@ export function MobilePeriodBudget({
   onSelect,
 }: MobilePeriodBudgetProps) {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<TabId>('month');
+  const [tab, setTab] = useState<TabId>(selection ? 'periods' : 'month');
   const openRow = selection ? findRow(view, selection.categoryId) : null;
 
   function openPeriodOf(row: CategoryRowView) {
@@ -198,15 +198,11 @@ export function MobilePeriodBudget({
                       >
                         {row.category.name}
                       </Text>
-                      <Text style={{ color: theme.pageTextSubdued }}>
-                        {active ? (
-                          labels.period(active.period)
-                        ) : row.periods.length === 0 ? (
-                          <Trans>No periods yet</Trans>
-                        ) : (
-                          <Trans>No active period</Trans>
-                        )}
-                      </Text>
+                      {active && (
+                        <Text style={{ color: theme.pageTextSubdued }}>
+                          {labels.period(active.period)}
+                        </Text>
+                      )}
                     </View>
                     {active && (
                       <>

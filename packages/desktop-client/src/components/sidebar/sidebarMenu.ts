@@ -46,7 +46,7 @@ export function isInMobileSettingsNav(id: SettingsSectionId): boolean {
 }
 
 function isHiddenByDefault(id: SidebarMenuItemId): boolean {
-  return isSettingsSection(id) && id !== 'schedules';
+  return isSettingsSection(id) && id !== 'schedules' && id !== 'period-budget';
 }
 
 function isKnownItemId(id: unknown): id is SidebarMenuItemId {

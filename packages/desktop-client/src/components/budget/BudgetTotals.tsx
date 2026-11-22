@@ -14,6 +14,8 @@ import { styles } from '@actual-app/components/styles';
 import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
 
+import { useBudgetPeriodMonths } from '#components/period-budget/BudgetPeriods';
+import { BudgetPeriodTotals } from '#components/period-budget/BudgetPeriodTotals';
 import { useGlobalPref } from '#hooks/useGlobalPref';
 
 import { RenderMonths } from './RenderMonths';
@@ -59,129 +61,157 @@ export const BudgetTotals = memo(function BudgetTotals({
 
   const { BudgetTotalsComponent: MonthComponent } = useBudgetComponents();
 
+  const hasActivePeriods = [...useBudgetPeriodMonths().values()].some(
+    ({ periods }) => [...periods.values()].some(({ view }) => view.isActive),
+  );
+
   return (
-    <View
-      data-testid="budget-totals"
-      style={{
-        backgroundColor: theme.budgetCurrentMonth, //use budget colors, not generic table colors
-        flexDirection: 'row',
-        flexShrink: 0,
-        boxShadow: styles.cardShadow,
-        marginLeft: 5,
-        marginRight: 5 + getScrollbarWidth(),
-        borderRadius: '4px 4px 0 0',
-        borderBottom: '1px solid ' + theme.tableBorder,
-        '& .hover-visible': {
-          opacity: 0,
-          transition: 'opacity .25s',
-        },
-        '&:hover .hover-visible': {
-          opacity: 1,
-        },
-      }}
-    >
+    <>
       <View
+        data-testid="budget-totals"
         style={{
-          width: 200 + 100 * categoryExpandedState,
-          color: theme.tableHeaderText,
-          justifyContent: 'center',
-          paddingLeft: 5,
-          paddingRight: 5,
-          display: 'flex',
+          backgroundColor: theme.budgetCurrentMonth, //use budget colors, not generic table colors
           flexDirection: 'row',
-          alignItems: 'center',
-          userSelect: 'none',
-          WebkitUserSelect: 'none',
+          flexShrink: 0,
+          boxShadow: styles.cardShadow,
+          marginLeft: 5,
+          marginRight: 5 + getScrollbarWidth(),
+          borderRadius: '4px 4px 0 0',
+          borderBottom: '1px solid ' + theme.tableBorder,
+          '& .hover-visible': {
+            opacity: 0,
+            transition: 'opacity .25s',
+          },
+          '&:hover .hover-visible': {
+            opacity: 1,
+          },
         }}
       >
-        <Button
-          variant="bare"
-          aria-label={getExpandStateLabel()}
-          onPress={cycleExpandedState}
-          className="hover-visible"
+        <View
           style={{
-            color: 'currentColor',
-            padding: 3,
-            marginRight: 10,
+            width: 200 + 100 * categoryExpandedState,
+            color: theme.tableHeaderText,
+            justifyContent: 'center',
+            paddingLeft: 5,
+            paddingRight: 5,
+            display: 'flex',
+            flexDirection: 'row',
+            alignItems: 'center',
+            userSelect: 'none',
+            WebkitUserSelect: 'none',
           }}
         >
-          {categoryExpandedState === 0 ? (
-            <SvgArrowButtonSingleLeft1
-              style={{
-                width: 12,
-                height: 12,
-              }}
-            />
-          ) : categoryExpandedState === 1 ? (
-            <SvgArrowButtonLeft1
-              style={{
-                width: 12,
-                height: 12,
-              }}
-            />
-          ) : (
-            <SvgArrowButtonRight1
-              style={{
-                width: 12,
-                height: 12,
-              }}
-            />
-          )}
-        </Button>
-        <View style={{ flexGrow: '1' }}>
-          <Trans>Category</Trans>
-        </View>
-        <Button
-          ref={triggerRef}
-          variant="bare"
-          aria-label={t('Menu')}
-          onPress={() => setMenuOpen(true)}
-          style={{ color: 'currentColor', padding: 3 }}
-        >
-          <SvgDotsHorizontalTriple
-            width={15}
-            height={15}
-            style={{ color: theme.tableHeaderText }}
-          />
-        </Button>
-
-        <Popover
-          triggerRef={triggerRef}
-          isOpen={menuOpen}
-          onOpenChange={() => setMenuOpen(false)}
-          style={{ width: 200 }}
-        >
-          <Menu
-            onMenuSelect={type => {
-              if (type === 'toggle-visibility') {
-                toggleHiddenCategories();
-              } else if (type === 'expandAllCategories') {
-                expandAllCategories();
-              } else if (type === 'collapseAllCategories') {
-                collapseAllCategories();
-              }
-              setMenuOpen(false);
+          <Button
+            variant="bare"
+            aria-label={getExpandStateLabel()}
+            onPress={cycleExpandedState}
+            className="hover-visible"
+            style={{
+              color: 'currentColor',
+              padding: 3,
+              marginRight: 10,
             }}
-            items={[
-              {
-                name: 'toggle-visibility',
-                text: t('Toggle hidden categories'),
-              },
-              {
-                name: 'expandAllCategories',
-                text: t('Expand all'),
-              },
-              {
-                name: 'collapseAllCategories',
-                text: t('Collapse all'),
-              },
-            ]}
-          />
-        </Popover>
+          >
+            {categoryExpandedState === 0 ? (
+              <SvgArrowButtonSingleLeft1
+                style={{
+                  width: 12,
+                  height: 12,
+                }}
+              />
+            ) : categoryExpandedState === 1 ? (
+              <SvgArrowButtonLeft1
+                style={{
+                  width: 12,
+                  height: 12,
+                }}
+              />
+            ) : (
+              <SvgArrowButtonRight1
+                style={{
+                  width: 12,
+                  height: 12,
+                }}
+              />
+            )}
+          </Button>
+          <View style={{ flexGrow: '1' }}>
+            {hasActivePeriods ? (
+              <Trans>Category / Monthly totals</Trans>
+            ) : (
+              <Trans>Category</Trans>
+            )}
+          </View>
+          <Button
+            ref={triggerRef}
+            variant="bare"
+            aria-label={t('Menu')}
+            onPress={() => setMenuOpen(true)}
+            style={{ color: 'currentColor', padding: 3 }}
+          >
+            <SvgDotsHorizontalTriple
+              width={15}
+              height={15}
+              style={{ color: theme.tableHeaderText }}
+            />
+          </Button>
+
+          <Popover
+            triggerRef={triggerRef}
+            isOpen={menuOpen}
+            onOpenChange={() => setMenuOpen(false)}
+            style={{ width: 200 }}
+          >
+            <Menu
+              onMenuSelect={type => {
+                if (type === 'toggle-visibility') {
+                  toggleHiddenCategories();
+                } else if (type === 'expandAllCategories') {
+                  expandAllCategories();
+                } else if (type === 'collapseAllCategories') {
+                  collapseAllCategories();
+                }
+                setMenuOpen(false);
+              }}
+              items={[
+                {
+                  name: 'toggle-visibility',
+                  text: t('Toggle hidden categories'),
+                },
+                {
+                  name: 'expandAllCategories',
+                  text: t('Expand all'),
+                },
+                {
+                  name: 'collapseAllCategories',
+                  text: t('Collapse all'),
+                },
+              ]}
+            />
+          </Popover>
+        </View>
+        <RenderMonths>
+          <MonthComponent />
+        </RenderMonths>
       </View>
-      <RenderMonths>
-        <MonthComponent />
-      </RenderMonths>
-    </View>
+      {hasActivePeriods && (
+        <View
+          style={{
+            flexDirection: 'row',
+            flexShrink: 0,
+            marginLeft: 5,
+            marginRight: 5 + getScrollbarWidth(),
+            backgroundColor: theme.budgetCurrentMonth,
+          }}
+        >
+          <View
+            style={{ width: 200 + 100 * categoryExpandedState, flexShrink: 0 }}
+          />
+          <RenderMonths>
+            {({ month }) => <BudgetPeriodTotals month={month} />}
+          </RenderMonths>
+        </View>
+      )}
+    </>
   );
 });

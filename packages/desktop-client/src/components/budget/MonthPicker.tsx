@@ -1,21 +1,19 @@
-// @ts-strict-ignore
-import React, { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { useTranslation } from 'react-i18next';
+import { Trans, useTranslation } from 'react-i18next';
 
+import { Button } from '@actual-app/components/button';
 import {
   SvgCheveronLeft,
   SvgCheveronRight,
 } from '@actual-app/components/icons/v1';
-import { SvgCalendar } from '@actual-app/components/icons/v2';
+import { Popover } from '@actual-app/components/popover';
 import { styles } from '@actual-app/components/styles';
 import { theme } from '@actual-app/components/theme';
 import { View } from '@actual-app/components/view';
-import * as monthUtils from '@actual-app/core/shared/months';
+import * as months from '@actual-app/core/shared/months';
 
-import { Link } from '#components/common/Link';
 import { useLocale } from '#hooks/useLocale';
-import { useResizeObserver } from '#hooks/useResizeObserver';
 
 import type { MonthBounds } from './MonthsContext';
 
@@ -23,246 +21,163 @@ type MonthPickerProps = {
   startMonth: string;
   numDisplayed: number;
   monthBounds: MonthBounds;
-  style: CSSProperties;
+  style?: CSSProperties;
   onSelect: (month: string) => void;
 };
 
-export const MonthPicker = ({
+const arrowStyle = { width: 32, height: 32, padding: 0, flexShrink: 0 };
+
+export function MonthPicker({
   startMonth,
   numDisplayed,
   monthBounds,
   style,
   onSelect,
-}: MonthPickerProps) => {
+}: MonthPickerProps) {
   const locale = useLocale();
   const { t } = useTranslation();
-  const [hoverId, setHoverId] = useState(null);
-  const [targetMonthCount, setTargetMonthCount] = useState(12);
-
-  const currentMonth = monthUtils.currentMonth();
-  const firstSelectedMonth = startMonth;
-
-  const lastSelectedMonth = monthUtils.addMonths(
-    firstSelectedMonth,
-    numDisplayed - 1,
-  );
-
-  const range = monthUtils.rangeInclusive(
-    monthUtils.subMonths(
-      firstSelectedMonth,
-      Math.floor(targetMonthCount / 2 - numDisplayed / 2),
-    ),
-    monthUtils.addMonths(
-      lastSelectedMonth,
-      Math.floor(targetMonthCount / 2 - numDisplayed / 2),
-    ),
-  );
-
-  const firstSelectedIndex =
-    Math.floor(range.length / 2) - Math.floor(numDisplayed / 2);
-  const lastSelectedIndex = firstSelectedIndex + numDisplayed - 1;
-
-  const [size, setSize] = useState('small');
-  const containerRef = useResizeObserver(rect => {
-    setSize(rect.width <= 400 ? 'small' : 'big');
-    setTargetMonthCount(
-      Math.min(Math.max(Math.floor(rect.width / 50), 12), 24),
-    );
-  });
-
-  const yearHeadersShown = [];
+  const trigger = useRef<HTMLButtonElement>(null);
+  const [year, setYear] = useState<number | null>(null);
+  const currentMonth = months.currentMonth();
+  const first = monthBounds.start;
+  const last = months.subMonths(monthBounds.end, numDisplayed - 1);
+  const lastDisplayed = months.addMonths(startMonth, numDisplayed - 1);
+  const headline = months.format(startMonth, 'MMMM yyyy', locale);
 
   return (
     <View
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        ...style,
-      }}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 4, ...style }}
     >
-      <View
-        innerRef={containerRef}
+      <Button
+        onPress={() => onSelect(currentMonth)}
         style={{
-          flexDirection: 'row',
-          flex: 1,
-          alignItems: 'center',
-          justifyContent: 'center',
+          borderRadius: 24,
+          paddingInline: 14,
+          marginRight: 8,
+          flexShrink: 0,
         }}
       >
-        <Link
-          variant="button"
-          buttonVariant="bare"
-          onPress={() => onSelect(currentMonth)}
-          style={{
-            padding: '3px 3px',
-            marginRight: '12px',
-          }}
-        >
-          <View title={t('Today')}>
-            <SvgCalendar
-              style={{
-                width: 16,
-                height: 16,
-              }}
-            />
-          </View>
-        </Link>
-        <Link
-          variant="button"
-          buttonVariant="bare"
-          onPress={() => onSelect(monthUtils.prevMonth(startMonth))}
-          style={{
-            padding: '3px 3px',
-            marginRight: '12px',
-          }}
-        >
-          <View title={t('Previous month')}>
-            <SvgCheveronLeft
-              style={{
-                width: 16,
-                height: 16,
-              }}
-            />
-          </View>
-        </Link>
-        {range.map((month, idx) => {
-          const monthName = monthUtils.format(month, 'MMM', locale);
-          const selected =
-            idx >= firstSelectedIndex && idx <= lastSelectedIndex;
-
-          const lastHoverId = hoverId + numDisplayed - 1;
-          const hovered =
-            hoverId === null ? false : idx >= hoverId && idx <= lastHoverId;
-
-          const current = currentMonth === month;
-          const year = monthUtils.getYear(month);
-
-          let showYearHeader = false;
-
-          if (!yearHeadersShown.includes(year)) {
-            yearHeadersShown.push(year);
-            showYearHeader = true;
-          }
-
-          const isMonthBudgeted =
-            month >= monthBounds.start && month <= monthBounds.end;
-
-          return (
+        <Trans>Today</Trans>
+      </Button>
+      <Button
+        variant="bare"
+        aria-label={t('Previous month')}
+        isDisabled={startMonth <= first}
+        style={arrowStyle}
+        onPress={() => onSelect(months.prevMonth(startMonth))}
+      >
+        <View title={t('Previous month')}>
+          <SvgCheveronLeft width={16} height={16} />
+        </View>
+      </Button>
+      <Button
+        variant="bare"
+        aria-label={t('Next month')}
+        isDisabled={startMonth >= last}
+        style={arrowStyle}
+        onPress={() => onSelect(months.nextMonth(startMonth))}
+      >
+        <View title={t('Next month')}>
+          <SvgCheveronRight width={16} height={16} />
+        </View>
+      </Button>
+      <Button
+        ref={trigger}
+        data-testid="selected-budget-month"
+        data-month={startMonth}
+        variant="bare"
+        aria-expanded={year !== null}
+        aria-haspopup="dialog"
+        onPress={() => setYear(Number(months.getYear(startMonth)))}
+        style={{
+          fontSize: 20,
+          justifyContent: 'flex-start',
+          textAlign: 'left',
+        }}
+      >
+        {headline}
+      </Button>
+      {months
+        .rangeInclusive(startMonth, lastDisplayed)
+        .slice(1)
+        .map(month => (
+          <span
+            key={month}
+            style={styles.visuallyHidden}
+            data-testid="selected-budget-month"
+            data-month={month}
+          >
+            {months.format(month, 'MMM', locale)}
+          </span>
+        ))}
+      <Popover
+        triggerRef={trigger}
+        isOpen={year !== null}
+        onOpenChange={open => {
+          if (!open) setYear(null);
+        }}
+      >
+        {year !== null && (
+          <View style={{ padding: 8, gap: 8 }}>
             <View
-              key={month}
-              data-testid={selected ? 'selected-budget-month' : undefined}
-              data-month={selected ? month : undefined}
               style={{
+                flexDirection: 'row',
                 alignItems: 'center',
-                padding: '3px 3px',
-                width: size === 'big' ? '35px' : '20px',
-                textAlign: 'center',
-                userSelect: 'none',
-                cursor: 'default',
-                borderRadius: 2,
-                border: 'none',
-                ...(!isMonthBudgeted && {
-                  textDecoration: 'line-through',
-                  color: theme.pageTextSubdued,
-                }),
-                ...styles.smallText,
-                ...(selected && {
-                  backgroundColor: theme.buttonPrimaryBackground,
-                  color: theme.buttonPrimaryText,
-                }),
-                ...((hovered || selected) && {
-                  borderRadius: 0,
-                  cursor: 'pointer',
-                }),
-                ...(hoverId !== null &&
-                  !hovered &&
-                  selected && {
-                    filter: 'brightness(65%)',
-                  }),
-                ...(hovered &&
-                  !selected && {
-                    backgroundColor: theme.buttonBareBackgroundHover,
-                  }),
-                ...(!hovered &&
-                  !selected &&
-                  current && {
-                    backgroundColor: theme.buttonBareBackgroundHover,
-                    filter: 'brightness(120%)',
-                  }),
-                ...(hovered &&
-                  selected &&
-                  current && {
-                    filter: 'brightness(120%)',
-                  }),
-                ...(hovered &&
-                  selected && {
-                    backgroundColor: theme.buttonPrimaryBackground,
-                  }),
-                ...((idx === firstSelectedIndex ||
-                  (idx === hoverId && !selected)) && {
-                  borderTopLeftRadius: 2,
-                  borderBottomLeftRadius: 2,
-                }),
-                ...((idx === lastSelectedIndex ||
-                  (idx === lastHoverId && !selected)) && {
-                  borderTopRightRadius: 2,
-                  borderBottomRightRadius: 2,
-                }),
-                ...(current && { fontWeight: 'bold' }),
+                justifyContent: 'space-between',
               }}
-              onClick={() => onSelect(month)}
-              onMouseEnter={() => setHoverId(idx)}
-              onMouseLeave={() => setHoverId(null)}
             >
-              <View>
-                {size === 'small' ? monthName[0] : monthName}
-                {showYearHeader && (
-                  <View
+              <Button
+                variant="bare"
+                aria-label={t('Previous year')}
+                isDisabled={year <= Number(months.getYear(first))}
+                onPress={() => setYear(year - 1)}
+              >
+                <SvgCheveronLeft width={16} height={16} />
+              </Button>
+              {year}
+              <Button
+                variant="bare"
+                aria-label={t('Next year')}
+                isDisabled={year >= Number(months.getYear(last))}
+                onPress={() => setYear(year + 1)}
+              >
+                <SvgCheveronRight width={16} height={16} />
+              </Button>
+            </View>
+            <View
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: 4,
+              }}
+            >
+              {months.rangeInclusive(`${year}-01`, `${year}-12`).map(month => {
+                const selected = month >= startMonth && month <= lastDisplayed;
+                return (
+                  <Button
+                    key={month}
+                    variant={selected ? 'primary' : 'bare'}
+                    aria-label={months.format(month, 'MMMM yyyy', locale)}
+                    aria-current={month === currentMonth ? 'date' : undefined}
+                    aria-pressed={selected}
+                    isDisabled={month < first || month > last}
                     style={{
-                      position: 'absolute',
-                      top: -16,
-                      left: 0,
-                      fontSize: 10,
-                      fontWeight: 'bold',
-                      color: isMonthBudgeted
-                        ? theme.pageText
-                        : theme.pageTextSubdued,
+                      fontWeight: month === currentMonth ? 700 : undefined,
+                      borderColor: theme.tableBorder,
+                    }}
+                    onPress={() => {
+                      onSelect(month);
+                      setYear(null);
                     }}
                   >
-                    {year}
-                  </View>
-                )}
-              </View>
+                    {months.format(month, 'MMM', locale)}
+                  </Button>
+                );
+              })}
             </View>
-          );
-        })}
-        <Link
-          variant="button"
-          buttonVariant="bare"
-          onPress={() => onSelect(monthUtils.nextMonth(startMonth))}
-          style={{
-            padding: '3px 3px',
-            marginLeft: '12px',
-          }}
-        >
-          <View title={t('Next month')}>
-            <SvgCheveronRight
-              style={{
-                width: 16,
-                height: 16,
-              }}
-            />
           </View>
-        </Link>
-        {/*Keep range centered*/}
-        <span
-          style={{
-            width: '22px',
-            marginLeft: '12px',
-          }}
-        />
-      </View>
+        )}
+      </Popover>
     </View>
   );
-};
+}

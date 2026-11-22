@@ -6,7 +6,7 @@ import type {
   PeriodBudgetRows,
   ScheduleEntity,
 } from '@actual-app/core/types/models';
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 
 import { accountQueries } from '#accounts';
 import { categoryQueries } from '#budget';
@@ -16,11 +16,7 @@ import {
   horizonEndFor,
   periodBudgetQueries,
 } from '#period-budget';
-import type {
-  Axis,
-  PeriodBudgetView,
-  SuggestedCategories,
-} from '#period-budget';
+import type { Axis, PeriodBudgetView } from '#period-budget';
 
 export type PeriodBudgetData = {
   // Null until the first calculation has arrived
@@ -30,7 +26,6 @@ export type PeriodBudgetData = {
   rows: PeriodBudgetRows | null;
   accounts: AccountEntity[];
   schedules: ScheduleEntity[];
-  suggestedCategories: SuggestedCategories;
   error: Error | null;
   categoryName: (id: string) => string;
   payeeName: (id: string | null) => string;
@@ -41,6 +36,7 @@ export type PeriodBudgetData = {
 type UsePeriodBudgetDataProps = {
   asOf: string;
   axis: Axis;
+  periodsOnly?: boolean;
 };
 
 // Everything the page shows for an as-of day, with the names it needs.
@@ -48,17 +44,33 @@ export function usePeriodBudgetData({
   asOf,
   axis,
 }: UsePeriodBudgetDataProps): PeriodBudgetData {
+  const [data] = usePeriodBudgetDataForDates([{ asOf, axis }]);
+  return data;
+}
+
+export function usePeriodBudgetDataForDates(
+  dates: [UsePeriodBudgetDataProps],
+): [PeriodBudgetData];
+export function usePeriodBudgetDataForDates(
+  dates: UsePeriodBudgetDataProps[],
+): PeriodBudgetData[];
+export function usePeriodBudgetDataForDates(dates: UsePeriodBudgetDataProps[]) {
   const { t } = useTranslation();
   const rowsQuery = useQuery(periodBudgetQueries.rows());
   const rows = rowsQuery.data ?? null;
-  const horizonEnd = horizonEndFor({ asOf, axis, rows: rowsQuery.data });
-  const calculationQuery = useQuery({
-    ...periodBudgetQueries.calculation({ asOf, horizonEnd }),
-    // The stored periods decide how far the calculation looks
-    enabled: rows !== null,
+  const hasPeriods =
+    (rows?.periods.some(row => !row.tombstone) ?? false) ||
+    (rows?.cadences.some(row => !row.tombstone && row.active) ?? false);
+  const calculationQueries = useQueries({
+    queries: dates.map(({ asOf, axis, periodsOnly }) => ({
+      ...periodBudgetQueries.calculation({
+        asOf,
+        horizonEnd: horizonEndFor({ asOf, axis, rows: rowsQuery.data }),
+      }),
+      enabled: rows !== null && (!periodsOnly || hasPeriods),
+    })),
   });
   const schedulesQuery = useQuery(periodBudgetQueries.schedules());
-  const suggestedQuery = useQuery(periodBudgetQueries.suggestedCategories());
   // These lookups must load on the page's first offline visit.
   const { data: categories } = useQuery({
     ...categoryQueries.list(),
@@ -75,16 +87,6 @@ export function usePeriodBudgetData({
     networkMode: 'always',
   });
   const schedules = schedulesQuery.data ?? [];
-
-  const calculation = calculationQuery.data;
-  const view =
-    calculation && rows && categories
-      ? buildPeriodBudgetView({
-          calculation,
-          rows,
-          categoryGroups: categories.grouped,
-        })
-      : null;
 
   function categoryName(id: string) {
     const category = categories?.list.find(entry => entry.id === id);
@@ -120,17 +122,28 @@ export function usePeriodBudgetData({
     return schedule._payee ? payeeName(schedule._payee) : t('Unnamed schedule');
   }
 
-  return {
-    view,
-    calculation: view === null ? null : (calculation ?? null),
-    rows,
-    accounts,
-    schedules,
-    suggestedCategories: suggestedQuery.data ?? {},
-    error: rowsQuery.error ?? calculationQuery.error ?? null,
-    categoryName,
-    payeeName,
-    accountName,
-    scheduleName,
-  };
+  return calculationQueries.map((calculationQuery): PeriodBudgetData => {
+    const calculation = calculationQuery.data;
+    const view =
+      calculation && rows && categories
+        ? buildPeriodBudgetView({
+            calculation,
+            rows,
+            categoryGroups: categories.grouped,
+          })
+        : null;
+
+    return {
+      view,
+      calculation: view === null ? null : (calculation ?? null),
+      rows,
+      accounts,
+      schedules,
+      error: rowsQuery.error ?? calculationQuery.error ?? null,
+      categoryName,
+      payeeName,
+      accountName,
+      scheduleName,
+    };
+  });
 }
