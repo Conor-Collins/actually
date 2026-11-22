@@ -3,15 +3,32 @@ id: TASK-29
 title: >-
   v1.0.0: Account date range header, monthly histogram popover, and aligned
   Payment/Deposit/Net footer
-status: Review
+status: Done
 assignee: []
 created_date: '2026-11-21T21:16:00Z'
-updated_date: '2026-11-22T00:03:00Z'
+updated_date: '2026-11-22T00:06:00Z'
 labels:
   - v1.0.0
   - ui
   - accounts
 dependencies: []
+modified_files:
+  - packages/desktop-client/src/components/accounts/Account.test.tsx
+  - packages/desktop-client/src/components/accounts/Account.tsx
+  - packages/desktop-client/src/components/accounts/AccountDateRange.test.tsx
+  - packages/desktop-client/src/components/accounts/AccountDateRange.tsx
+  - packages/desktop-client/src/components/accounts/Balance.tsx
+  - packages/desktop-client/src/components/accounts/Header.tsx
+  - packages/desktop-client/src/components/accounts/account-date-filters.ts
+  - packages/desktop-client/src/components/filters/AppliedFilters.tsx
+  - packages/desktop-client/src/components/filters/FiltersStack.tsx
+  - packages/desktop-client/src/components/filters/SavedFilterMenuButton.tsx
+  - packages/desktop-client/src/components/transactions/TransactionList.test.tsx
+  - packages/desktop-client/src/components/transactions/TransactionList.tsx
+  - >-
+    packages/desktop-client/src/components/transactions/TransactionTotals.test.tsx
+  - packages/desktop-client/src/components/transactions/TransactionTotals.tsx
+  - packages/desktop-client/src/components/transactions/TransactionsTable.tsx
 priority: high
 ordinal: 29000
 ---
@@ -28,9 +45,15 @@ Preserves all TASK-23 correctness invariants (no split double-counting, saved An
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Account and All Accounts views show a calendar-style range header: outlined Today pill on the left, adjacent fixed-position previous/next chevrons, unboxed headline range label opening the range popover on click, and one-click All dates toggle (no date filter chip)
-- [ ] #2 Range popover anchors cleanly inside the viewport (never overflowing over the left sidebar), uses styled date inputs consistent with Actual, and shows an interactive monthly bar chart (all non-date filters applied) with scale/value readouts, hover tooltips with correct singular/plural transaction counts, clean zero-month baseline, click for month, and shift-click/drag for span
-- [ ] #3 Table footer renders on a single unclipped line aligned under Payment and Deposit, showing Payment, Deposit, and Net sums clearly labelled as the sum of shown posted transactions using FinancialText
-- [ ] #4 Active filter bar exposes a clean action slot/button hook beside active filter chips for Schedule conversion (used by TASK-30) and preserves saved/URL date filters, split totals, post-edit refresh, and scoped links
-- [ ] #5 Component and page tests cover calendar nav, popover viewport anchoring, histogram ignoring date filter with singular/plural labels, Payment/Deposit/Net footer updates after edits, and filter-bar hook; focused tests, typecheck, and lint pass
+- [x] #1 Account and All Accounts views show a calendar-style range header: outlined Today pill on the left, adjacent fixed-position previous/next chevrons, unboxed headline range label opening the range popover on click, and one-click All dates toggle (no date filter chip)
+- [x] #2 Range popover anchors cleanly inside the viewport (never overflowing over the left sidebar), uses styled date inputs consistent with Actual, and shows an interactive monthly bar chart (all non-date filters applied) with scale/value readouts, hover tooltips with correct singular/plural transaction counts, clean zero-month baseline, click for month, and shift-click/drag for span
+- [x] #3 Table footer renders on a single unclipped line aligned under Payment and Deposit, showing Payment, Deposit, and Net sums clearly labelled as the sum of shown posted transactions using FinancialText
+- [x] #4 Active filter bar exposes a clean action slot/button hook beside active filter chips for Schedule conversion (used by TASK-30) and preserves saved/URL date filters, split totals, post-edit refresh, and scoped links
+- [x] #5 Component and page tests cover calendar nav, popover viewport anchoring, histogram ignoring date filter with singular/plural labels, Payment/Deposit/Net footer updates after edits, and filter-bar hook; focused tests, typecheck, and lint pass
 <!-- AC:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Landed task-29-account-range-footer as 689fe9dac on 2026-11-21.
+<!-- SECTION:FINAL_SUMMARY:END -->
